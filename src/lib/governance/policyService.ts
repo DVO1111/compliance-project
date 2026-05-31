@@ -62,7 +62,7 @@ export const policyService = {
 
     async createPolicy(companyId: string, userId: string, data: Partial<Policy>): Promise<Policy> {
         const { data: policy, error } = await (supabase.from('policies') as any)
-            .insert(data)
+            .insert({ ...data, company_id: companyId, owner_id: userId })
             .select()
             .single();
 

@@ -2,9 +2,10 @@
 -- 'compliance_officer'), which excluded owners, executives, legal users, and any
 -- user whose profile.role is NULL (all new signups — role is never set during INSERT).
 --
--- New approach: use is_company_admin() which checks company_members.role IN
--- ('owner','admin'). This is the same SECURITY DEFINER helper used by company_members,
--- company_invites, and departments RLS, so it is consistent and avoids the NULL-role trap.
+-- New approach: check company_members.role directly for the set of roles that
+-- are permitted to manage policies: owner, admin, legal.
+-- This avoids the NULL-role trap (profiles.role is never populated on signup)
+-- and correctly includes legal users who are the primary policy authors.
 
 -- ── policies ──────────────────────────────────────────────────────────────────
 
@@ -14,12 +15,20 @@ CREATE POLICY "Admins can manage policies"
     ON public.policies FOR ALL
     TO authenticated
     USING (
-        company_id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid())
-        AND is_company_admin(company_id)
+        EXISTS (
+            SELECT 1 FROM public.company_members
+            WHERE user_id = auth.uid()
+            AND company_members.company_id = policies.company_id
+            AND role IN ('owner', 'admin', 'legal')
+        )
     )
     WITH CHECK (
-        company_id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid())
-        AND is_company_admin(company_id)
+        EXISTS (
+            SELECT 1 FROM public.company_members
+            WHERE user_id = auth.uid()
+            AND company_members.company_id = policies.company_id
+            AND role IN ('owner', 'admin', 'legal')
+        )
     );
 
 -- ── policy_versions ───────────────────────────────────────────────────────────
@@ -30,16 +39,20 @@ CREATE POLICY "Admins can manage policy versions"
     ON public.policy_versions FOR ALL
     TO authenticated
     USING (
-        policy_id IN (
-            SELECT id FROM public.policies
-            WHERE company_id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid())
-            AND is_company_admin(company_id)
+        EXISTS (
+            SELECT 1 FROM public.policies p
+            JOIN public.company_members cm ON cm.company_id = p.company_id
+            WHERE policy_versions.policy_id = p.id
+            AND cm.user_id = auth.uid()
+            AND cm.role IN ('owner', 'admin', 'legal')
         )
     )
     WITH CHECK (
-        policy_id IN (
-            SELECT id FROM public.policies
-            WHERE company_id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid())
-            AND is_company_admin(company_id)
+        EXISTS (
+            SELECT 1 FROM public.policies p
+            JOIN public.company_members cm ON cm.company_id = p.company_id
+            WHERE policy_versions.policy_id = p.id
+            AND cm.user_id = auth.uid()
+            AND cm.role IN ('owner', 'admin', 'legal')
         )
     );
