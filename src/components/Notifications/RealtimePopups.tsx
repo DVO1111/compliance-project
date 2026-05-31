@@ -39,21 +39,28 @@ export default function RealtimePopups() {
         if (!user) return;
 
         // ── 1) Realtime subscription (instant, but requires Realtime enabled on the table) ──
-        const channel = supabase.channel(`notifications:recipient_id=eq.${user.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'notifications',
-                    filter: `recipient_id=eq.${user.id}`,
-                },
-                (payload) => {
-                    const newNotif = payload.new as NotificationPayload;
-                    showNotification(newNotif);
-                }
-            )
-            .subscribe();
+        let channel: ReturnType<typeof supabase.channel> | null = null;
+        try {
+            channel = supabase.channel(`notifications:recipient_id=eq.${user.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'notifications',
+                        filter: `recipient_id=eq.${user.id}`,
+                    },
+                    (payload) => {
+                        const newNotif = payload.new as NotificationPayload;
+                        showNotification(newNotif);
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (err) logger.error('Realtime subscription error:', err);
+                });
+        } catch (err) {
+            logger.error('Realtime channel unavailable, falling back to polling:', err);
+        }
 
         // ── 2) Polling fallback (checks every 10s for unread expedited_review_request) ──
         const poll = async () => {
@@ -80,7 +87,7 @@ export default function RealtimePopups() {
         const pollInterval = setInterval(poll, 10000);
 
         return () => {
-            supabase.removeChannel(channel);
+            if (channel) supabase.removeChannel(channel);
             clearInterval(pollInterval);
         };
     }, [user, popup, showNotification]);
