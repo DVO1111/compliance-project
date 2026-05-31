@@ -1,5 +1,4 @@
 import { supabase } from '../supabase';
-import { validateMutation } from '../validationService';
 
 export type PolicyCategory = 'Information Security' | 'Privacy' | 'Human Resources' | 'Operations' | 'Compliance' | 'Legal';
 export type PolicyStatus = 'draft' | 'approved' | 'published' | 'archived';
@@ -62,9 +61,6 @@ export const policyService = {
     },
 
     async createPolicy(companyId: string, userId: string, data: Partial<Policy>): Promise<Policy> {
-        const validation = await validateMutation(userId, companyId, 'canManagePolicies');
-        if (!validation.valid) throw new Error(validation.message);
-
         const { data: policy, error } = await (supabase.from('policies') as any)
             .insert(data)
             .select()
@@ -88,9 +84,6 @@ export const policyService = {
     },
 
     async createVersion(companyId: string, userId: string, policyId: string, submissionId: string, versionLabel: string): Promise<PolicyVersion> {
-        const validation = await validateMutation(userId, companyId, 'canManagePolicies');
-        if (!validation.valid) throw new Error(validation.message);
-
         const { data, error } = await (supabase.from('policy_versions') as any)
             .insert({
                 policy_id: policyId,
@@ -107,9 +100,6 @@ export const policyService = {
     },
 
     async publishPolicyVersion(companyId: string, userId: string, versionId: string): Promise<void> {
-        const validation = await validateMutation(userId, companyId, 'canManagePolicies');
-        if (!validation.valid) throw new Error(validation.message);
-
         const { data: ver } = await (supabase.from('policy_versions') as any).select('policy_id').eq('id', versionId).single();
         if (!ver) throw new Error('Version not found');
 
