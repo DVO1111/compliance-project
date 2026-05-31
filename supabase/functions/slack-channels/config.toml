@@ -1,0 +1,2 @@
+name = "slack-channels"
+verify_jwt = true

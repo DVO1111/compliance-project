@@ -1,0 +1,47 @@
+name: Deploy — Staging
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  build-staging:
+    name: Build (staging)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Build (staging mode)
+        run: npm run build:staging
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          VITE_SENTRY_DSN: ${{ secrets.STAGING_SENTRY_DSN }}
+
+      # ----------------------------------------------------------------
+      # Deploy step — uncomment and configure for your hosting provider.
+      # ----------------------------------------------------------------
+
+      # Vercel example:
+      # - name: Deploy to Vercel (staging)
+      #   run: npx vercel --token ${{ secrets.VERCEL_TOKEN }} --prod false
+      #   env:
+      #     VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      #     VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      # Netlify example:
+      # - name: Deploy to Netlify (staging)
+      #   run: npx netlify-cli deploy --dir=dist --site ${{ secrets.NETLIFY_STAGING_SITE_ID }} --auth ${{ secrets.NETLIFY_AUTH_TOKEN }}

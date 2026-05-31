@@ -1,0 +1,779 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────
+   Theme variables — Light / Dark / Dark-Blue
+   ────────────────────────────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  --color-bg: #f3f4f6;
+  --color-bg-gradient: radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.4) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(245, 208, 254, 0.4) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(236, 254, 255, 0.4) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(221, 214, 254, 0.4) 0px, transparent 50%),
+    #f3f4f6;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f9fafb;
+  --color-border: rgba(229, 231, 235, 0.7);
+  --color-border-hover: rgba(209, 213, 219, 1);
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-tertiary: #9ca3af;
+  --color-accent: #004A99;
+  --color-accent-soft: rgba(0, 74, 153, 0.08);
+  --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --color-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --color-skeleton: #e5e7eb;
+  --color-skeleton-shine: #f3f4f6;
+  --chart-grid: #e5e7eb;
+  --chart-text: #6b7280;
+
+  /* Semantic Status Colors */
+  --color-success: #16a34a;
+  --color-success-soft: rgba(22, 163, 74, 0.1);
+  --color-warning: #d97706;
+  --color-warning-soft: rgba(217, 119, 6, 0.1);
+  --color-danger: #dc2626;
+  --color-danger-soft: rgba(220, 38, 38, 0.1);
+  --color-info: #2563eb;
+  --color-info-soft: rgba(37, 99, 235, 0.1);
+  --color-accent-hover: #003873;
+  --color-purple: #7c3aed;
+  --color-behance-blue: #2943D6;
+  --color-behance-purple: #8145CD;
+
+  /* Form & Input */
+  --color-input-bg: #ffffff;
+  --color-input-border: #d1d5db;
+  --color-badge-bg: #f3f4f6;
+  --color-hover-bg: rgba(0, 0, 0, 0.04);
+  --color-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Calendar Variables */
+  --color-cal-marketing: #3b82f6;
+  --color-cal-marketing-soft: rgba(59, 130, 246, 0.1);
+  --color-cal-marketing-hover: #2563eb;
+
+  --color-cal-legal: #a855f7;
+  --color-cal-legal-soft: rgba(168, 85, 247, 0.1);
+  --color-cal-legal-hover: #9333ea;
+
+  --color-cal-success: #10b981;
+  --color-cal-success-soft: rgba(16, 185, 129, 0.1);
+
+  --color-cal-warning: #f59e0b;
+  --color-cal-warning-soft: rgba(245, 158, 11, 0.1);
+
+  --color-cal-selected: #4f46e5;
+  --color-cal-selected-text: #ffffff;
+  --color-cal-selected-ring: rgba(79, 70, 229, 0.4);
+
+  --color-cal-lane-1: #6366f1;
+  --color-cal-lane-2: #8b5cf6;
+  --color-cal-lane-3: #3b82f6;
+  --color-cal-lane-4: #f59e0b;
+  --color-cal-lane-5: #10b981;
+
+  /* Metric Card Variants - Light */
+  --metric-blue-bg: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --metric-blue-text: #ffffff;
+  --metric-blue-secondary: rgba(255, 255, 255, 0.7);
+  --metric-blue-accent: #ffffff;
+  --metric-blue-delta-bg: rgba(255, 255, 255, 0.2);
+  --metric-blue-delta-text: #ffffff;
+
+  --metric-green-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --metric-green-text: #ffffff;
+  --metric-green-secondary: rgba(255, 255, 255, 0.7);
+  --metric-green-accent: #ffffff;
+  --metric-green-delta-bg: rgba(255, 255, 255, 0.2);
+  --metric-green-delta-text: #ffffff;
+
+  --metric-red-bg: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  --metric-red-text: #ffffff;
+  --metric-red-secondary: rgba(255, 255, 255, 0.7);
+  --metric-red-accent: #ffffff;
+  --metric-red-delta-bg: rgba(255, 255, 255, 0.2);
+  --metric-red-delta-text: #ffffff;
+
+  --metric-yellow-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  --metric-yellow-text: #ffffff;
+  --metric-yellow-secondary: rgba(255, 255, 255, 0.7);
+  --metric-yellow-accent: #ffffff;
+  --metric-yellow-delta-bg: rgba(255, 255, 255, 0.2);
+  --metric-yellow-delta-text: #ffffff;
+
+  --metric-purple-bg: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  --metric-purple-text: #ffffff;
+  --metric-purple-secondary: rgba(255, 255, 255, 0.7);
+  --metric-purple-accent: #ffffff;
+  --metric-purple-delta-bg: rgba(255, 255, 255, 0.2);
+  --metric-purple-delta-text: #ffffff;
+}
+
+[data-theme="dark"] {
+  --color-bg: #121212;
+  --color-surface: #1e1e1e;
+  --color-surface-alt: #2d2d2d;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-hover: rgba(255, 255, 255, 0.15);
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #71717a;
+  --color-accent: #2943d6;
+  --color-accent-soft: rgba(41, 67, 214, 0.15);
+  --color-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --color-card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --color-skeleton: #2d2d2d;
+  --color-skeleton-shine: #3f3f46;
+  --chart-grid: #2d2d2d;
+  --chart-text: #a1a1aa;
+
+  /* Semantic Status Colors */
+  --color-success: #34d399;
+  --color-success-soft: rgba(52, 211, 153, 0.15);
+  --color-warning: #fbbf24;
+  --color-warning-soft: rgba(251, 191, 36, 0.15);
+  --color-danger: #f87171;
+  --color-danger-soft: rgba(248, 113, 113, 0.15);
+  --color-info: #60a5fa;
+  --color-info-soft: rgba(96, 165, 250, 0.15);
+  --color-accent-hover: #1e36b8;
+  --color-purple: #a78bfa;
+  --color-behance-blue: #2943D6;
+  --color-behance-purple: #8145CD;
+
+  /* Form & Input */
+  --color-input-bg: #2d2d2d;
+  --color-input-border: rgba(255, 255, 255, 0.12);
+  --color-badge-bg: rgba(255, 255, 255, 0.08);
+  --color-hover-bg: rgba(255, 255, 255, 0.06);
+  --color-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Calendar Variables */
+  --color-cal-marketing: #60a5fa;
+  --color-cal-marketing-soft: rgba(96, 165, 250, 0.15);
+  --color-cal-marketing-hover: #3b82f6;
+
+  --color-cal-legal: #c084fc;
+  --color-cal-legal-soft: rgba(192, 132, 252, 0.15);
+  --color-cal-legal-hover: #a855f7;
+
+  --color-cal-success: #34d399;
+  --color-cal-success-soft: rgba(52, 211, 153, 0.15);
+
+  --color-cal-warning: #fbbf24;
+  --color-cal-warning-soft: rgba(251, 191, 36, 0.15);
+
+  --color-cal-selected: #6366f1;
+  --color-cal-selected-text: #ffffff;
+  --color-cal-selected-ring: rgba(99, 102, 241, 0.4);
+
+  --color-cal-lane-1: #818cf8;
+  --color-cal-lane-2: #a78bfa;
+  --color-cal-lane-3: #60a5fa;
+  --color-cal-lane-4: #fbbf24;
+  --color-cal-lane-5: #34d399;
+
+  /* Metric Card Variants - Dark */
+  --metric-blue-bg: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  --metric-blue-text: #f8fafc;
+  --metric-blue-secondary: rgba(255, 255, 255, 0.5);
+  --metric-blue-accent: #60a5fa;
+  --metric-blue-delta-bg: rgba(255, 255, 255, 0.1);
+  --metric-blue-delta-text: #60a5fa;
+
+  --metric-green-bg: linear-gradient(135deg, #065f46 0%, #064e3b 100%);
+  --metric-green-text: #f8fafc;
+  --metric-green-secondary: rgba(255, 255, 255, 0.5);
+  --metric-green-accent: #34d399;
+  --metric-green-delta-bg: rgba(255, 255, 255, 0.1);
+  --metric-green-delta-text: #34d399;
+
+  --metric-red-bg: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);
+  --metric-red-text: #f8fafc;
+  --metric-red-secondary: rgba(255, 255, 255, 0.5);
+  --metric-red-accent: #f87171;
+  --metric-red-delta-bg: rgba(255, 255, 255, 0.1);
+  --metric-red-delta-text: #f87171;
+
+  --metric-yellow-bg: linear-gradient(135deg, #92400e 0%, #78350f 100%);
+  --metric-yellow-text: #f8fafc;
+  --metric-yellow-secondary: rgba(255, 255, 255, 0.5);
+  --metric-yellow-accent: #fbbf24;
+  --metric-yellow-delta-bg: rgba(255, 255, 255, 0.1);
+  --metric-yellow-delta-text: #fbbf24;
+
+  --metric-purple-bg: linear-gradient(135deg, #5b21b6 0%, #4c1d95 100%);
+  --metric-purple-text: #f8fafc;
+  --metric-purple-secondary: rgba(255, 255, 255, 0.5);
+  --metric-purple-accent: #a78bfa;
+  --metric-purple-delta-bg: rgba(255, 255, 255, 0.1);
+  --metric-purple-delta-text: #a78bfa;
+}
+
+[data-theme="dark-blue"] {
+  --color-bg: #001029;
+  --color-surface: #001f42;
+  --color-surface-alt: #002D62;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.2);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b3d1ff;
+  --color-text-tertiary: #80b3ff;
+  --color-accent: #00D084;
+  --color-accent-soft: rgba(0, 208, 132, 0.15);
+  --color-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --color-card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.25);
+  --color-skeleton: #002D62;
+  --color-skeleton-shine: #003d7a;
+  --chart-grid: #002D62;
+  --chart-text: #b3d1ff;
+
+  /* Semantic Status Colors */
+  --color-success: #34d399;
+  --color-success-soft: rgba(52, 211, 153, 0.15);
+  --color-warning: #fbbf24;
+  --color-warning-soft: rgba(251, 191, 36, 0.15);
+  --color-danger: #f87171;
+  --color-danger-soft: rgba(248, 113, 113, 0.15);
+  --color-info: #60a5fa;
+  --color-info-soft: rgba(96, 165, 250, 0.15);
+  --color-accent-hover: #00b870;
+  --color-purple: #c084fc;
+
+  /* Form & Input */
+  --color-input-bg: #002D62;
+  --color-input-border: rgba(255, 255, 255, 0.15);
+  --color-badge-bg: rgba(255, 255, 255, 0.08);
+  --color-hover-bg: rgba(255, 255, 255, 0.06);
+  --color-overlay: rgba(0, 16, 41, 0.7);
+
+  /* Calendar Variables */
+  --color-cal-marketing: #60a5fa;
+  --color-cal-marketing-soft: rgba(96, 165, 250, 0.15);
+  --color-cal-marketing-hover: #3b82f6;
+
+  --color-cal-legal: #c084fc;
+  --color-cal-legal-soft: rgba(192, 132, 252, 0.15);
+  --color-cal-legal-hover: #a855f7;
+
+  --color-cal-success: #34d399;
+  --color-cal-success-soft: rgba(52, 211, 153, 0.15);
+
+  --color-cal-warning: #fbbf24;
+  --color-cal-warning-soft: rgba(251, 191, 36, 0.15);
+
+  --color-cal-selected: #00D084;
+  --color-cal-selected-text: #001f42;
+  --color-cal-selected-ring: rgba(0, 208, 132, 0.4);
+
+  --color-cal-lane-1: #38bdf8;
+  --color-cal-lane-2: #c084fc;
+  --color-cal-lane-3: #60a5fa;
+  --color-cal-lane-4: #fbbf24;
+  --color-cal-lane-5: #34d399;
+
+  /* Metric Card Variants - Navy */
+  --metric-blue-bg: linear-gradient(135deg, #003d7a 0%, #002d62 100%);
+  --metric-blue-text: #ffffff;
+  --metric-blue-secondary: rgba(255, 255, 255, 0.5);
+  --metric-blue-accent: #00d084;
+  --metric-blue-delta-bg: rgba(0, 208, 132, 0.1);
+  --metric-blue-delta-text: #00d084;
+
+  --metric-green-bg: linear-gradient(135deg, #004d33 0%, #003322 100%);
+  --metric-green-text: #ffffff;
+  --metric-green-secondary: rgba(255, 255, 255, 0.5);
+  --metric-green-accent: #00d084;
+  --metric-green-delta-bg: rgba(0, 208, 132, 0.1);
+  --metric-green-delta-text: #00d084;
+
+  --metric-red-bg: linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%);
+  --metric-red-text: #ffffff;
+  --metric-red-secondary: rgba(255, 255, 255, 0.5);
+  --metric-red-accent: #fca5a5;
+  --metric-red-delta-bg: rgba(252, 165, 165, 0.1);
+  --metric-red-delta-text: #fca5a5;
+
+  --metric-yellow-bg: linear-gradient(135deg, #78350f 0%, #451a03 100%);
+  --metric-yellow-text: #ffffff;
+  --metric-yellow-secondary: rgba(255, 255, 255, 0.5);
+  --metric-yellow-accent: #fcd34d;
+  --metric-yellow-delta-bg: rgba(252, 211, 77, 0.1);
+  --metric-yellow-delta-text: #fcd34d;
+
+  --metric-purple-bg: linear-gradient(135deg, #4c1d95 0%, #2e1065 100%);
+  --metric-purple-text: #ffffff;
+  --metric-purple-secondary: rgba(255, 255, 255, 0.5);
+  --metric-purple-accent: #d8b4fe;
+  --metric-purple-delta-bg: rgba(216, 180, 254, 0.1);
+  --metric-purple-delta-text: #d8b4fe;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Base styles using theme variables
+   ────────────────────────────────────────────────────────── */
+body {
+  background: var(--color-bg-gradient, var(--color-bg));
+  background-attachment: fixed;
+  color: var(--color-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Global select / option dark-mode fix
+   Native <select> dropdowns ignore CSS color inheritance in most
+   browsers, so we force background and text explicitly.
+   ────────────────────────────────────────────────────────── */
+select {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+textarea {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text-primary) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-tertiary) !important;
+  opacity: 1;
+}
+
+/* Autofill overrides — browsers force their own background on autofill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--color-surface) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Calendar / date-time picker icon colour in WebKit */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Dashboard utility classes
+   ────────────────────────────────────────────────────────── */
+@layer utilities {
+  .dash-card {
+    position: relative;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--color-card-shadow);
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .dash-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, var(--color-accent) 0%, #8b5cf6 50%, #ec4899 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.12;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .dash-card:hover {
+    box-shadow: var(--color-card-shadow-hover);
+    border-color: transparent;
+    transform: translateY(-2px);
+  }
+
+  .dash-card:hover::before {
+    opacity: 0.4;
+  }
+
+  .dash-surface {
+    background: var(--color-surface);
+  }
+
+  .dash-surface-alt {
+    background: var(--color-surface-alt);
+  }
+
+  .dash-text {
+    color: var(--color-text-primary);
+  }
+
+  .dash-text-secondary {
+    color: var(--color-text-secondary);
+  }
+
+  .dash-text-tertiary {
+    color: var(--color-text-tertiary);
+  }
+
+  .dash-border {
+    border-color: var(--color-border);
+  }
+
+  .dash-accent {
+    color: var(--color-accent);
+  }
+
+  /* Calendar Utility Classes */
+  .cal-bg-marketing {
+    background-color: var(--color-cal-marketing);
+  }
+
+  .cal-bg-marketing-soft {
+    background-color: var(--color-cal-marketing-soft);
+  }
+
+  .cal-text-marketing {
+    color: var(--color-cal-marketing);
+  }
+
+  .cal-border-marketing {
+    border-color: var(--color-cal-marketing);
+  }
+
+  .cal-bg-legal {
+    background-color: var(--color-cal-legal);
+  }
+
+  .cal-bg-legal-soft {
+    background-color: var(--color-cal-legal-soft);
+  }
+
+  .cal-text-legal {
+    color: var(--color-cal-legal);
+  }
+
+  .cal-border-legal {
+    border-color: var(--color-cal-legal);
+  }
+
+  .cal-bg-success {
+    background-color: var(--color-cal-success);
+  }
+
+  .cal-bg-success-soft {
+    background-color: var(--color-cal-success-soft);
+  }
+
+  .cal-text-success {
+    color: var(--color-cal-success);
+  }
+
+  .cal-bg-warning {
+    background-color: var(--color-cal-warning);
+  }
+
+  .cal-bg-warning-soft {
+    background-color: var(--color-cal-warning-soft);
+  }
+
+  .cal-text-warning {
+    color: var(--color-cal-warning);
+  }
+
+  .cal-selected-event {
+    background-color: var(--color-cal-selected);
+    color: var(--color-cal-selected-text);
+  }
+
+  .cal-ring-selected {
+    --tw-ring-color: var(--color-cal-selected-ring);
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: var(--color-skeleton);
+    border-radius: 0.375rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--color-skeleton-shine) 50%,
+        transparent 100%);
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* Semantic status utilities */
+  .dash-success {
+    color: var(--color-success);
+  }
+
+  .dash-success-bg {
+    background-color: var(--color-success-soft);
+  }
+
+  .dash-warning {
+    color: var(--color-warning);
+  }
+
+  .dash-warning-bg {
+    background-color: var(--color-warning-soft);
+  }
+
+  .dash-danger {
+    color: var(--color-danger);
+  }
+
+  .dash-danger-bg {
+    background-color: var(--color-danger-soft);
+  }
+
+  .dash-info {
+    color: var(--color-info);
+  }
+
+  .dash-info-bg {
+    background-color: var(--color-info-soft);
+  }
+
+  .dash-input {
+    background-color: var(--color-input-bg);
+    border-color: var(--color-input-border);
+    color: var(--color-text-primary);
+  }
+
+  .dash-badge {
+    background-color: var(--color-badge-bg);
+    color: var(--color-text-secondary);
+  }
+
+  .dash-hover:hover {
+    background-color: var(--color-hover-bg);
+  }
+
+  .dash-overlay {
+    background-color: var(--color-overlay);
+  }
+
+  /* Legacy utilities kept for backward compatibility */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .glass-card-hover {
+    transition: all 0.3s ease;
+  }
+
+  .glass-card-hover:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-4px);
+  }
+
+  .glass-nav {
+    background: rgba(0, 45, 98, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #a0c4ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #00A86B 0%, #00D084 100%);
+    box-shadow: 0 8px 24px rgba(0, 168, 107, 0.3);
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 12px 32px rgba(0, 168, 107, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Print Styles - Dashboard Export
+   ────────────────────────────────────────────────────────── */
+@media print {
+
+  /* Hide UI elements that shouldn't be in a report */
+  header,
+  aside,
+  nav,
+  .sticky,
+  button,
+  .no-print,
+  [role="button"] {
+    display: none !important;
+  }
+
+  /* Reset layout for print */
+  body,
+  #root,
+  #main-scroll-container,
+  main {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  /* Force background colors to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Dashboard specific print adjustments */
+  .max-w-\[1600px\],
+  .max-w-7xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .grid {
+    display: grid !important;
+    gap: 20px !important;
+  }
+
+  /* Cards should not break mid-page */
+  .dash-card,
+  .metric-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border: 1px solid #e5e7eb !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  /* Text color corrections for print readability */
+  .dash-text-secondary,
+  .dash-text-tertiary {
+    color: #4b5563 !important;
+  }
+
+  /* Show the print-only header */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Section Visibility Logic */
+  .printing-dashboard .metric-card,
+  .printing-dashboard .dash-card,
+  .printing-dashboard [data-section] {
+    display: none !important;
+  }
+
+  /* Show selected sections */
+  .print-section-kpis .metric-card,
+  .print-section-compliance [data-section="compliance"],
+  .print-section-risk [data-section="risk"],
+  .print-section-activity [data-section="activity"],
+  .print-section-queue [data-section="queue"],
+  .print-section-deadlines [data-section="deadlines"] {
+    display: block !important;
+  }
+}
+
+.print-only {
+  display: none;
+}

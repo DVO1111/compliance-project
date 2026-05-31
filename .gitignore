@@ -1,0 +1,43 @@
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.env
+.env.staging
+.env.production
+
+# Demo seed data — contains real UUIDs; never commit
+supabase/seed_demo_workspace.sql
+
+# Build / typecheck output artifacts
+build_output.txt
+tsc_errors.txt
+tsc_output.txt
+typecheck_output.txt
+types_out.txt
+test_error.txt
+supabase_push_log.txt
+
+# Temp scripts and scratch files
+tmp/
+
+# Claude Code local memory (machine-specific)
+.claude/
