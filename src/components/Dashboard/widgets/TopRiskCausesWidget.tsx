@@ -126,12 +126,15 @@ export default function TopRiskCausesWidget({
         };
     }, [companyId, userId, jurisdiction, currentLimit, currentPeriod]);
 
-    const chartData = useMemo(() => data.map((d) => ({
-        ...d,
-        label: d.cause.length > 30 ? d.cause.slice(0, 27) + "…" : d.cause,
-    })), [data]);
+    const chartData = useMemo(() => data.map((d) => {
+        const cause = d.cause ?? '';
+        return {
+            ...d,
+            label: cause.length > 30 ? cause.slice(0, 27) + "…" : cause,
+        };
+    }), [data]);
 
-    const topCauses = useMemo(() => data.map(d => d.cause), [data]);
+    const topCauses = useMemo(() => data.map(d => d.cause ?? '').filter(Boolean), [data]);
 
     return (
         <DashboardCard
