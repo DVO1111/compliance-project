@@ -50,20 +50,24 @@ export async function createReviewAssignment(opts: {
   const entityId = opts.entityId ?? opts.submissionId ?? null;
   const deadlineAt = new Date(Date.now() + opts.slaHours * 3600 * 1000).toISOString();
 
-  const { data, error } = await supabase
+  const insertRow: Record<string, unknown> = {
+    company_id: opts.companyId,
+    entity_type: entityType,
+    entity_id: entityId,
+    reviewer_ids: opts.reviewerIds,
+    quorum: opts.quorum,
+    sla_hours: opts.slaHours,
+    deadline_at: deadlineAt,
+    status: 'open',
+    created_by: opts.createdBy,
+  };
+  if (entityType === 'content_submission' && entityId) {
+    insertRow.submission_id = entityId;
+  }
+
+  const { data, error } = await (supabase as any)
     .from('review_assignments')
-    .insert({
-      company_id: opts.companyId,
-      submission_id: entityType === 'content_submission' ? entityId : null,
-      entity_type: entityType,
-      entity_id: entityId,
-      reviewer_ids: opts.reviewerIds,
-      quorum: opts.quorum,
-      sla_hours: opts.slaHours,
-      deadline_at: deadlineAt,
-      status: 'open',
-      created_by: opts.createdBy,
-    })
+    .insert(insertRow)
     .select('*')
     .single();
 

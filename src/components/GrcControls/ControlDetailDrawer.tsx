@@ -11,7 +11,7 @@ import {
     unlinkEvidence,
     expireEvidence,
     setValidUntil,
-    getLinkedSubmissionIds,
+    getLinkedEntityIds,
     type EnrichedEvidence,
 } from '../../lib/grc/grcEvidenceService';
 import EvidencePickerModal from './EvidencePickerModal';
@@ -50,7 +50,7 @@ export default function ControlDetailDrawer({
         try {
             const [enriched, ids] = await Promise.all([
                 getEnrichedEvidence(control.id, companyId),
-                getLinkedSubmissionIds(control.id, companyId),
+                getLinkedEntityIds(control.id, companyId, 'content_submission'),
             ]);
             setEvidence(enriched);
             setLinkedIds(ids);
@@ -76,7 +76,8 @@ export default function ControlDetailDrawer({
     const handleBulkLink = async (submissionIds: string[]) => {
         if (!companyId || !user) return;
         try {
-            const count = await bulkLinkEvidence(control.id, submissionIds, companyId, user.id);
+            const entities = submissionIds.map(id => ({ entityType: 'content_submission' as const, entityId: id }));
+            const count = await bulkLinkEvidence(control.id, entities, companyId, user.id);
             toast(`${count} evidence item${count > 1 ? 's' : ''} linked`);
             loadEvidence();
         } catch (err: any) {
@@ -240,13 +241,13 @@ export default function ControlDetailDrawer({
                                                         {ev.computed_status === 'missing' ? (
                                                             <span className="dash-text-tertiary italic">Deleted document</span>
                                                         ) : (
-                                                            ev.submission_title || 'Untitled'
+                                                            ev.entity_label || 'Untitled'
                                                         )}
                                                     </span>
                                                     {evidenceStatusBadge(ev.computed_status)}
                                                 </div>
                                                 <div className="flex items-center gap-2 text-[10px] dash-text-tertiary">
-                                                    {ev.submission_platform && <span>{ev.submission_platform}</span>}
+                                                    {ev.entity_detail && <span>{ev.entity_detail}</span>}
                                                     <span>Linked {new Date(ev.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                                     {ev.valid_until && (
                                                         <span className="flex items-center gap-0.5">
@@ -258,8 +259,8 @@ export default function ControlDetailDrawer({
                                             </div>
                                             {canManage && (
                                                 <div className="flex items-center gap-1 shrink-0">
-                                                    {ev.computed_status !== 'missing' && ev.submission_id && (
-                                                        <button onClick={() => viewInArchive(ev.submission_id)} title="View in Archive" className="p-1 rounded-lg hover:bg-[var(--color-surface-alt)] group">
+                                                    {ev.computed_status !== 'missing' && ev.entity_type === 'content_submission' && ev.entity_id && (
+                                                        <button onClick={() => viewInArchive(ev.entity_id)} title="View in Archive" className="p-1 rounded-lg hover:bg-[var(--color-surface-alt)] group">
                                                             <ExternalLink className="w-3.5 h-3.5 dash-text-tertiary group-hover:dash-accent" />
                                                         </button>
                                                     )}
