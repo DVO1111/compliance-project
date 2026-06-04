@@ -13,7 +13,29 @@ export type NotificationType =
   | 'content_submitted'
   | 'content_approved'
   | 'content_rejected'
-  | 'changes_requested';
+  | 'changes_requested'
+  // Batch release
+  | 'batch_released'
+  | 'batch_held'
+  | 'batch_rejected'
+  // Change control
+  | 'change_control_approved'
+  | 'change_control_rejected'
+  | 'change_control_submitted'
+  // SOP / document control
+  | 'sop_published'
+  | 'sop_review_due'
+  // CAPA
+  | 'capa_opened'
+  | 'capa_overdue'
+  | 'capa_closed'
+  // Deviations
+  | 'deviation_raised'
+  // Supplier / vendor
+  | 'supplier_expiring'
+  | 'supplier_suspended'
+  // Policy
+  | 'policy_reminder';
 
 export interface NotifyParams {
   /** Single recipient by user ID */

@@ -8,7 +8,9 @@ import { recordAuditEvent } from './auditService';
 export interface ReviewAssignment {
   id: string;
   company_id: string;
-  submission_id: string;
+  submission_id: string | null;
+  entity_type: string;
+  entity_id: string | null;
   reviewer_ids: string[];
   quorum: number;
   sla_hours: number;
@@ -35,19 +37,26 @@ export interface ReviewVote {
 
 export async function createReviewAssignment(opts: {
   companyId: string;
-  submissionId: string;
+  /** Legacy: content_submission entity. Use entityType + entityId for other entity types. */
+  submissionId?: string;
+  entityType?: string;
+  entityId?: string;
   reviewerIds: string[];
   quorum: number;
   slaHours: number;
   createdBy: string;
 }): Promise<ReviewAssignment> {
+  const entityType = opts.entityType ?? 'content_submission';
+  const entityId = opts.entityId ?? opts.submissionId ?? null;
   const deadlineAt = new Date(Date.now() + opts.slaHours * 3600 * 1000).toISOString();
 
   const { data, error } = await supabase
     .from('review_assignments')
     .insert({
       company_id: opts.companyId,
-      submission_id: opts.submissionId,
+      submission_id: entityType === 'content_submission' ? entityId : null,
+      entity_type: entityType,
+      entity_id: entityId,
       reviewer_ids: opts.reviewerIds,
       quorum: opts.quorum,
       sla_hours: opts.slaHours,
@@ -60,17 +69,19 @@ export async function createReviewAssignment(opts: {
 
   if (error) throw error;
 
-  // Update submission with SLA deadline
-  await supabase
-    .from('content_submissions')
-    .update({ sla_deadline_at: deadlineAt })
-    .eq('id', opts.submissionId);
+  // Update SLA deadline on content_submissions only (content-specific field)
+  if (entityType === 'content_submission' && entityId) {
+    await supabase
+      .from('content_submissions')
+      .update({ sla_deadline_at: deadlineAt })
+      .eq('id', entityId);
+  }
 
   await recordAuditEvent({
     userId: opts.createdBy,
     action: 'review_assigned',
-    entityType: 'content_submission',
-    entityId: opts.submissionId,
+    entityType,
+    entityId: entityId ?? '',
     companyId: opts.companyId,
     metadata: {
       reviewer_count: opts.reviewerIds.length,
@@ -90,7 +101,10 @@ export async function castVote(opts: {
   vote: ReviewVote['vote'];
   comments: string;
   companyId: string;
-  submissionId: string;
+  /** Legacy: pass submissionId for content_submission entities */
+  submissionId?: string;
+  entityType?: string;
+  entityId?: string;
 }): Promise<{ vote: ReviewVote; resolved: boolean; outcome?: string }> {
   // Upsert the vote (reviewer can change their mind)
   const { data: voteData, error: voteErr } = await supabase
@@ -110,11 +124,13 @@ export async function castVote(opts: {
 
   if (voteErr) throw voteErr;
 
+  const auditEntityType = opts.entityType ?? 'content_submission';
+  const auditEntityId = opts.entityId ?? opts.submissionId ?? opts.assignmentId;
   await recordAuditEvent({
     userId: opts.reviewerId,
     action: `review_vote_${opts.vote}`,
-    entityType: 'content_submission',
-    entityId: opts.submissionId,
+    entityType: auditEntityType,
+    entityId: auditEntityId,
     companyId: opts.companyId,
     metadata: { assignment_id: opts.assignmentId, vote: opts.vote },
   });
@@ -185,16 +201,17 @@ export async function checkQuorumReached(
   return { resolved: false };
 }
 
-/* ── Fetch assignment + votes for a submission ─────────── */
+/* ── Fetch assignment + votes for any entity ───────────── */
 
-export async function getAssignmentForSubmission(
-  submissionId: string
+export async function getAssignmentForEntity(
+  entityType: string,
+  entityId: string
 ): Promise<{ assignment: ReviewAssignment | null; votes: ReviewVote[] }> {
-  // Get the latest (most recent) open or resolved assignment
   const { data: assignments, error } = await supabase
     .from('review_assignments')
     .select('*')
-    .eq('submission_id', submissionId)
+    .eq('entity_type', entityType)
+    .eq('entity_id', entityId)
     .order('created_at', { ascending: false })
     .limit(1);
 
@@ -211,6 +228,12 @@ export async function getAssignmentForSubmission(
     .order('created_at', { ascending: true });
 
   return { assignment, votes: (votes || []) as ReviewVote[] };
+}
+
+export async function getAssignmentForSubmission(
+  submissionId: string
+): Promise<{ assignment: ReviewAssignment | null; votes: ReviewVote[] }> {
+  return getAssignmentForEntity('content_submission', submissionId);
 }
 
 /* ── SLA check (call periodically or on page load) ─────── */

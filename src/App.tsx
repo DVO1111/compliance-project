@@ -95,6 +95,10 @@ import RealtimePopups from './components/Notifications/RealtimePopups';
 import CompanySettingsPage from './components/company/CompanySettingsPage';
 import BillingPage from './components/Billing/BillingPage';
 import FeatureGate from './components/Billing/FeatureGate';
+import BatchReleasePage from './components/BatchRelease/BatchReleasePage';
+import ChangeControlPage from './components/ChangeControl/ChangeControlPage';
+import SopLibraryPage from './components/SopLibrary/SopLibraryPage';
+import ComingSoonPage from './components/Common/ComingSoonPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -169,7 +173,12 @@ function isValidPageId(value: any): value is PageId {
     value === 'platform-evidence-ingestions' ||
     value === 'platform-ecosystem' ||
     value === 'billing' ||
-    value === 'notifications'
+    value === 'notifications' ||
+    value === 'batch-release' ||
+    value === 'change-control' ||
+    value === 'sop-library' ||
+    value === 'supplier-qualification' ||
+    value === 'gmp-inspection'
   );
 }
 
@@ -715,6 +724,21 @@ function AppContent() {
 
       case 'platform-ecosystem':
         return perms.canViewEcosystem ? <EcosystemHubPage /> : <AccessDenied />;
+
+      case 'batch-release':
+        return <BatchReleasePage />;
+
+      case 'change-control':
+        return <ChangeControlPage />;
+
+      case 'sop-library':
+        return <SopLibraryPage />;
+
+      case 'supplier-qualification':
+        return <ComingSoonPage title="Supplier Qualification" description="Manage and qualify raw material suppliers and CMOs against GMP/HACCP requirements." />;
+
+      case 'gmp-inspection':
+        return <ComingSoonPage title="GMP Inspection Readiness" description="Track inspection preparation tasks, evidence packages, and CAPA status for upcoming NAFDAC/regulatory inspections." />;
 
       default:
         return <DashboardPage />;

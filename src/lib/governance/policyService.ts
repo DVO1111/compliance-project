@@ -19,7 +19,10 @@ export interface Policy {
 export interface PolicyVersion {
     id: string;
     policy_id: string;
-    submission_id: string;
+    submission_id?: string | null;
+    content_text?: string | null;
+    file_name?: string | null;
+    file_url?: string | null;
     version_label: string;
     version_number?: string; // Virtual/Mapped
     status: PolicyStatus;
@@ -70,9 +73,9 @@ export const policyService = {
         return policy;
     },
 
-    async listPolicyVersions(policyId: string): Promise<(PolicyVersion & { content_submissions: any })[]> {
+    async listPolicyVersions(policyId: string): Promise<PolicyVersion[]> {
         const { data, error } = await (supabase.from('policy_versions') as any)
-            .select('*, content_submissions(*)')
+            .select('*')
             .eq('policy_id', policyId)
             .order('created_at', { ascending: false });
 
@@ -83,15 +86,30 @@ export const policyService = {
         }));
     },
 
-    async createVersion(companyId: string, userId: string, policyId: string, submissionId: string, versionLabel: string): Promise<PolicyVersion> {
+    async createVersion(
+        companyId: string,
+        userId: string,
+        policyId: string,
+        submissionIdOrContent: string | { contentText?: string; fileName?: string; fileUrl?: string },
+        versionLabel: string
+    ): Promise<PolicyVersion> {
+        const isLegacy = typeof submissionIdOrContent === 'string';
+        const insert: any = {
+            policy_id: policyId,
+            version_label: versionLabel,
+            created_by: userId,
+            status: 'draft',
+        };
+        if (isLegacy) {
+            insert.submission_id = submissionIdOrContent;
+        } else {
+            insert.content_text = submissionIdOrContent.contentText ?? null;
+            insert.file_name = submissionIdOrContent.fileName ?? null;
+            insert.file_url = submissionIdOrContent.fileUrl ?? null;
+        }
+
         const { data, error } = await (supabase.from('policy_versions') as any)
-            .insert({
-                policy_id: policyId,
-                submission_id: submissionId,
-                version_label: versionLabel,
-                created_by: userId,
-                status: 'draft'
-            })
+            .insert(insert)
             .select()
             .single();
 

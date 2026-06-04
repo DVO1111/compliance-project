@@ -50,6 +50,11 @@ import {
   Menu,
   X,
   CreditCard,
+  FlaskConical,
+  GitMerge,
+  BookMarked,
+  PackageCheck,
+  Factory,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 
@@ -133,7 +138,12 @@ export type PageId =
   | 'platform-ecosystem'
   | 'notifications'
   | 'billing'
-  | 'dashboard';
+  // Manufacturing & Quality modules
+  | 'batch-release'
+  | 'change-control'
+  | 'sop-library'
+  | 'supplier-qualification'
+  | 'gmp-inspection';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -201,78 +211,93 @@ export default function MainLayout({
     category: string;
     hidden?: boolean;
   }[] = [
+      // ── 1. Overview ──────────────────────────────────────────────────
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'Overview' },
-      { id: 'content-calendar', label: 'Content Calendar', icon: CalendarDays, category: 'Overview', hidden: false },
-      { id: 'team-chat', label: 'Team Chat', icon: MessageSquare, category: 'Overview', hidden: false },
-      { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, category: 'Overview', hidden: false },
       { id: 'compliance-reporting', label: 'Compliance Report', icon: Activity, category: 'Overview', hidden: !perms.canViewComplianceReporting },
+      { id: 'team-chat', label: 'Team Chat', icon: MessageSquare, category: 'Overview' },
+      { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, category: 'Overview' },
 
-      { id: 'upload', label: 'Upload Content', icon: Upload, category: 'Content & Marketing', hidden: !perms.canUpload },
-      { id: 'content-blocks', label: 'Content Blocks', icon: Blocks, category: 'Content & Marketing', hidden: !perms.canViewContentBlocks },
-      { id: 'archive', label: 'Content Archive', icon: Archive, category: 'Content & Marketing', hidden: !perms.canViewArchive },
-      { id: 'agency-portal', label: 'Agency Portal', icon: Briefcase, category: 'Content & Marketing', hidden: !perms.canViewAgencyPortal },
-      { id: 'translation-compliance', label: 'Translation', icon: Languages, category: 'Content & Marketing', hidden: !perms.canViewTranslationCompliance },
+      // ── 2. Manufacturing & Quality ───────────────────────────────────
+      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Manufacturing & Quality' },
+      { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Manufacturing & Quality', hidden: !perms.canViewCapaManagement },
+      { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Manufacturing & Quality' },
+      { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality' },
+      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality' },
+      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality' },
 
-      { id: 'legal-review', label: 'Legal Review', icon: Scale, category: 'Legal & Review', hidden: !perms.canViewLegalReview },
-      { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Legal & Review' },
-      { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Legal & Review', hidden: !perms.canViewRegulatoryLibrary },
-      { id: 'consent-management', label: 'Consent Mgmt', icon: UserCheck, category: 'Legal & Review', hidden: !perms.canViewConsentManagement },
-      { id: 'channel-rules', label: 'Channel Rules', icon: Layers, category: 'Legal & Review', hidden: !perms.canViewChannelRules },
-      { id: 'claim-extraction', label: 'Claim NLP', icon: FileSearch, category: 'Legal & Review', hidden: !perms.canViewClaimExtraction },
-      { id: 'policy-assistant', label: 'Policy Assistant', icon: FileEdit, category: 'Legal & Review' },
-      { id: 'grc-dashboard', label: 'GRC Posture', icon: BarChart3, category: 'Legal & Review', hidden: !perms.canViewGrcDashboard },
-      { id: 'grc-frameworks', label: 'GRC Frameworks', icon: ShieldCheck, category: 'Legal & Review', hidden: !perms.canViewGrcFrameworks },
-      { id: 'grc-controls', label: 'GRC Controls', icon: ListChecks, category: 'Legal & Review', hidden: !perms.canViewGrcControls },
-      { id: 'grc-automation', label: 'Automation', icon: Zap, category: 'Legal & Review', hidden: !perms.canViewGrcAutomation },
-      { id: 'command-center', label: 'Command Center', icon: LayoutDashboard, category: 'Governance', hidden: !perms.canViewAuditTrail },
-      { id: 'risk-register', label: 'Risk Register', icon: ShieldAlert, category: 'Governance', hidden: !perms.canViewGrcFrameworks },
-      { id: 'obligations', label: 'Obligations', icon: Scale, category: 'Governance', hidden: !perms.canViewGrcFrameworks },
-      { id: 'identity-providers', label: 'Identity & SSO', icon: Fingerprint, category: 'Governance', hidden: !perms.canViewIdentity },
-      { id: 'retention-policies', label: 'Data Retention', icon: CalendarDays, category: 'Governance', hidden: !perms.canViewRetention },
-      { id: 'legal-holds', label: 'Legal Holds', icon: ShieldAlert, category: 'Governance', hidden: !perms.canViewLegalHold },
-      { id: 'governance-timeline', label: 'Gov Timeline', icon: Activity, category: 'Governance', hidden: !perms.canViewGovernanceTimeline },
+      // ── 3. Governance & Policy ───────────────────────────────────────
+      { id: 'policies', label: 'Policies', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewPolicies },
+      { id: 'my-policies', label: 'My Policies', icon: ShieldCheck, category: 'Governance & Policy', hidden: !perms.canViewMyPolicies },
+      { id: 'grc-dashboard', label: 'GRC Posture', icon: BarChart3, category: 'Governance & Policy', hidden: !perms.canViewGrcDashboard },
+      { id: 'grc-frameworks', label: 'GRC Frameworks', icon: ShieldCheck, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
+      { id: 'grc-controls', label: 'GRC Controls', icon: ListChecks, category: 'Governance & Policy', hidden: !perms.canViewGrcControls },
+      { id: 'grc-automation', label: 'GRC Automation', icon: Zap, category: 'Governance & Policy', hidden: !perms.canViewGrcAutomation },
+      { id: 'obligations', label: 'Obligations', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
+      { id: 'risk-register', label: 'Risk Register', icon: ShieldAlert, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
+
+      // ── 4. Content & Marketing Compliance ────────────────────────────
+      { id: 'upload', label: 'Upload Content', icon: Upload, category: 'Content & Marketing Compliance', hidden: !perms.canUpload },
+      { id: 'legal-review', label: 'Legal Review', icon: Scale, category: 'Content & Marketing Compliance', hidden: !perms.canViewLegalReview },
+      { id: 'content-blocks', label: 'Content Blocks', icon: Blocks, category: 'Content & Marketing Compliance', hidden: !perms.canViewContentBlocks },
+      { id: 'archive', label: 'Content Archive', icon: Archive, category: 'Content & Marketing Compliance', hidden: !perms.canViewArchive },
+      { id: 'channel-rules', label: 'Channel Rules', icon: Layers, category: 'Content & Marketing Compliance', hidden: !perms.canViewChannelRules },
+      { id: 'claim-extraction', label: 'Claim NLP', icon: FileSearch, category: 'Content & Marketing Compliance', hidden: !perms.canViewClaimExtraction },
+      { id: 'translation-compliance', label: 'Translation', icon: Languages, category: 'Content & Marketing Compliance', hidden: !perms.canViewTranslationCompliance },
+      { id: 'agency-portal', label: 'Agency Portal', icon: Briefcase, category: 'Content & Marketing Compliance', hidden: !perms.canViewAgencyPortal },
+      { id: 'consent-management', label: 'Consent Mgmt', icon: UserCheck, category: 'Content & Marketing Compliance', hidden: !perms.canViewConsentManagement },
+
+      // ── 5. Regulatory Intelligence ───────────────────────────────────
+      { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory Intelligence' },
+      { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory Intelligence', hidden: !perms.canViewRegulatoryLibrary },
+      { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewHorizonScanning },
+      { id: 'drift-monitor', label: 'Drift Monitor', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewDriftMonitor },
+      { id: 'policy-assistant', label: 'Policy Assistant', icon: FileEdit, category: 'Regulatory Intelligence' },
+
+      // ── 6. Risk & Monitoring ─────────────────────────────────────────
+      { id: 'predictive-risk', label: 'Risk Modeling', icon: BrainCircuit, category: 'Risk & Monitoring', hidden: !perms.canViewPredictiveRisk },
+      { id: 'social-listening', label: 'Social Listening', icon: Radio, category: 'Risk & Monitoring', hidden: !perms.canViewSocialListening },
+      { id: 'website-monitoring', label: 'Web Monitoring', icon: Globe, category: 'Risk & Monitoring', hidden: !perms.canViewWebsiteMonitoring },
+      { id: 'crisis-response', label: 'Crisis Response', icon: Siren, category: 'Risk & Monitoring', hidden: !perms.canViewCrisisResponse },
+      { id: 'whistleblower', label: 'Internal Reports', icon: ShieldAlert, category: 'Risk & Monitoring', hidden: !perms.canViewWhistleblower },
+      { id: 'programmatic-ad', label: 'Ad Compliance', icon: MonitorDot, category: 'Risk & Monitoring', hidden: !perms.canViewProgrammaticAd },
+
+      // ── 7. Provider & Vendor Management ─────────────────────────────
+      { id: 'vendor-scorecard', label: 'Vendor Scorecard', icon: Building2, category: 'Provider & Vendor', hidden: !perms.canViewVendorScorecard },
+      { id: 'vendors', label: 'Vendors', icon: Building2, category: 'Provider & Vendor', hidden: !perms.canViewVendors },
+      { id: 'license-vault', label: 'License Vault', icon: FileKey, category: 'Provider & Vendor', hidden: !perms.canViewLicenseVault },
+
+      // ── 8. AI Governance ─────────────────────────────────────────────
       { id: 'ai-dashboard', label: 'AI Dashboard', icon: LayoutDashboard, category: 'AI Governance', hidden: !perms.canViewAIDashboard },
       { id: 'ai-assets', label: 'AI Assets', icon: BrainCircuit, category: 'AI Governance', hidden: !perms.canViewAIGovernance },
       { id: 'ai-usage', label: 'AI Usage', icon: Activity, category: 'AI Governance', hidden: !perms.canViewAIUsage },
       { id: 'ai-reviews', label: 'AI Reviews', icon: ShieldCheck, category: 'AI Governance', hidden: !perms.canViewAIReviews },
       { id: 'ai-prompts', label: 'AI Prompts', icon: FileEdit, category: 'AI Governance', hidden: !perms.canViewAIPrompts },
       { id: 'ai-incidents', label: 'AI Incidents', icon: ShieldAlert, category: 'AI Governance', hidden: !perms.canViewAIIncidents },
-      { id: 'policies', label: 'Policies', icon: Scale, category: 'Legal & Review', hidden: !perms.canViewPolicies },
-      { id: 'my-policies', label: 'My Policies', icon: ShieldCheck, category: 'Legal & Review', hidden: !perms.canViewMyPolicies },
-      { id: 'vendors', label: 'Vendors', icon: Building2, category: 'Legal & Review', hidden: !perms.canViewVendors },
-      { id: 'audit-sessions', label: 'Audit Workspace', icon: ClipboardCheck, category: 'Legal & Review', hidden: !perms.canViewAuditWorkspace },
 
-      { id: 'drift-monitor', label: 'Drift Monitor', icon: Radar, category: 'Monitoring & Risk', hidden: !perms.canViewDriftMonitor },
-      { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Monitoring & Risk', hidden: !perms.canViewHorizonScanning },
-      { id: 'crisis-response', label: 'Crisis Response', icon: Siren, category: 'Monitoring & Risk', hidden: !perms.canViewCrisisResponse },
-      { id: 'programmatic-ad', label: 'Ad Compliance', icon: MonitorDot, category: 'Monitoring & Risk', hidden: !perms.canViewProgrammaticAd },
-      { id: 'whistleblower', label: 'Internal Reports', icon: ShieldAlert, category: 'Monitoring & Risk', hidden: !perms.canViewWhistleblower },
-      { id: 'predictive-risk', label: 'Risk Modeling', icon: BrainCircuit, category: 'Monitoring & Risk', hidden: !perms.canViewPredictiveRisk },
-      { id: 'social-listening', label: 'Social Listening', icon: Radio, category: 'Monitoring & Risk', hidden: !perms.canViewSocialListening },
-      { id: 'website-monitoring', label: 'Web Monitoring', icon: Globe, category: 'Monitoring & Risk', hidden: !perms.canViewWebsiteMonitoring },
-      { id: 'vendor-scorecard', label: 'Vendor Scorecard', icon: Building2, category: 'Monitoring & Risk', hidden: !perms.canViewVendorScorecard },
-      { id: 'capa-management', label: 'CAPA', icon: ClipboardList, category: 'Monitoring & Risk', hidden: !perms.canViewCapaManagement },
+      // ── 9. Audit & Evidence ──────────────────────────────────────────
+      { id: 'audit-trail', label: 'Audit Trail', icon: ShieldCheck, category: 'Audit & Evidence', hidden: !perms.canViewAuditTrail },
+      { id: 'audit-sessions', label: 'Audit Workspace', icon: ClipboardCheck, category: 'Audit & Evidence', hidden: !perms.canViewAuditWorkspace },
 
+      // ── 10. Administration ───────────────────────────────────────────
       { id: 'billing', label: 'Billing & Plan', icon: CreditCard, category: 'Administration', hidden: !perms.canViewMembers },
       { id: 'company-settings', label: 'Company Settings', icon: Building2, category: 'Administration', hidden: !perms.canViewMembers },
       { id: 'company-members', label: 'Members', icon: User, category: 'Administration', hidden: !perms.canViewMembers },
       { id: 'company-invites', label: 'Invites', icon: User, category: 'Administration', hidden: !perms.canInvite },
       { id: 'company-departments', label: 'Departments', icon: User, category: 'Administration', hidden: !perms.canInvite },
-      { id: 'license-vault', label: 'License Vault', icon: FileKey, category: 'Administration', hidden: !perms.canViewLicenseVault },
       { id: 'integrations', label: 'Integrations', icon: Plug, category: 'Administration', hidden: !perms.canViewLicenseVault },
-      { id: 'audit-trail', label: 'Audit Trail', icon: ShieldCheck, category: 'Administration', hidden: !perms.canViewAuditTrail },
+      { id: 'platform-webhooks', label: 'Outbound Webhooks', icon: Radio, category: 'Administration', hidden: !perms.canViewWebhooks },
+      { id: 'platform-jobs', label: 'Platform Jobs', icon: Activity, category: 'Administration', hidden: !perms.canViewPlatformJobs },
       { id: 'secret-vault', label: 'Secret Vault', icon: FileKey, category: 'Administration', hidden: !perms.canManageRoles && profile?.role !== 'admin' },
       { id: 'role-management', label: 'Role Management', icon: KeyRound, category: 'Administration', hidden: !perms.canManageRoles },
       { id: 'org-management', label: 'Org Management', icon: Building2, category: 'Administration', hidden: !profile?.organization_id || !perms.canManageRoles },
       { id: 'training-log', label: 'Training Log', icon: GraduationCap, category: 'Administration', hidden: !perms.canViewTraining },
       { id: 'training-simulation', label: 'Training Sim', icon: GraduationCap, category: 'Administration', hidden: !perms.canViewTrainingSimulation },
-      { id: 'platform-jobs', label: 'Platform Jobs', icon: Activity, category: 'Administration', hidden: !perms.canViewPlatformJobs },
-      { id: 'platform-webhooks', label: 'Outbound Webhooks', icon: Radio, category: 'Administration', hidden: !perms.canViewWebhooks },
+      { id: 'partner-verification', label: 'Partner Verification', icon: ShieldCheck, category: 'Administration', hidden: !perms.canManageRoles },
 
+      // ── Hidden / external ────────────────────────────────────────────
       { id: 'correction-editor', label: 'Correction Editor', icon: Scale, category: 'Hidden', hidden: true },
       { id: 'legal-marketplace', label: 'Legal Marketplace', icon: Building2, category: 'External Partners', hidden: profile?.role === 'legal_partner' },
       { id: 'legal-partner-dashboard', label: 'Partner Console', icon: LayoutDashboard, category: 'External Partners', hidden: profile?.role !== 'legal_partner' },
-      { id: 'partner-verification', label: 'Partner Verification', icon: ShieldCheck, category: 'Administration', hidden: !perms.canManageRoles },
     ];
 
   const visibleNavItems = navItems.filter((item) => !item.hidden);

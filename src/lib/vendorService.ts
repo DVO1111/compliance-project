@@ -41,11 +41,14 @@ export interface VendorRiskProfile {
 export interface VendorDocument {
   id: string;
   vendor_id: string;
-  submission_id: string;
+  submission_id?: string | null;
+  file_name?: string | null;
+  file_url?: string | null;
+  file_size?: number | null;
   document_type: VendorDocumentType;
   uploaded_by: string;
   created_at: string;
-  // joined submission
+  // joined submission (present only when linked via submission_id)
   submission?: { id: string; title: string; platform: string; status: string; created_at: string } | null;
 }
 
@@ -190,7 +193,7 @@ export async function upsertVendorRiskProfile(
 export async function getVendorDocuments(vendorId: string): Promise<VendorDocument[]> {
   const { data, error } = await (supabase as any)
     .from('vendor_documents')
-    .select('*, submission:content_submissions(id, title, platform, status, created_at)')
+    .select('*')
     .eq('vendor_id', vendorId)
     .order('created_at', { ascending: false });
   if (error) { logger.error('getVendorDocuments:', error); return []; }
@@ -204,13 +207,44 @@ export async function linkVendorDocument(
   documentType: VendorDocumentType,
   uploadedBy: string
 ): Promise<boolean> {
-  const validation = await validateMutation(uploadedBy, companyId, 'canManagePolicies');
-  if (!validation.valid) throw new Error(validation.message);
+  // Look up file_name from content_submissions to store directly
+  const { data: sub } = await (supabase as any)
+    .from('content_submissions')
+    .select('file_name, title')
+    .eq('id', submissionId)
+    .maybeSingle();
 
   const { error } = await (supabase as any)
     .from('vendor_documents')
-    .insert({ vendor_id: vendorId, submission_id: submissionId, document_type: documentType, uploaded_by: uploadedBy });
+    .insert({
+      vendor_id: vendorId,
+      submission_id: submissionId,
+      file_name: sub?.file_name || sub?.title || null,
+      document_type: documentType,
+      uploaded_by: uploadedBy,
+    });
   if (error) { logger.error('linkVendorDocument:', error); return false; }
+  return true;
+}
+
+export async function uploadVendorDocument(
+  companyId: string,
+  vendorId: string,
+  file: { fileName: string; fileUrl: string; fileSize?: number },
+  documentType: VendorDocumentType,
+  uploadedBy: string
+): Promise<boolean> {
+  const { error } = await (supabase as any)
+    .from('vendor_documents')
+    .insert({
+      vendor_id: vendorId,
+      file_name: file.fileName,
+      file_url: file.fileUrl,
+      file_size: file.fileSize ?? null,
+      document_type: documentType,
+      uploaded_by: uploadedBy,
+    });
+  if (error) { logger.error('uploadVendorDocument:', error); return false; }
   return true;
 }
 

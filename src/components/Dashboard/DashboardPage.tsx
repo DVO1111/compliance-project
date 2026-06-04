@@ -24,6 +24,7 @@ import ComplianceHealthScoreWidget from "./widgets/ComplianceHealthScoreWidget";
 import NeedsAttentionWidget from "./widgets/NeedsAttentionWidget";
 import DailyQuizWidget from "./widgets/DailyQuizWidget";
 import UpcomingDeadlinesWidget from "./widgets/UpcomingDeadlinesWidget";
+import ActiveWorkflowsWidget from "./widgets/ActiveWorkflowsWidget";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPermissions } from "../../lib/permissions";
 import MetricCard from "./ui/MetricCard";
@@ -517,6 +518,13 @@ export default function DashboardPage({
             </motion.div>
           ))}
       </motion.div>
+
+      {/* ── Active Workflows (cross-module summary) ───────────────── */}
+      {companyId && (
+        <div className="max-w-[1600px] mx-auto">
+          <ActiveWorkflowsWidget companyId={companyId} />
+        </div>
+      )}
 
       {/* ── Hero Row: Health Score + Needs Attention ───────────── */}
       {/* Only render when user has access to at least one relevant module */}
