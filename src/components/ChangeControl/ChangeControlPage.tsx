@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GitMerge, Plus, X, ChevronRight } from 'lucide-react';
+import { GitMerge, Plus, X, ChevronRight, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   listChangeControls,
@@ -137,6 +137,160 @@ function ChangeControlModal({ companyId, userId, onClose, onSuccess }: {
   );
 }
 
+function DetailModal({ cc, companyId, userId, onClose, onAction }: {
+  cc: ChangeControl;
+  companyId: string;
+  userId: string;
+  onClose: () => void;
+  onAction: () => void;
+}) {
+  const [actionLoading, setActionLoading] = useState(false);
+  const next = NEXT_STATUS[cc.status];
+  const canReject = ['impact_assessment', 'pending_approval', 'approved', 'implementing', 'verification'].includes(cc.status);
+
+  const handleAdvance = async () => {
+    if (!next) return;
+    setActionLoading(true);
+    try {
+      await updateChangeControlStatus(cc.id, companyId, userId, next);
+      onAction();
+    } catch (e: any) { alert(e.message); }
+    finally { setActionLoading(false); }
+  };
+
+  const handleReject = async () => {
+    const reason = prompt('Rejection reason:');
+    if (!reason) return;
+    setActionLoading(true);
+    try {
+      await updateChangeControlStatus(cc.id, companyId, userId, 'rejected', { rejectedReason: reason });
+      onAction();
+    } catch (e: any) { alert(e.message); }
+    finally { setActionLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="dash-card border dash-border rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-start justify-between p-6 border-b dash-border flex-shrink-0">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-[var(--color-accent-soft)] flex-shrink-0 mt-0.5">
+              <GitMerge size={20} className="text-[var(--color-accent)]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold dash-text-tertiary">{cc.change_number}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${CC_STATUS_COLORS[cc.status]}`}>
+                  {CC_STATUS_LABELS[cc.status]}
+                </span>
+                {cc.regulatory_impact && (
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border text-red-600 bg-red-50 border-red-200">
+                    Regulatory
+                  </span>
+                )}
+                {cc.validation_required && (
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border text-purple-600 bg-purple-50 border-purple-200">
+                    Validation Req.
+                  </span>
+                )}
+              </div>
+              <p className="font-bold dash-text text-base mt-1">{cc.title}</p>
+              <p className="text-xs dash-text-tertiary mt-0.5">
+                {CHANGE_TYPE_LABELS[cc.change_type]} &middot; {cc.change_category} change &middot; Created {new Date(cc.created_at).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="dash-text-tertiary hover:dash-text-primary flex-shrink-0 ml-4"><X size={22} /></button>
+        </div>
+
+        {/* Body — scrollable */}
+        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+
+          {/* Description */}
+          {cc.description && (
+            <section>
+              <p className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary mb-2">Description</p>
+              <p className="text-sm dash-text leading-relaxed whitespace-pre-wrap">{cc.description}</p>
+            </section>
+          )}
+
+          {/* Impact assessment */}
+          {cc.impact_assessment && (
+            <section>
+              <p className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary mb-2">Impact Assessment</p>
+              <div className="p-4 rounded-xl bg-[var(--color-surface-alt)] border dash-border">
+                <p className="text-sm dash-text leading-relaxed whitespace-pre-wrap">{cc.impact_assessment}</p>
+              </div>
+            </section>
+          )}
+
+          {/* Flags row */}
+          <section className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              {cc.regulatory_impact
+                ? <AlertTriangle size={16} className="text-red-500" />
+                : <CheckCircle2 size={16} className="text-green-500" />}
+              <span className="text-sm dash-text">
+                {cc.regulatory_impact ? 'Regulatory notification required' : 'No regulatory notification'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {cc.validation_required
+                ? <Clock size={16} className="text-purple-500" />
+                : <CheckCircle2 size={16} className="text-green-500" />}
+              <span className="text-sm dash-text">
+                {cc.validation_required ? 'Validation required' : 'No validation required'}
+              </span>
+            </div>
+          </section>
+
+          {/* Workflow progress */}
+          {cc.status !== 'rejected' && (
+            <section>
+              <p className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary mb-3">Workflow Progress</p>
+              <div className="flex gap-1">
+                {WORKFLOW_STEPS.map((step, i) => {
+                  const stepIdx = WORKFLOW_STEPS.indexOf(cc.status);
+                  const done = i <= stepIdx;
+                  return (
+                    <div key={step} className="flex-1">
+                      <div className={`h-1.5 rounded-full transition-colors ${done ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-border)]'}`} />
+                      <p className={`text-[9px] mt-1 font-bold uppercase tracking-widest truncate ${done ? 'text-[var(--color-accent)]' : 'dash-text-tertiary'}`}>
+                        {CC_STATUS_LABELS[step]}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        {!['closed', 'rejected'].includes(cc.status) && (next || canReject) && (
+          <div className="flex gap-3 p-6 border-t dash-border flex-shrink-0">
+            {canReject && (
+              <button disabled={actionLoading} onClick={handleReject}
+                className="px-4 py-2.5 rounded-xl text-red-600 text-sm font-semibold border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 transition-all">
+                Reject
+              </button>
+            )}
+            {next && (
+              <button disabled={actionLoading} onClick={handleAdvance}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all ml-auto shadow-md"
+                style={{ background: 'var(--color-accent)' }}>
+                {actionLoading ? 'Updating...' : <><ChevronRight size={14} />Advance to {CC_STATUS_LABELS[next]}</>}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ChangeControlPage() {
   const { user, profile } = useAuth();
   const companyId = (profile as any)?.company_id ?? '';
@@ -145,6 +299,7 @@ export default function ChangeControlPage() {
   const [records, setRecords] = useState<ChangeControl[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [selectedCC, setSelectedCC] = useState<ChangeControl | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const load = async () => {
@@ -228,18 +383,21 @@ export default function ChangeControlPage() {
       ) : (
         <div className="space-y-3">
           {records.map(cc => {
-            const isActioning = actionLoading === cc.id;
             const next = NEXT_STATUS[cc.status];
-            const canReject = ['impact_assessment', 'pending_approval', 'approved', 'implementing', 'verification'].includes(cc.status);
+            const isActioning = actionLoading === cc.id;
 
             return (
-              <div key={cc.id} className="dash-card border dash-border rounded-2xl p-5 shadow-sm">
+              <div
+                key={cc.id}
+                onClick={() => setSelectedCC(cc)}
+                className="dash-card border dash-border rounded-2xl p-5 shadow-sm cursor-pointer hover:border-[var(--color-accent)] transition-colors group"
+              >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <div className="p-2 rounded-xl bg-[var(--color-accent-soft)] flex-shrink-0">
                       <GitMerge size={18} className="text-[var(--color-accent)]" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold dash-text-tertiary">{cc.change_number}</span>
                         <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${CC_STATUS_COLORS[cc.status]}`}>
@@ -255,30 +413,30 @@ export default function ChangeControlPage() {
                       <p className="text-xs dash-text-tertiary mt-0.5">
                         {CHANGE_TYPE_LABELS[cc.change_type]} &middot; {cc.change_category} change &middot; {new Date(cc.created_at).toLocaleDateString()}
                       </p>
+                      {cc.description && (
+                        <p className="text-xs dash-text-secondary mt-1.5 line-clamp-1 italic">
+                          {cc.description}
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  {(next || canReject) && !['closed', 'rejected'].includes(cc.status) && (
-                    <div className="flex gap-2">
-                      {next && (
-                        <button disabled={isActioning} onClick={() => handleAdvance(cc)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-all"
-                          style={{ background: 'var(--color-accent)' }}>
-                          {isActioning ? '...' : <><ChevronRight size={12} />{CC_STATUS_LABELS[next]}</>}
-                        </button>
-                      )}
-                      {canReject && (
-                        <button disabled={isActioning} onClick={() => handleReject(cc)}
-                          className="px-3 py-1.5 rounded-xl text-red-600 text-xs font-bold border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 transition-all">
-                          Reject
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {next && !['closed', 'rejected'].includes(cc.status) && (
+                      <button
+                        disabled={isActioning}
+                        onClick={e => { e.stopPropagation(); handleAdvance(cc); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-all"
+                        style={{ background: 'var(--color-accent)' }}>
+                        {isActioning ? '...' : <><ChevronRight size={12} />{CC_STATUS_LABELS[next]}</>}
+                      </button>
+                    )}
+                    <ChevronRight size={16} className="dash-text-tertiary group-hover:text-[var(--color-accent)] transition-colors" />
+                  </div>
                 </div>
 
                 {/* Progress bar */}
-                {!['rejected'].includes(cc.status) && (
+                {cc.status !== 'rejected' && (
                   <div className="mt-4 flex gap-1">
                     {WORKFLOW_STEPS.map((step, i) => {
                       const stepIdx = WORKFLOW_STEPS.indexOf(cc.status);
@@ -306,6 +464,16 @@ export default function ChangeControlPage() {
           userId={userId}
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); load(); }}
+        />
+      )}
+
+      {selectedCC && (
+        <DetailModal
+          cc={selectedCC}
+          companyId={companyId}
+          userId={userId}
+          onClose={() => setSelectedCC(null)}
+          onAction={() => { setSelectedCC(null); load(); }}
         />
       )}
     </div>
