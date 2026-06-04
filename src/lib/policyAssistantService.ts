@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { generateJSON } from './geminiClient';
+import { wrapAICall } from './aiResponseValidator';
 
 export interface PolicyTemplate {
   id: string;
@@ -192,9 +193,13 @@ export async function generatePolicyDraft(
   `;
 
   try {
-    const result = await generateJSON<{ title: string; content: string }>(systemPrompt);
+    const result = await wrapAICall<{ title: string; content: string } | null>(
+      () => generateJSON(systemPrompt),
+      { title: 'string', content: 'string' },
+      null,
+      { action: 'policy_draft_generation' }
+    );
     if (result && result.title && result.content) {
-      // Save to cache (1 hour TTL)
       await complianceCache.set(cacheKey, result, 3600_000);
       return result;
     }

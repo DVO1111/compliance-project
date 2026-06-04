@@ -5,6 +5,7 @@
 
 import { supabase } from './supabase';
 import { generateJSON } from './geminiClient';
+import { wrapAICall } from './aiResponseValidator';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -114,14 +115,12 @@ export async function runImpactAnalysis(
         .join('\n\n');
 
     // 4. Run AI analysis
-    let aiResult: AIImpactResult;
-    try {
-        aiResult = await generateJSON<AIImpactResult>(
-            IMPACT_PROMPT(regulation.content || regulation.title, contentList)
-        );
-    } catch {
-        aiResult = { affected: [], summary: 'AI analysis failed. Manual review recommended.' };
-    }
+    const aiResult = await wrapAICall<AIImpactResult>(
+        () => generateJSON(IMPACT_PROMPT(regulation.content || regulation.title, contentList)),
+        { affected: 'array', summary: 'string' },
+        { affected: [], summary: 'AI analysis failed. Manual review recommended.' },
+        { action: 'impact_analysis', companyId, userId: generatedBy }
+    );
 
     // 5. Map results to affected items
     const affectedItems: AffectedItem[] = (aiResult.affected || [])
