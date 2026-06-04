@@ -99,6 +99,7 @@ import BatchReleasePage from './components/BatchRelease/BatchReleasePage';
 import ChangeControlPage from './components/ChangeControl/ChangeControlPage';
 import SopLibraryPage from './components/SopLibrary/SopLibraryPage';
 import ComingSoonPage from './components/Common/ComingSoonPage';
+import AIInsightsPage from './components/Dashboard/AIInsightsPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -178,7 +179,8 @@ function isValidPageId(value: any): value is PageId {
     value === 'change-control' ||
     value === 'sop-library' ||
     value === 'supplier-qualification' ||
-    value === 'gmp-inspection'
+    value === 'gmp-inspection' ||
+    value === 'ai-insights'
   );
 }
 
@@ -739,6 +741,9 @@ function AppContent() {
 
       case 'gmp-inspection':
         return <ComingSoonPage title="GMP Inspection Readiness" description="Track inspection preparation tasks, evidence packages, and CAPA status for upcoming NAFDAC/regulatory inspections." />;
+
+      case 'ai-insights':
+        return <AIInsightsPage />;
 
       default:
         return <DashboardPage />;

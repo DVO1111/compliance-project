@@ -20,7 +20,6 @@ import LongestWaitingItemsWidget from "./widgets/LongestWaitingItemsWidget";
 import TopRiskCausesWidget from "./widgets/TopRiskCausesWidget";
 import MyStatsWidget from "./widgets/MyStatsWidget";
 import JurisdictionHealthWidget from "./widgets/JurisdictionHealthWidget";
-import ComplianceHealthScoreWidget from "./widgets/ComplianceHealthScoreWidget";
 import NeedsAttentionWidget from "./widgets/NeedsAttentionWidget";
 import DailyQuizWidget from "./widgets/DailyQuizWidget";
 import UpcomingDeadlinesWidget from "./widgets/UpcomingDeadlinesWidget";
@@ -526,12 +525,13 @@ export default function DashboardPage({
         </div>
       )}
 
-      {/* ── Hero Row: Health Score + Needs Attention ───────────── */}
-      {/* Only render when user has access to at least one relevant module */}
+      {/* ── Hero Row: Needs Attention + Activity Feed ──────────── */}
+      {/* Health score / compliance rates live in Compliance Report.  */}
+      {/* Dashboard shows operational: what to act on, what just happened. */}
       {companyId && hasHeroAccess && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-[1600px] mx-auto">
-          <ComplianceHealthScoreWidget companyId={companyId} access={perms} />
           <NeedsAttentionWidget companyId={companyId} access={perms} />
+          <ActivityFeedWidget companyId={companyId} limit={8} />
         </div>
       )}
 
