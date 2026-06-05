@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import {
     Building2, Palette, Globe, Upload, Loader2, CheckCircle,
     Database, AlertTriangle, Lock, Sparkles, ChevronRight,
-    Image, Type, Link2, Users
+    Image, Type, Link2, Users, BookOpen, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { seedDemoData } from '../../lib/sampleDataSeeder';
 import { logger } from '../../lib/logger';
+import {
+    getAllFrameworks, getEnabledFrameworks, setWorkspaceFramework,
+    type FrameworkRow,
+} from '../../lib/frameworkLibraryService';
 
 interface CompanySettings {
     name: string;
@@ -58,6 +62,11 @@ export default function CompanySettingsPage() {
     const [seeding, setSeeding] = useState(false);
     const [seedResult, setSeedResult] = useState<{ text: string; ok: boolean } | null>(null);
 
+    // Regulatory frameworks selection
+    const [allFrameworks, setAllFrameworks] = useState<FrameworkRow[]>([]);
+    const [enabledFrameworkIds, setEnabledFrameworkIds] = useState<Set<string>>(new Set());
+    const [frameworkToggles, setFrameworkToggles] = useState<Record<string, boolean>>({});
+
     useEffect(() => {
         if (!companyId) { setLoading(false); return; }
         const load = async () => {
@@ -76,9 +85,29 @@ export default function CompanySettingsPage() {
                 });
             }
             setLoading(false);
+
+            // Load framework catalogue and enabled set
+            const [fwRows, enabledIds] = await Promise.all([
+                getAllFrameworks(),
+                getEnabledFrameworks(companyId),
+            ]);
+            setAllFrameworks(fwRows);
+            setEnabledFrameworkIds(new Set(enabledIds));
         };
         load();
     }, [companyId]);
+
+    const handleFrameworkToggle = async (frameworkId: string, enabled: boolean) => {
+        if (!companyId || !user) return;
+        setFrameworkToggles(t => ({ ...t, [frameworkId]: true }));
+        await setWorkspaceFramework(companyId, frameworkId, enabled, user.id);
+        setEnabledFrameworkIds(prev => {
+            const next = new Set(prev);
+            if (enabled) next.add(frameworkId); else next.delete(frameworkId);
+            return next;
+        });
+        setFrameworkToggles(t => ({ ...t, [frameworkId]: false }));
+    };
 
     const handleSave = async () => {
         if (!companyId || !isAdminOrOwner) return;
@@ -329,6 +358,60 @@ export default function CompanySettingsPage() {
                     </button>
                 ))}
             </div>
+
+            {/* Regulatory Frameworks */}
+            {allFrameworks.length > 0 && (
+                <div className="dash-card border dash-border rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b dash-border flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
+                            <BookOpen className="w-4 h-4 text-[var(--color-accent)]" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold dash-text">Regulatory Frameworks</h2>
+                            <p className="text-xs dash-text-tertiary">Select which regulatory frameworks apply to your workspace — only enabled frameworks run during compliance checks.</p>
+                        </div>
+                    </div>
+                    <div className="divide-y dash-border">
+                        {allFrameworks.map(fw => {
+                            const isEnabled = enabledFrameworkIds.has(fw.id);
+                            const isToggling = !!frameworkToggles[fw.id];
+                            return (
+                                <div key={fw.id} className="flex items-center gap-4 px-6 py-4">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-semibold dash-text">{fw.short_name}</span>
+                                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--color-surface-alt)] dash-text-secondary border dash-border uppercase tracking-wide">{fw.jurisdiction.replace('_', ' ')}</span>
+                                        </div>
+                                        <p className="text-xs dash-text-secondary mt-0.5 leading-snug">{fw.name}</p>
+                                        {fw.regulatory_body && <p className="text-[10px] dash-text-tertiary mt-0.5">{fw.regulatory_body}{fw.version ? ` — ${fw.version}` : ''}</p>}
+                                    </div>
+                                    {isAdminOrOwner ? (
+                                        <button
+                                            onClick={() => handleFrameworkToggle(fw.id, !isEnabled)}
+                                            disabled={isToggling}
+                                            className="flex-shrink-0 transition-colors disabled:opacity-50"
+                                        >
+                                            {isEnabled
+                                                ? <ToggleRight className="w-7 h-7 text-[var(--color-success)]" />
+                                                : <ToggleLeft className="w-7 h-7 dash-text-tertiary" />
+                                            }
+                                        </button>
+                                    ) : (
+                                        <span className={`text-xs font-semibold ${isEnabled ? 'text-[var(--color-success)]' : 'dash-text-tertiary'}`}>
+                                            {isEnabled ? 'Enabled' : 'Disabled'}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {enabledFrameworkIds.size === 0 && (
+                        <div className="px-6 py-3 bg-[var(--color-warning-soft)] border-t border-[var(--color-warning)]/30">
+                            <p className="text-xs text-[var(--color-warning)] font-medium">No frameworks enabled — the compliance engine will use all available frameworks until at least one is selected.</p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Demo Data / Pilot Setup */}
             {isAdminOrOwner && (

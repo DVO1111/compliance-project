@@ -5,6 +5,7 @@ import type { Database } from '../lib/database.types';
 import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
+import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
@@ -157,6 +158,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Not fatal — falls back to legacy role
       }
     }
+
+    // Warm the framework library rule cache in the background after sign-in.
+    // Idempotent — subsequent calls return immediately once warmed.
+    initFrameworkLibrary().catch(() => {});
 
     setProfile({ ...baseProfile, company_role, module_access, customPermissions });
     setLoading(false);

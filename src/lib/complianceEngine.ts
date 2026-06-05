@@ -11,6 +11,14 @@ import { scanFdaRules, scanFdaCaveats } from './rules/fdaRules';
 import { scanEmaRules, scanEmaCaveats } from './rules/emaRules';
 import { scanPanAfricanRules, scanPanAfricanCaveats } from './rules/panAfricanRules';
 import { scanWhoRules, scanWhoCaveats } from './rules/whoRules';
+import {
+  isLibraryReady,
+  getCachedRules,
+  getCachedCaveats,
+  runPatternRules,
+  runCaveatRules,
+  type RuntimeRule,
+} from './frameworkLibraryService';
 
 export interface ComplianceAnalysisResult {
   overall_risk: 'low' | 'medium' | 'high' | 'critical';
@@ -52,8 +60,10 @@ const AUDIENCE_MULTIPLIER: Record<string, number> = {
   general_public: 1.5,
 };
 
+type RuleHit = { rule: RuleDefinition | RuntimeRule; match: string; position: number; context: string };
+
 function processRuleHits(
-  hits: Array<{ rule: RuleDefinition; match: string; position: number; context: string }>,
+  hits: RuleHit[],
   issues: ComplianceIssue[],
   flaggedPhrases: FlaggedPhrase[],
   violatedRegulations: ViolatedRegulation[],
@@ -63,11 +73,12 @@ function processRuleHits(
   halfScore: number
 ) {
   for (const hit of hits) {
+    const suggestion = hit.rule.suggestion(hit.match);
     issues.push({
       severity: hit.rule.severity,
       issue: hit.match,
       regulation_cited: hit.rule.regulation_cited,
-      suggestion: hit.rule.suggestion(hit.match),
+      suggestion,
       category: hit.rule.category || 'product_violation',
       jurisdiction: hit.rule.jurisdiction,
     });
@@ -87,7 +98,7 @@ function processRuleHits(
 
     suggestedRewrites.push({
       original: hit.match,
-      suggested: hit.rule.suggestion(hit.match),
+      suggested: suggestion,
       reasoning: hit.rule.regulation_cited,
     });
 
@@ -133,6 +144,33 @@ function calculateRisk(
   return 'critical';
 }
 
+// ── Shared helpers ────────────────────────────────────────────────────────
+
+function applyRuleHitsFromCache(
+  jurisdiction: string,
+  contentText: string,
+  platform: string,
+  audience: string,
+  issues: ComplianceIssue[],
+  flaggedPhrases: FlaggedPhrase[],
+  violatedRegulations: ViolatedRegulation[],
+  suggestedRewrites: SuggestedRewrite[],
+  riskScore: { value: number },
+  ruleBaseScore: number,
+  ruleHalfScore: number
+) {
+  const rules = getCachedRules(jurisdiction);
+  const caveats = getCachedCaveats(jurisdiction);
+  const hits = runPatternRules(contentText, rules) as RuleHit[];
+  processRuleHits(hits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, ruleBaseScore, ruleHalfScore);
+  const caveatResults = runCaveatRules(contentText, platform, audience, caveats);
+  for (const c of caveatResults) {
+    processCaveatIssues([c as ComplianceIssue], issues, violatedRegulations, suggestedRewrites, riskScore);
+  }
+}
+
+// ── Per-jurisdiction analysers ────────────────────────────────────────────
+
 function analyzeForNigeria(
   contentText: string,
   platform: string,
@@ -144,20 +182,22 @@ function analyzeForNigeria(
   const suggestedRewrites: SuggestedRewrite[] = [];
   const riskScore = { value: 0 };
 
-  const forbiddenHits = scanForbiddenClaims(contentText);
-  processRuleHits(forbiddenHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
-
-  const superlativeHits = scanSuperlatives(contentText);
-  processRuleHits(superlativeHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 8, 4);
-
-  const ethicsHits = scanProfessionalEthics(contentText);
-  processRuleHits(ethicsHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
-
-  const caveatIssues = scanMandatoryCaveats(contentText, platform, targetAudience);
-  processCaveatIssues(caveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
-
-  const ethicsCaveats = scanProfessionalEthicsCaveats(contentText, platform, targetAudience);
-  processCaveatIssues(ethicsCaveats, issues, violatedRegulations, suggestedRewrites, riskScore);
+  if (isLibraryReady()) {
+    // DB-backed cache path — runs all nigeria-jurisdiction controls (NAFDAC + professional ethics)
+    applyRuleHitsFromCache('nigeria', contentText, platform, targetAudience, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+  } else {
+    // Static TypeScript fallback (cache not yet warmed)
+    const forbiddenHits = scanForbiddenClaims(contentText);
+    processRuleHits(forbiddenHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+    const superlativeHits = scanSuperlatives(contentText);
+    processRuleHits(superlativeHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 8, 4);
+    const ethicsHits = scanProfessionalEthics(contentText);
+    processRuleHits(ethicsHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+    const caveatIssues = scanMandatoryCaveats(contentText, platform, targetAudience);
+    processCaveatIssues(caveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+    const ethicsCaveats = scanProfessionalEthicsCaveats(contentText, platform, targetAudience);
+    processCaveatIssues(ethicsCaveats, issues, violatedRegulations, suggestedRewrites, riskScore);
+  }
 
   const strictnessLevel = PLATFORM_STRICTNESS[platform] || 'moderate';
   const audienceMultiplier = AUDIENCE_MULTIPLIER[targetAudience] || 1.0;
@@ -184,11 +224,14 @@ function analyzeForUSA(
   const suggestedRewrites: SuggestedRewrite[] = [];
   const riskScore = { value: 0 };
 
-  const fdaHits = scanFdaRules(contentText);
-  processRuleHits(fdaHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
-
-  const fdaCaveatIssues = scanFdaCaveats(contentText, platform, targetAudience);
-  processCaveatIssues(fdaCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+  if (isLibraryReady()) {
+    applyRuleHitsFromCache('usa', contentText, platform, targetAudience, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+  } else {
+    const fdaHits = scanFdaRules(contentText);
+    processRuleHits(fdaHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+    const fdaCaveatIssues = scanFdaCaveats(contentText, platform, targetAudience);
+    processCaveatIssues(fdaCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+  }
 
   const strictnessLevel = PLATFORM_STRICTNESS[platform] || 'moderate';
   const audienceMultiplier = AUDIENCE_MULTIPLIER[targetAudience] || 1.0;
@@ -215,11 +258,14 @@ function analyzeForEurope(
   const suggestedRewrites: SuggestedRewrite[] = [];
   const riskScore = { value: 0 };
 
-  const emaHits = scanEmaRules(contentText);
-  processRuleHits(emaHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
-
-  const emaCaveatIssues = scanEmaCaveats(contentText, platform, targetAudience);
-  processCaveatIssues(emaCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+  if (isLibraryReady()) {
+    applyRuleHitsFromCache('europe', contentText, platform, targetAudience, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+  } else {
+    const emaHits = scanEmaRules(contentText);
+    processRuleHits(emaHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+    const emaCaveatIssues = scanEmaCaveats(contentText, platform, targetAudience);
+    processCaveatIssues(emaCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+  }
 
   const strictnessLevel = PLATFORM_STRICTNESS[platform] || 'moderate';
   const audienceMultiplier = AUDIENCE_MULTIPLIER[targetAudience] || 1.0;
@@ -246,17 +292,20 @@ function analyzeForPanAfrican(
   const suggestedRewrites: SuggestedRewrite[] = [];
   const riskScore = { value: 0 };
 
-  const panAfricanHits = scanPanAfricanRules(contentText);
-  processRuleHits(panAfricanHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
-
-  const panAfricanCaveatIssues = scanPanAfricanCaveats(contentText, platform, targetAudience);
-  processCaveatIssues(panAfricanCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
-
-  const whoHits = scanWhoRules(contentText);
-  processRuleHits(whoHits, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 8, 4);
-
-  const whoCaveatIssues = scanWhoCaveats(contentText, platform, targetAudience);
-  processCaveatIssues(whoCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+  if (isLibraryReady()) {
+    // Pan-African also runs WHO criteria at a slightly lower score weight
+    applyRuleHitsFromCache('pan_african', contentText, platform, targetAudience, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+    applyRuleHitsFromCache('who', contentText, platform, targetAudience, issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 8, 4);
+  } else {
+    const panAfricanHits = scanPanAfricanRules(contentText);
+    processRuleHits(panAfricanHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 10, 5);
+    const panAfricanCaveatIssues = scanPanAfricanCaveats(contentText, platform, targetAudience);
+    processCaveatIssues(panAfricanCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+    const whoHits = scanWhoRules(contentText);
+    processRuleHits(whoHits as RuleHit[], issues, flaggedPhrases, violatedRegulations, suggestedRewrites, riskScore, 8, 4);
+    const whoCaveatIssues = scanWhoCaveats(contentText, platform, targetAudience);
+    processCaveatIssues(whoCaveatIssues, issues, violatedRegulations, suggestedRewrites, riskScore);
+  }
 
   const strictnessLevel = PLATFORM_STRICTNESS[platform] || 'moderate';
   const audienceMultiplier = AUDIENCE_MULTIPLIER[targetAudience] || 1.0;

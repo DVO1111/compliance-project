@@ -1,6 +1,6 @@
 import type { CaveatRequirement, ComplianceIssue } from './types';
 
-const CAVEAT_REQUIREMENTS: CaveatRequirement[] = [
+export const CAVEAT_REQUIREMENTS: CaveatRequirement[] = [
   {
     id: 'MC-001',
     triggers: [/.+/s],

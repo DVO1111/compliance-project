@@ -143,7 +143,9 @@ export type PageId =
   | 'change-control'
   | 'sop-library'
   | 'supplier-qualification'
-  | 'gmp-inspection';
+  | 'gmp-inspection'
+  // Tier 1 — Framework Library
+  | 'framework-library';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -247,6 +249,7 @@ export default function MainLayout({
       { id: 'consent-management', label: 'Consent Mgmt', icon: UserCheck, category: 'Content & Marketing Compliance', hidden: !perms.canViewConsentManagement },
 
       // ── 5. Regulatory Intelligence ───────────────────────────────────
+      { id: 'framework-library', label: 'Framework Library', icon: Layers, category: 'Regulatory Intelligence' },
       { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory Intelligence' },
       { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory Intelligence', hidden: !perms.canViewRegulatoryLibrary },
       { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewHorizonScanning },

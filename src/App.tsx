@@ -100,6 +100,7 @@ import ChangeControlPage from './components/ChangeControl/ChangeControlPage';
 import SopLibraryPage from './components/SopLibrary/SopLibraryPage';
 import ComingSoonPage from './components/Common/ComingSoonPage';
 import AIInsightsPage from './components/Dashboard/AIInsightsPage';
+import FrameworkLibraryPage from './components/FrameworkLibrary/FrameworkLibraryPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -180,7 +181,8 @@ function isValidPageId(value: any): value is PageId {
     value === 'sop-library' ||
     value === 'supplier-qualification' ||
     value === 'gmp-inspection' ||
-    value === 'ai-insights'
+    value === 'ai-insights' ||
+    value === 'framework-library'
   );
 }
 
@@ -744,6 +746,9 @@ function AppContent() {
 
       case 'ai-insights':
         return <AIInsightsPage />;
+
+      case 'framework-library':
+        return <FrameworkLibraryPage />;
 
       default:
         return <DashboardPage />;
