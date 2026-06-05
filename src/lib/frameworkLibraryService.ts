@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Framework Library Service
  *
  * Pre-encoded regulatory framework catalogue. Replaces the hard-coded
@@ -8,16 +8,23 @@
  * be added via the authoring UI without a code deploy.
  *
  * Design:
- * - Bootstrap: import TypeScript rule arrays → serialize to DB rows (idempotent)
+ * - Bootstrap: import TypeScript rule arrays â†’ serialize to DB rows (idempotent)
  * - Cache: module-level Map keyed by jurisdiction, warmed once on app init
  * - Sync getters: compliance engine calls getCachedRules/getCachedCaveats synchronously
  * - Admin functions: CRUD for the FrameworkLibraryPage authoring UI
  */
 
-import { supabase } from './supabase';
 import { logger } from './logger';
 
-/* ── Serialised DB row types ─────────────────────────────────────────────── */
+// Supabase is imported lazily inside async functions only.
+// This keeps the module safe to import in test environments where
+// VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set.
+async function db() {
+  const { supabase } = await import('./supabase');
+  return supabase;
+}
+
+/* â”€â”€ Serialised DB row types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export interface FrameworkRow {
   id: string;
@@ -64,7 +71,7 @@ export interface CrossMappingRow {
   notes: string | null;
 }
 
-/* ── Runtime types (what the compliance engine uses) ─────────────────────── */
+/* â”€â”€ Runtime types (what the compliance engine uses) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export interface RuntimeRule {
   id: string;
@@ -91,14 +98,14 @@ export interface RuntimeCaveat {
   jurisdiction?: string;
 }
 
-/* ── In-memory cache ─────────────────────────────────────────────────────── */
+/* â”€â”€ In-memory cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 const ruleCache  = new Map<string, RuntimeRule[]>();    // key: jurisdiction
 const caveatCache = new Map<string, RuntimeCaveat[]>(); // key: jurisdiction
 let cacheWarmed = false;
 let initPromise: Promise<void> | null = null;
 
-/* ── Serialisation helpers ───────────────────────────────────────────────── */
+/* â”€â”€ Serialisation helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 function serializeRegex(re: RegExp): { source: string; flags: string } {
   return { source: re.source, flags: re.flags };
@@ -157,7 +164,7 @@ function buildRuntimeCaveat(row: ControlRow): RuntimeCaveat | null {
   }
 }
 
-/* ── Bootstrap: import TypeScript rule files → DB ────────────────────────── */
+/* â”€â”€ Bootstrap: import TypeScript rule files â†’ DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 async function bootstrapFromTypeScriptRules(): Promise<void> {
   // Lazy-import rule files to avoid circular dependency at module load time
@@ -183,17 +190,17 @@ async function bootstrapFromTypeScriptRules(): Promise<void> {
 
   const MANDATORY_CAVEATS = (mandatoryCaveatsModule as any).CAVEAT_REQUIREMENTS ?? [];
 
-  // ── 1. Seed framework rows ──────────────────────────────────────────────
+  // â”€â”€ 1. Seed framework rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const frameworks = [
     { code: 'nafdac', name: 'NAFDAC Pharmaceutical Advertising Regulations', short_name: 'NAFDAC', jurisdiction: 'nigeria', regulatory_body: 'NAFDAC', version: '2021', description: 'Nigerian food and drug advertising rules covering forbidden claims, mandatory caveats, and superlative language', sort_order: 1 },
     { code: 'nafdac_professional_ethics', name: 'Nigeria Professional Council Ethics (MDCN / PCN / NMCN)', short_name: 'NIG-ETHICS', jurisdiction: 'nigeria', regulatory_body: 'MDCN, PCN, NMCN', version: '2024', description: 'Professional conduct rules from Nigerian Medical and Dental Council, Pharmacy Council of Nigeria, and Nursing and Midwifery Council', sort_order: 2 },
     { code: 'fda', name: 'FDA Prescription Drug Advertising Regulations', short_name: 'FDA', jurisdiction: 'usa', regulatory_body: 'FDA', version: '21 CFR 202', description: 'US FDA direct-to-consumer and professional advertising standards for prescription and OTC drugs', sort_order: 3 },
-    { code: 'ema', name: 'EU Medicines Advertising Directive', short_name: 'EMA', jurisdiction: 'europe', regulatory_body: 'EMA', version: 'Directive 2001/83/EC', description: 'European Medicines Agency strict advertising standards — DTC advertising of prescription medicines is banned', sort_order: 4 },
+    { code: 'ema', name: 'EU Medicines Advertising Directive', short_name: 'EMA', jurisdiction: 'europe', regulatory_body: 'EMA', version: 'Directive 2001/83/EC', description: 'European Medicines Agency strict advertising standards â€” DTC advertising of prescription medicines is banned', sort_order: 4 },
     { code: 'ama', name: 'African Medicines Agency Harmonized Advertising Standards', short_name: 'AMA', jurisdiction: 'pan_african', regulatory_body: 'AMA / AfCFTA / ECOWAS', version: '2023', description: 'Pan-African harmonized pharmaceutical advertising standards under the AMA Treaty and AfCFTA protocols', sort_order: 5 },
     { code: 'who', name: 'WHO Ethical Criteria for Medicinal Drug Promotion', short_name: 'WHO', jurisdiction: 'who', regulatory_body: 'WHO', version: '1988', description: 'World Health Organization ethical criteria for promotion of medicinal products to healthcare professionals and the public', sort_order: 6 },
   ];
 
-  const { error: fwError } = await (supabase as any)
+  const { error: fwError } = await (await db() as any)
     .from('regulatory_frameworks')
     .upsert(frameworks, { onConflict: 'code', ignoreDuplicates: true });
 
@@ -203,7 +210,7 @@ async function bootstrapFromTypeScriptRules(): Promise<void> {
   }
 
   // Fetch framework IDs
-  const { data: fwRows } = await (supabase as any)
+  const { data: fwRows } = await (await db() as any)
     .from('regulatory_frameworks')
     .select('id, code');
 
@@ -211,10 +218,10 @@ async function bootstrapFromTypeScriptRules(): Promise<void> {
   const fwMap: Record<string, string> = {};
   for (const row of fwRows) fwMap[row.code] = row.id;
 
-  // ── 2. Seed controls ────────────────────────────────────────────────────
+  // â”€â”€ 2. Seed controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const controls: Array<Omit<ControlRow, 'id' | 'section_id' | 'created_at'>> = [];
 
-  // Map framework code → jurisdiction for defaulting rules that have no explicit jurisdiction
+  // Map framework code â†’ jurisdiction for defaulting rules that have no explicit jurisdiction
   const fwJurisdiction: Record<string, string> = {
     nafdac: 'nigeria',
     nafdac_professional_ethics: 'nigeria',
@@ -299,7 +306,7 @@ async function bootstrapFromTypeScriptRules(): Promise<void> {
     const CHUNK = 50;
     for (let i = 0; i < controls.length; i += CHUNK) {
       const chunk = controls.slice(i, i + CHUNK);
-      const { error } = await (supabase as any)
+      const { error } = await (await db() as any)
         .from('framework_controls')
         .upsert(chunk, { onConflict: 'framework_id,control_code', ignoreDuplicates: true });
       if (error) logger.warn('frameworkLibrary: error seeding controls chunk', error);
@@ -309,10 +316,10 @@ async function bootstrapFromTypeScriptRules(): Promise<void> {
   logger.info(`frameworkLibrary: bootstrapped ${controls.length} controls across ${frameworks.length} frameworks`);
 }
 
-/* ── Cache warmer ────────────────────────────────────────────────────────── */
+/* â”€â”€ Cache warmer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 async function warmCache(): Promise<void> {
-  const { data: rows, error } = await (supabase as any)
+  const { data: rows, error } = await (await db() as any)
     .from('framework_controls')
     .select('*')
     .eq('is_active', true);
@@ -343,10 +350,10 @@ async function warmCache(): Promise<void> {
   }
 
   cacheWarmed = true;
-  logger.info(`frameworkLibrary: cache warmed — ${rows.length} controls loaded`);
+  logger.info(`frameworkLibrary: cache warmed â€” ${rows.length} controls loaded`);
 }
 
-/* ── Public initialisation ───────────────────────────────────────────────── */
+/* â”€â”€ Public initialisation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /**
  * Call once on app startup (e.g. in AuthContext after sign-in).
@@ -360,7 +367,7 @@ export async function initFrameworkLibrary(): Promise<void> {
   initPromise = (async () => {
     try {
       // Check if any frameworks already exist in the DB
-      const { count } = await (supabase as any)
+      const { count } = await (await db() as any)
         .from('regulatory_frameworks')
         .select('id', { count: 'exact', head: true });
 
@@ -378,7 +385,7 @@ export async function initFrameworkLibrary(): Promise<void> {
   return initPromise;
 }
 
-/* ── Sync getters for the compliance engine ──────────────────────────────── */
+/* â”€â”€ Sync getters for the compliance engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /**
  * Returns pattern-matching rules for the given jurisdiction.
@@ -408,7 +415,7 @@ export async function refreshCache(): Promise<void> {
   cacheWarmed = true;
 }
 
-/* ── Runtime scanning helpers (used by complianceEngine) ─────────────────── */
+/* â”€â”€ Runtime scanning helpers (used by complianceEngine) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function runPatternRules(
   text: string,
@@ -454,10 +461,10 @@ export function runCaveatRules(
   return issues;
 }
 
-/* ── Admin: framework catalogue CRUD ─────────────────────────────────────── */
+/* â”€â”€ Admin: framework catalogue CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export async function getAllFrameworks(): Promise<FrameworkRow[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('regulatory_frameworks')
     .select('*')
     .order('sort_order');
@@ -466,7 +473,7 @@ export async function getAllFrameworks(): Promise<FrameworkRow[]> {
 }
 
 export async function getControlsForFramework(frameworkId: string): Promise<ControlRow[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('framework_controls')
     .select('*')
     .eq('framework_id', frameworkId)
@@ -478,7 +485,7 @@ export async function getControlsForFramework(frameworkId: string): Promise<Cont
 export async function createFramework(
   payload: Omit<FrameworkRow, 'id' | 'created_at'>
 ): Promise<FrameworkRow | null> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('regulatory_frameworks')
     .insert(payload)
     .select('*')
@@ -491,7 +498,7 @@ export async function updateFramework(
   id: string,
   payload: Partial<Omit<FrameworkRow, 'id' | 'created_at'>>
 ): Promise<boolean> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('regulatory_frameworks')
     .update(payload)
     .eq('id', id);
@@ -503,7 +510,7 @@ export async function updateFramework(
 export async function createControl(
   payload: Omit<ControlRow, 'id' | 'created_at'>
 ): Promise<ControlRow | null> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('framework_controls')
     .insert(payload)
     .select('*')
@@ -517,7 +524,7 @@ export async function updateControl(
   id: string,
   payload: Partial<Omit<ControlRow, 'id' | 'created_at'>>
 ): Promise<boolean> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('framework_controls')
     .update(payload)
     .eq('id', id);
@@ -530,10 +537,10 @@ export async function toggleControl(id: string, isActive: boolean): Promise<bool
   return updateControl(id, { is_active: isActive });
 }
 
-/* ── Workspace framework selection ───────────────────────────────────────── */
+/* â”€â”€ Workspace framework selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export async function getEnabledFrameworks(companyId: string): Promise<string[]> {
-  const { data } = await (supabase as any)
+  const { data } = await (await db() as any)
     .from('workspace_frameworks')
     .select('framework_id')
     .eq('company_id', companyId);
@@ -547,12 +554,12 @@ export async function setWorkspaceFramework(
   enabledBy?: string
 ): Promise<boolean> {
   if (enabled) {
-    const { error } = await (supabase as any)
+    const { error } = await (await db() as any)
       .from('workspace_frameworks')
       .upsert({ company_id: companyId, framework_id: frameworkId, enabled_by: enabledBy }, { onConflict: 'company_id,framework_id', ignoreDuplicates: true });
     return !error;
   } else {
-    const { error } = await (supabase as any)
+    const { error } = await (await db() as any)
       .from('workspace_frameworks')
       .delete()
       .eq('company_id', companyId)
@@ -561,10 +568,10 @@ export async function setWorkspaceFramework(
   }
 }
 
-/* ── Cross-mapping helpers ───────────────────────────────────────────────── */
+/* â”€â”€ Cross-mapping helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export async function getCrossMappings(controlId: string): Promise<CrossMappingRow[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('control_cross_mappings')
     .select('*')
     .or(`source_control_id.eq.${controlId},target_control_id.eq.${controlId}`);
@@ -578,7 +585,7 @@ export async function createCrossMapping(
   mappingType: 'equivalent' | 'partial' | 'supersedes',
   notes?: string
 ): Promise<boolean> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('control_cross_mappings')
     .insert({ source_control_id: sourceControlId, target_control_id: targetControlId, mapping_type: mappingType, notes: notes ?? null });
   return !error;
