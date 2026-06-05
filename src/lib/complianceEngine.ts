@@ -79,7 +79,7 @@ function processRuleHits(
       issue: hit.match,
       regulation_cited: hit.rule.regulation_cited,
       suggestion,
-      category: hit.rule.category || 'product_violation',
+      category: (hit.rule.category || 'product_violation') as import('./rules/types').IssueCategory,
       jurisdiction: hit.rule.jurisdiction,
     });
 
