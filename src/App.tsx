@@ -102,6 +102,7 @@ import ComingSoonPage from './components/Common/ComingSoonPage';
 import AIInsightsPage from './components/Dashboard/AIInsightsPage';
 import FrameworkLibraryPage from './components/FrameworkLibrary/FrameworkLibraryPage';
 import ControlHealthDashboard from './components/ControlMonitoring/ControlHealthDashboard';
+import RegulatoryAffairsPage from './components/RegulatoryAffairs/RegulatoryAffairsPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -184,7 +185,8 @@ function isValidPageId(value: any): value is PageId {
     value === 'gmp-inspection' ||
     value === 'ai-insights' ||
     value === 'framework-library' ||
-    value === 'control-monitoring'
+    value === 'control-monitoring' ||
+    value === 'regulatory-affairs'
   );
 }
 
@@ -754,6 +756,9 @@ function AppContent() {
 
       case 'control-monitoring':
         return <ControlHealthDashboard />;
+
+      case 'regulatory-affairs':
+        return <RegulatoryAffairsPage />;
 
       default:
         return <DashboardPage />;

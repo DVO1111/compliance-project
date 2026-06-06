@@ -147,7 +147,9 @@ export type PageId =
   // Tier 1 — Framework Library
   | 'framework-library'
   // Tier 1 — Continuous Control Monitoring
-  | 'control-monitoring';
+  | 'control-monitoring'
+  // Regulatory Affairs (NAPAMS + Licences + Labelling)
+  | 'regulatory-affairs';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -253,6 +255,7 @@ export default function MainLayout({
       // ── 5. Regulatory Intelligence ───────────────────────────────────
       { id: 'framework-library', label: 'Framework Library', icon: Layers, category: 'Regulatory Intelligence' },
       { id: 'control-monitoring', label: 'Control Health', icon: ClipboardCheck, category: 'Regulatory Intelligence' },
+      { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch, category: 'Regulatory Intelligence' },
       { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory Intelligence' },
       { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory Intelligence', hidden: !perms.canViewRegulatoryLibrary },
       { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewHorizonScanning },
