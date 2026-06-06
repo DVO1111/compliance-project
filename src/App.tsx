@@ -103,6 +103,7 @@ import AIInsightsPage from './components/Dashboard/AIInsightsPage';
 import FrameworkLibraryPage from './components/FrameworkLibrary/FrameworkLibraryPage';
 import ControlHealthDashboard from './components/ControlMonitoring/ControlHealthDashboard';
 import RegulatoryAffairsPage from './components/RegulatoryAffairs/RegulatoryAffairsPage';
+import GmpInspectionPage from './components/GmpInspection/GmpInspectionPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -746,7 +747,7 @@ function AppContent() {
         return <ComingSoonPage title="Supplier Qualification" description="Manage and qualify raw material suppliers and CMOs against GMP/HACCP requirements." />;
 
       case 'gmp-inspection':
-        return <ComingSoonPage title="GMP Inspection Readiness" description="Track inspection preparation tasks, evidence packages, and CAPA status for upcoming NAFDAC/regulatory inspections." />;
+        return <GmpInspectionPage />;
 
       case 'ai-insights':
         return <AIInsightsPage />;
