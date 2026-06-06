@@ -16,6 +16,16 @@
 
 import { logger } from './logger';
 
+async function logAudit(params: {
+  userId: string; companyId: string; action: string;
+  entityType: string; entityId: string; metadata?: Record<string, unknown>;
+}) {
+  try {
+    const { recordAuditEvent } = await import('./auditService');
+    await recordAuditEvent(params);
+  } catch { /* audit failure must never block the main operation */ }
+}
+
 // Supabase is imported lazily inside async functions only.
 // This keeps the module safe to import in test environments where
 // VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set.
@@ -533,8 +543,18 @@ export async function updateControl(
   return true;
 }
 
-export async function toggleControl(id: string, isActive: boolean): Promise<boolean> {
-  return updateControl(id, { is_active: isActive });
+export async function toggleControl(id: string, isActive: boolean, companyId?: string, userId?: string): Promise<boolean> {
+  const result = await updateControl(id, { is_active: isActive });
+  if (result && companyId && userId) {
+    await logAudit({
+      userId, companyId,
+      action: isActive ? 'enable_framework_control' : 'disable_framework_control',
+      entityType: 'framework_control',
+      entityId: id,
+      metadata: { is_active: isActive },
+    });
+  }
+  return result;
 }
 
 /* â”€â”€ Workspace framework selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */

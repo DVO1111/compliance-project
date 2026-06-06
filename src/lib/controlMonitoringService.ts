@@ -13,6 +13,16 @@ async function db() {
   return supabase;
 }
 
+async function logAudit(params: {
+  userId: string; companyId: string; action: string;
+  entityType: string; entityId: string; metadata?: Record<string, unknown>;
+}) {
+  try {
+    const { recordAuditEvent } = await import('./auditService');
+    await recordAuditEvent(params);
+  } catch { /* audit failure must never block the main operation */ }
+}
+
 /* ── Row types ─────────────────────────────────────────────────────────────── */
 
 export interface EvidenceRow {
@@ -415,6 +425,13 @@ export async function recordTest(
       .select('*')
       .single();
     if (error) { logger.error('recordTest', error); return null; }
+    await logAudit({
+      userId: testedBy, companyId,
+      action: 'record_control_test',
+      entityType: 'framework_control',
+      entityId: controlId,
+      metadata: { status, notes: notes || null, next_test_due: nextTestDue },
+    });
     return data;
   } catch (err) {
     logger.error('recordTest', err);
@@ -456,6 +473,13 @@ export async function addEvidence(
       .select('*')
       .single();
     if (error) { logger.error('addEvidence', error); return null; }
+    await logAudit({
+      userId: payload.uploaded_by, companyId,
+      action: 'add_control_evidence',
+      entityType: 'framework_control',
+      entityId: controlId,
+      metadata: { evidence_title: payload.title, evidence_type: payload.evidence_type, expires_at: payload.expires_at ?? null },
+    });
     return data;
   } catch (err) {
     logger.error('addEvidence', err);

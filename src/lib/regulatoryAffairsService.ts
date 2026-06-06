@@ -14,6 +14,16 @@ async function db() {
   return supabase;
 }
 
+async function logAudit(params: {
+  userId: string; companyId: string; action: string;
+  entityType: string; entityId: string; metadata?: Record<string, unknown>;
+}) {
+  try {
+    const { recordAuditEvent } = await import('./auditService');
+    await recordAuditEvent(params);
+  } catch { /* audit failure must never block the main operation */ }
+}
+
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 
 export type ProductCategory =
@@ -352,6 +362,13 @@ export async function createSubmission(
     .select('*')
     .single();
   if (error) { logger.error('createSubmission', error); return null; }
+  await logAudit({
+    userId: payload.created_by, companyId,
+    action: 'create_regulatory_submission',
+    entityType: 'regulatory_submission',
+    entityId: data.id,
+    metadata: { product_name: payload.product_name, product_category: payload.product_category, submission_type: payload.submission_type, regulatory_body: payload.regulatory_body },
+  });
   return data;
 }
 
@@ -363,7 +380,7 @@ export async function updateSubmissionStatus(
   extra?: { napams_reference?: string; registration_number?: string; expiry_date?: string; submitted_date?: string; approved_date?: string }
 ): Promise<boolean> {
   const client = await db() as any;
-  const { data: current } = await client.from('regulatory_submissions').select('current_status').eq('id', id).single();
+  const { data: current } = await client.from('regulatory_submissions').select('current_status, company_id, product_name').eq('id', id).single();
   const patch: any = { current_status: newStatus, updated_at: new Date().toISOString(), ...extra };
   if (newStatus === 'submitted' && !extra?.submitted_date) patch.submitted_date = new Date().toISOString().split('T')[0];
   if (newStatus === 'approved' && !extra?.approved_date) patch.approved_date = new Date().toISOString().split('T')[0];
@@ -372,6 +389,13 @@ export async function updateSubmissionStatus(
   await client.from('submission_status_log').insert({
     submission_id: id, from_status: current?.current_status ?? null, to_status: newStatus,
     notes: notes || null, updated_by: userId,
+  });
+  await logAudit({
+    userId, companyId: current?.company_id ?? '',
+    action: 'update_submission_status',
+    entityType: 'regulatory_submission',
+    entityId: id,
+    metadata: { from_status: current?.current_status, to_status: newStatus, product_name: current?.product_name, napams_reference: extra?.napams_reference, registration_number: extra?.registration_number },
   });
   return true;
 }
@@ -449,6 +473,15 @@ export async function createLicence(
     .select('*')
     .single();
   if (error) { logger.error('createLicence', error); return null; }
+  if (payload.created_by) {
+    await logAudit({
+      userId: payload.created_by, companyId,
+      action: 'create_regulatory_licence',
+      entityType: 'regulatory_licence',
+      entityId: data.id,
+      metadata: { licence_type: payload.licence_type, name: payload.name, registration_number: payload.registration_number ?? null, expiry_date: payload.expiry_date ?? null, regulatory_body: payload.regulatory_body },
+    });
+  }
   return data;
 }
 

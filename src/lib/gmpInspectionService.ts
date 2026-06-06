@@ -19,6 +19,16 @@ async function db() {
   return supabase;
 }
 
+async function logAudit(params: {
+  userId: string; companyId: string; action: string;
+  entityType: string; entityId: string; metadata?: Record<string, unknown>;
+}) {
+  try {
+    const { recordAuditEvent } = await import('./auditService');
+    await recordAuditEvent(params);
+  } catch { /* audit failure must never block the main operation */ }
+}
+
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 
 export type ReadinessStatus = 'ready' | 'in_progress' | 'gap' | 'not_applicable';
@@ -292,6 +302,15 @@ export async function updateReadinessItem(
       updated_at: new Date().toISOString(),
     }, { onConflict: 'company_id,item_id' });
   if (error) { logger.error('updateReadinessItem', error); return false; }
+
+  const item = INSPECTION_ITEMS.find(i => i.id === itemId);
+  await logAudit({
+    userId, companyId,
+    action: 'update_gmp_readiness',
+    entityType: 'gmp_inspection',
+    entityId: itemId,
+    metadata: { status, item_id: itemId, item_title: item?.title ?? itemId, area: item?.area, is_critical: item?.isCritical },
+  });
   return true;
 }
 
