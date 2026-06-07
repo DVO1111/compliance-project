@@ -105,6 +105,7 @@ import ControlHealthDashboard from './components/ControlMonitoring/ControlHealth
 import RegulatoryAffairsPage from './components/RegulatoryAffairs/RegulatoryAffairsPage';
 import GmpInspectionPage from './components/GmpInspection/GmpInspectionPage';
 import SONCompliancePage from './components/SONCompliance/SONCompliancePage';
+import CTDDossierPage from './components/CTDDossier/CTDDossierPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -188,7 +189,9 @@ function isValidPageId(value: any): value is PageId {
     value === 'ai-insights' ||
     value === 'framework-library' ||
     value === 'control-monitoring' ||
-    value === 'regulatory-affairs'
+    value === 'regulatory-affairs' ||
+    value === 'son-compliance' ||
+    value === 'ctd-dossier'
   );
 }
 
@@ -764,6 +767,9 @@ function AppContent() {
 
       case 'son-compliance':
         return <SONCompliancePage />;
+
+      case 'ctd-dossier':
+        return <CTDDossierPage />;
 
       default:
         return <DashboardPage />;
