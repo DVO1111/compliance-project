@@ -38,6 +38,7 @@ export default function SubmissionDetailModal({ submission, companyId, userId, o
   const [saving, setSaving] = useState(false);
   const [creatingLicence, setCreatingLicence] = useState(false);
   const [licenceCreated, setLicenceCreated] = useState(false);
+  const [validationError, setValidationError] = useState<string[] | null>(null);
 
   useEffect(() => {
     getStatusLog(submission.id).then(setLog);
@@ -51,6 +52,17 @@ export default function SubmissionDetailModal({ submission, companyId, userId, o
 
   const handleStatusUpdate = async () => {
     if (!newStatus) return;
+
+    // Block draft → submitted if required documents are missing
+    if (newStatus === 'submitted') {
+      const missing = checklist.filter(i => i.required && !checkStatus[i.name]?.is_present).map(i => i.name);
+      if (missing.length > 0) {
+        setValidationError(missing);
+        return;
+      }
+    }
+
+    setValidationError(null);
     setSaving(true);
     await updateSubmissionStatus(submission.id, newStatus as SubmissionStatus, statusNote, userId, {
       napams_reference: napamsRef || undefined,
@@ -238,7 +250,7 @@ export default function SubmissionDetailModal({ submission, companyId, userId, o
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Move to</label>
-                  <select value={newStatus} onChange={e => setNewStatus(e.target.value as SubmissionStatus)}
+                  <select value={newStatus} onChange={e => { setNewStatus(e.target.value as SubmissionStatus); setValidationError(null); }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="">— select —</option>
                     {nextOptions.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
@@ -272,6 +284,22 @@ export default function SubmissionDetailModal({ submission, companyId, userId, o
                   placeholder="e.g. Inspection visit confirmed for 20 June"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
+              {validationError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-700">Cannot submit — required documents missing</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {validationError.map(name => (
+                          <li key={name} className="text-xs text-red-600">· {name}</li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-red-500 mt-1.5">Tick each document in the checklist above once it is in your possession before submitting to NAPAMS.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <button onClick={handleStatusUpdate} disabled={!newStatus || saving}
                 className="w-full py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40">
                 {saving ? 'Updating…' : 'Update Status'}
