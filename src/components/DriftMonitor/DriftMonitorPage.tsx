@@ -3,8 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     Radar, Plus, X, RefreshCw, CheckCircle, AlertTriangle,
-    Shield, Globe, Trash2, Eye, Send, XCircle, Clock,
-    Activity, AlertCircle, Search, Loader2,
+    Shield, Globe, Trash2, Send, XCircle, Clock,
+    Activity, AlertCircle, Search, Loader2, TrendingDown,
+    ArrowUpRight, FileWarning, BadgeAlert, Siren, ShieldAlert,
 } from 'lucide-react';
 import {
     addChannel, getChannels, removeChannel, checkForDrift,
@@ -16,6 +17,10 @@ import {
     reportEvent, dismissEvent, getAEStats,
     type AdverseEvent,
 } from '../../lib/adverseEventService';
+import {
+    getComplianceDriftSignals, getDriftSummary,
+    type ComplianceDriftSignal, type DriftSeverity, type DriftCategory,
+} from '../../lib/complianceDriftService';
 
 const CHANNEL_TYPES: { value: ChannelType; label: string }[] = [
     { value: 'website', label: 'Website' },
@@ -35,6 +40,13 @@ const SEVERITY_COLORS: Record<string, string> = {
     critical: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
 };
 
+const SEVERITY_BORDER: Record<DriftSeverity, string> = {
+    low:      'border-l-[var(--color-info)]',
+    medium:   'border-l-[var(--color-warning)]',
+    high:     'border-l-[var(--color-warning)]',
+    critical: 'border-l-[var(--color-danger)]',
+};
+
 const AE_STATUS_COLORS: Record<string, string> = {
     detected: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
     quarantined: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
@@ -42,17 +54,46 @@ const AE_STATUS_COLORS: Record<string, string> = {
     dismissed: 'bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]',
 };
 
-export default function DriftMonitorPage() {
+const CATEGORY_ICONS: Record<DriftCategory, React.ReactNode> = {
+    capa:       <FileWarning className="w-4 h-4" />,
+    licence:    <BadgeAlert className="w-4 h-4" />,
+    gmp:        <Siren className="w-4 h-4" />,
+    son_audit:  <ShieldAlert className="w-4 h-4" />,
+    regulatory: <AlertTriangle className="w-4 h-4" />,
+};
+
+const CATEGORY_LABELS: Record<DriftCategory, string> = {
+    capa:       'CAPA',
+    licence:    'Licence',
+    gmp:        'GMP',
+    son_audit:  'SON Audit',
+    regulatory: 'Regulatory',
+};
+
+const MODULE_LABELS: Record<string, string> = {
+    'capa-management': 'CAPA Management',
+    'license-vault':   'Licence Vault',
+    'gmp-inspection':  'GMP Inspection',
+    'son-compliance':  'SON Compliance',
+    'horizon-scanning': 'Horizon Scanning',
+};
+
+interface Props {
+    onNavigate?: (pageId: string) => void;
+}
+
+export default function DriftMonitorPage({ onNavigate }: Props) {
     const { user, profile } = useAuth();
     const companyId = (profile as any)?.company_id as string | undefined;
 
-    const [tab, setTab] = useState<'channels' | 'drift' | 'adverse'>('channels');
+    const [tab, setTab] = useState<'channels' | 'drift' | 'adverse' | 'compliance'>('compliance');
     const [channels, setChannels] = useState<MonitoredChannel[]>([]);
     const [alerts, setAlerts] = useState<DriftAlert[]>([]);
     const [aeEvents, setAeEvents] = useState<AdverseEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [driftStats, setDriftStats] = useState({ total: 0, unresolved: 0, critical: 0, high: 0 });
     const [aeStats, setAeStats] = useState({ total: 0, detected: 0, quarantined: 0, reported: 0, critical: 0 });
+    const [complianceSignals, setComplianceSignals] = useState<ComplianceDriftSignal[]>([]);
 
     // Add channel modal
     const [showAddModal, setShowAddModal] = useState(false);
@@ -73,21 +114,27 @@ export default function DriftMonitorPage() {
     const [aeReportModal, setAeReportModal] = useState<AdverseEvent | null>(null);
     const [aeReportNotes, setAeReportNotes] = useState('');
 
+    // Compliance drift filter
+    const [severityFilter, setSeverityFilter] = useState<DriftSeverity | 'all'>('all');
+    const [categoryFilter, setCategoryFilter] = useState<DriftCategory | 'all'>('all');
+
     const load = useCallback(async () => {
         if (!companyId) return;
         setLoading(true);
-        const [ch, al, ae, ds, as_] = await Promise.all([
+        const [ch, al, ae, ds, as_, cs] = await Promise.all([
             getChannels(companyId),
             getAlerts(companyId),
             getAdverseEvents(companyId),
             getDriftStats(companyId),
             getAEStats(companyId),
+            getComplianceDriftSignals(companyId),
         ]);
         setChannels(ch);
         setAlerts(al);
         setAeEvents(ae);
         setDriftStats(ds);
         setAeStats(as_);
+        setComplianceSignals(cs);
         setLoading(false);
     }, [companyId]);
 
@@ -144,6 +191,12 @@ export default function DriftMonitorPage() {
         await load();
     };
 
+    const complianceSummary = getDriftSummary(complianceSignals);
+    const filteredSignals = complianceSignals.filter(s =>
+        (severityFilter === 'all' || s.severity === severityFilter) &&
+        (categoryFilter === 'all' || s.category === categoryFilter)
+    );
+
     if (!companyId) {
         return (
             <div className="text-center py-16">
@@ -160,16 +213,41 @@ export default function DriftMonitorPage() {
                 <div>
                     <div className="flex items-center gap-3 mb-1">
                         <div className="p-2 rounded-xl bg-[var(--color-accent-soft)]">
-                            <Radar className="w-5 h-5 dash-accent" />
+                            <TrendingDown className="w-5 h-5 dash-accent" />
                         </div>
-                        <h2 className="text-2xl font-bold dash-text">Omnichannel Monitor</h2>
+                        <h2 className="text-2xl font-bold dash-text">Compliance Drift Monitor</h2>
                     </div>
-                    <p className="dash-text-secondary text-sm ml-12">Content drift detection & adverse event sentinel</p>
+                    <p className="dash-text-secondary text-sm ml-12">Compliance posture drift · Content integrity · Adverse event sentinel</p>
                 </div>
+                <button onClick={load} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm dash-card border border-[var(--color-border)] dash-text-secondary hover:dash-text transition">
+                    <RefreshCw className="w-3.5 h-3.5" />Refresh
+                </button>
             </div>
 
+            {/* Critical compliance alert banner */}
+            {complianceSummary.critical > 0 && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[var(--color-danger-soft)] border border-[var(--color-danger)]/30">
+                    <Siren className="w-4 h-4 text-[var(--color-danger)] shrink-0" />
+                    <p className="text-sm font-medium text-[var(--color-danger)]">
+                        {complianceSummary.critical} critical compliance signal{complianceSummary.critical > 1 ? 's' : ''} require immediate attention
+                    </p>
+                </div>
+            )}
+
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
+                <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
+                    <p className="text-[11px] dash-text-tertiary">Compliance Signals</p>
+                    <p className="text-xl font-bold dash-text mt-1">{complianceSummary.total}</p>
+                </div>
+                <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
+                    <p className="text-[11px] dash-text-tertiary">Critical</p>
+                    <p className="text-xl font-bold text-[var(--color-danger)] mt-1">{complianceSummary.critical}</p>
+                </div>
+                <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
+                    <p className="text-[11px] dash-text-tertiary">High Priority</p>
+                    <p className="text-xl font-bold text-[var(--color-warning)] mt-1">{complianceSummary.high}</p>
+                </div>
                 <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
                     <p className="text-[11px] dash-text-tertiary">Channels</p>
                     <p className="text-xl font-bold dash-text mt-1">{channels.length}</p>
@@ -177,10 +255,6 @@ export default function DriftMonitorPage() {
                 <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
                     <p className="text-[11px] dash-text-tertiary">Drift Alerts</p>
                     <p className="text-xl font-bold text-[var(--color-warning)] mt-1">{driftStats.unresolved}</p>
-                </div>
-                <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
-                    <p className="text-[11px] dash-text-tertiary">Critical Drifts</p>
-                    <p className="text-xl font-bold text-[var(--color-danger)] mt-1">{driftStats.critical}</p>
                 </div>
                 <div className="dash-card rounded-xl p-4 border border-[var(--color-border)]">
                     <p className="text-[11px] dash-text-tertiary">AE Detected</p>
@@ -194,10 +268,18 @@ export default function DriftMonitorPage() {
 
             {/* Tabs */}
             <div className="flex items-center gap-2 flex-wrap">
-                {([['channels', 'Channels'], ['drift', 'Drift Alerts'], ['adverse', 'Adverse Events']] as const).map(([key, label]) => (
+                {([
+                    ['compliance', 'Compliance Drift'],
+                    ['channels', 'Content Channels'],
+                    ['drift', 'Content Drift Alerts'],
+                    ['adverse', 'Adverse Events'],
+                ] as const).map(([key, label]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === key ? 'bg-[var(--color-accent)] text-white' : 'dash-card border border-[var(--color-border)] dash-text-secondary hover:dash-text'}`}>
                         {label}
+                        {key === 'compliance' && complianceSummary.critical > 0 && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-danger)] text-white">{complianceSummary.critical}</span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -206,6 +288,92 @@ export default function DriftMonitorPage() {
                 <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin dash-accent" /></div>
             ) : (
                 <>
+                    {/* Compliance Drift Tab */}
+                    {tab === 'compliance' && (
+                        <div className="space-y-4">
+                            {/* Category summary chips */}
+                            <div className="flex items-center gap-3 flex-wrap">
+                                {(Object.keys(CATEGORY_LABELS) as DriftCategory[]).map(cat => (
+                                    complianceSummary.byCategory[cat] > 0 && (
+                                        <button key={cat}
+                                            onClick={() => setCategoryFilter(categoryFilter === cat ? 'all' : cat)}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition ${categoryFilter === cat ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]' : 'dash-card border-[var(--color-border)] dash-text-secondary hover:dash-text'}`}>
+                                            {CATEGORY_ICONS[cat]}
+                                            {CATEGORY_LABELS[cat]}
+                                            <span className="font-bold">{complianceSummary.byCategory[cat]}</span>
+                                        </button>
+                                    )
+                                ))}
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                    {(['all', 'critical', 'high', 'medium', 'low'] as const).map(sev => (
+                                        <button key={sev}
+                                            onClick={() => setSeverityFilter(sev)}
+                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${severityFilter === sev ? 'bg-[var(--color-accent)] text-white' : 'dash-card border border-[var(--color-border)] dash-text-secondary hover:dash-text'}`}>
+                                            {sev === 'all' ? 'All' : sev.charAt(0).toUpperCase() + sev.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {filteredSignals.length === 0 ? (
+                                <div className="dash-card rounded-2xl border border-[var(--color-border)] text-center py-16 px-4">
+                                    <Shield className="w-10 h-10 dash-text-tertiary mx-auto mb-3" />
+                                    <p className="font-semibold dash-text mb-1">No compliance drift detected</p>
+                                    <p className="text-sm dash-text-secondary">All CAPAs on time, licences valid, GMP gaps cleared, and audits passing.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {filteredSignals.map(signal => (
+                                        <div key={signal.id}
+                                            className={`dash-card rounded-xl border border-[var(--color-border)] border-l-4 ${SEVERITY_BORDER[signal.severity]} px-5 py-4`}>
+                                            <div className="flex items-start gap-3">
+                                                <div className={`mt-0.5 p-1.5 rounded-lg ${
+                                                    signal.severity === 'critical' ? 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]' :
+                                                    signal.severity === 'high'     ? 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]' :
+                                                    'bg-[var(--color-info-soft)] text-[var(--color-info)]'
+                                                }`}>
+                                                    {CATEGORY_ICONS[signal.category]}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${SEVERITY_COLORS[signal.severity]}`}>
+                                                            {signal.severity.toUpperCase()}
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-surface-alt)] dash-text-secondary">
+                                                            {signal.framework}
+                                                        </span>
+                                                        <span className="text-[11px] dash-text-tertiary">
+                                                            {signal.daysOverdue > 0
+                                                                ? `${signal.daysOverdue}d overdue`
+                                                                : signal.daysOverdue < 0
+                                                                    ? `${Math.abs(signal.daysOverdue)}d remaining`
+                                                                    : 'Active gap'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm font-semibold dash-text">{signal.title}</p>
+                                                    <p className="text-xs dash-text-secondary mt-0.5">{signal.description}</p>
+                                                </div>
+                                                {onNavigate && (
+                                                    <button
+                                                        onClick={() => onNavigate(signal.navigateTo)}
+                                                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-border)] dash-text-secondary hover:dash-text transition shrink-0">
+                                                        <ArrowUpRight className="w-3.5 h-3.5" />
+                                                        {MODULE_LABELS[signal.navigateTo] ?? signal.navigateTo}
+                                                    </button>
+                                                )}
+                                                {!onNavigate && (
+                                                    <span className="text-[11px] dash-text-tertiary shrink-0 mt-1">
+                                                        → {MODULE_LABELS[signal.navigateTo] ?? signal.navigateTo}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Channels Tab */}
                     {tab === 'channels' && (
                         <div className="dash-card rounded-2xl border border-[var(--color-border)] overflow-hidden">
@@ -253,10 +421,10 @@ export default function DriftMonitorPage() {
                     {tab === 'drift' && (
                         <div className="dash-card rounded-2xl border border-[var(--color-border)] overflow-hidden">
                             <div className="px-5 py-3 border-b border-[var(--color-border)]">
-                                <h3 className="font-semibold dash-text flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />Drift Alerts</h3>
+                                <h3 className="font-semibold dash-text flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />Content Drift Alerts</h3>
                             </div>
                             {alerts.length === 0 ? (
-                                <div className="text-center py-14"><Shield className="w-8 h-8 dash-text-tertiary mx-auto mb-2" /><p className="text-sm dash-text-secondary">No drift alerts detected.</p></div>
+                                <div className="text-center py-14"><Shield className="w-8 h-8 dash-text-tertiary mx-auto mb-2" /><p className="text-sm dash-text-secondary">No content drift alerts detected.</p></div>
                             ) : (
                                 <div className="divide-y divide-[var(--color-border)]">
                                     {alerts.map((alert) => (

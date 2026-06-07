@@ -509,7 +509,7 @@ function AppContent() {
       case 'drift-monitor':
         return perms.canViewDriftMonitor ? (
           <FeatureGate feature="horizon_scanning" featureLabel="Regulatory Drift Monitor">
-            <DriftMonitorPage />
+            <DriftMonitorPage onNavigate={(id) => setCurrentPage(id as PageId)} />
           </FeatureGate>
         ) : <AccessDenied />;
 
