@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { validateMutation } from './validationService';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -141,6 +142,7 @@ export async function addVendor(
     .select()
     .single();
   if (error) { logger.error('addVendor:', error); return null; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.created', entityType: 'vendor', entityId: data.id, metadata: { name: v.name, category: v.category, risk_level: v.risk_level || 'medium' }, captureEvidence: false }); } catch { /* non-blocking */ }
   return data;
 }
 
@@ -158,11 +160,15 @@ export async function updateVendor(
     .update(updates)
     .eq('id', vendorId);
   if (error) { logger.error('updateVendor:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.updated', entityType: 'vendor', entityId: vendorId, metadata: { updates }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 
 export async function archiveVendor(companyId: string, userId: string, vendorId: string): Promise<boolean> {
-  return updateVendor(companyId, userId, vendorId, { status: 'archived' });
+  const { error } = await (supabase as any).from('vendors').update({ status: 'archived' }).eq('id', vendorId);
+  if (error) { logger.error('archiveVendor:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.archived', entityType: 'vendor', entityId: vendorId, metadata: {}, captureEvidence: false }); } catch { /* non-blocking */ }
+  return true;
 }
 
 // ─── Risk Profiles ──────────────────────────────────────────────────────────
@@ -245,15 +251,17 @@ export async function uploadVendorDocument(
       uploaded_by: uploadedBy,
     });
   if (error) { logger.error('uploadVendorDocument:', error); return false; }
+  try { await recordAuditEvent({ userId: uploadedBy, companyId, action: 'vendor.document_uploaded', entityType: 'vendor', entityId: vendorId, metadata: { file_name: file.fileName, document_type: documentType }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 
-export async function unlinkVendorDocument(docId: string): Promise<boolean> {
+export async function unlinkVendorDocument(docId: string, companyId: string, userId: string): Promise<boolean> {
   const { error } = await (supabase as any)
     .from('vendor_documents')
     .delete()
     .eq('id', docId);
   if (error) { logger.error('unlinkVendorDocument:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.document_removed', entityType: 'vendor', entityId: docId, metadata: { doc_id: docId }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 
@@ -271,7 +279,9 @@ export async function getVendorQuestionnaires(vendorId: string): Promise<VendorQ
 
 export async function createQuestionnaire(
   vendorId: string,
-  type: QuestionnaireType
+  type: QuestionnaireType,
+  companyId: string,
+  userId: string
 ): Promise<VendorQuestionnaire | null> {
   const { data, error } = await (supabase as any)
     .from('vendor_questionnaires')
@@ -284,12 +294,15 @@ export async function createQuestionnaire(
     .select()
     .single();
   if (error) { logger.error('createQuestionnaire:', error); return null; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.questionnaire_sent', entityType: 'vendor', entityId: vendorId, metadata: { questionnaire_type: type }, captureEvidence: false }); } catch { /* non-blocking */ }
   return data;
 }
 
 export async function updateQuestionnaireStatus(
   id: string,
-  status: QuestionnaireStatus
+  status: QuestionnaireStatus,
+  companyId: string,
+  userId: string
 ): Promise<boolean> {
   const updates: any = { status };
   if (status === 'completed') updates.completed_at = new Date().toISOString();
@@ -298,5 +311,6 @@ export async function updateQuestionnaireStatus(
     .update(updates)
     .eq('id', id);
   if (error) { logger.error('updateQuestionnaireStatus:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.questionnaire_updated', entityType: 'vendor', entityId: id, metadata: { status }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }

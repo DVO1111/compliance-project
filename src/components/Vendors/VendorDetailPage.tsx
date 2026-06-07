@@ -159,20 +159,20 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
     };
 
     const handleUnlinkDoc = async (docId: string) => {
-        await unlinkVendorDocument(docId);
+        await unlinkVendorDocument(docId, companyId || '', userId);
         await load();
     };
 
     // ─── Questionnaires ─────────────────────────────────────────────────
     const handleSendQ = async () => {
-        if (!vendorId) return;
-        await createQuestionnaire(vendorId, qType);
+        if (!vendorId || !companyId) return;
+        await createQuestionnaire(vendorId, qType, companyId, userId);
         setShowQForm(false);
         await load();
     };
 
     const handleQStatusChange = async (id: string, status: QuestionnaireStatus) => {
-        await updateQuestionnaireStatus(id, status);
+        await updateQuestionnaireStatus(id, status, companyId || '', userId);
         await load();
     };
 

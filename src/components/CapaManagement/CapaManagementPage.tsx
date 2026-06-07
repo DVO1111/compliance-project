@@ -35,16 +35,16 @@ export default function CapaManagementPage() {
         setShowCreate(false); setForm({ title: '', description: '', source: 'audit_finding', capa_type: 'corrective', priority: 'medium', due_date: '', owner_name: '', root_cause: '' }); setSaving(false); load();
     }
 
-    async function handleStatusChange(id: string, status: CapaStatus) { await updateCapaStatus(id, status); load(); setSelected(null); }
+    async function handleStatusChange(id: string, status: CapaStatus) { if (!companyId || !user) return; await updateCapaStatus(id, status, companyId, user.id); load(); setSelected(null); }
 
     async function handleAddAction() {
-        if (!selected || !aForm.description) return;
+        if (!selected || !aForm.description || !companyId || !user) return;
         setSaving(true);
-        await addCapaAction(selected.id, { action_type: aForm.action_type, description: aForm.description, assigned_to: aForm.assigned_to || undefined, due_date: aForm.due_date || undefined });
+        await addCapaAction(selected.id, { action_type: aForm.action_type, description: aForm.description, assigned_to: aForm.assigned_to || undefined, due_date: aForm.due_date || undefined }, companyId, user.id);
         setShowAction(false); setAForm({ action_type: 'corrective_action', description: '', assigned_to: '', due_date: '' }); setSaving(false); load();
     }
 
-    async function handleCompleteAction(actionId: string) { await completeCapaAction(actionId); load(); }
+    async function handleCompleteAction(actionId: string) { if (!companyId || !user) return; await completeCapaAction(actionId, companyId, user.id); load(); }
 
     return (
         <div className="space-y-6">

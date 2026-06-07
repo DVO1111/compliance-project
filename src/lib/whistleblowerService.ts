@@ -4,6 +4,7 @@
 import { supabase } from './supabase';
 import { generateJSON } from './geminiClient';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 export type ReportStatus = 'submitted' | 'under_investigation' | 'escalated' | 'resolved' | 'dismissed';
 export type ReportCategory = 'off_label_promotion' | 'misleading_claims' | 'data_integrity' | 'kickback_concern' | 'safety_reporting_failure' | 'other';
@@ -96,16 +97,18 @@ export async function submitReport(companyId: string, userId: string | null, rep
   // Add initial case update
   await addCaseUpdate(data.id, 'Report received', report.anonymous ? 'Anonymous report received via secure channel' : 'Report submitted', 'System');
 
+  try { await recordAuditEvent({ userId: report.anonymous ? 'anonymous' : (userId || 'unknown'), companyId, action: 'whistleblower.report_submitted', entityType: 'whistleblower_report', entityId: data.id, metadata: { case_number: data.case_number, category: report.category, priority: report.priority, anonymous: report.anonymous }, captureEvidence: false }); } catch { /* non-blocking */ }
   return data;
 }
 
-export async function updateReportStatus(reportId: string, status: ReportStatus): Promise<boolean> {
+export async function updateReportStatus(reportId: string, status: ReportStatus, companyId: string, userId: string): Promise<boolean> {
   const { error } = await (supabase as any)
     .from('whistleblower_reports')
     .update({ status, last_updated_at: new Date().toISOString() })
     .eq('id', reportId);
 
   if (error) { logger.error('updateReportStatus error:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'whistleblower.status_changed', entityType: 'whistleblower_report', entityId: reportId, metadata: { status }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 

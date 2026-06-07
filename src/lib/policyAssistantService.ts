@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { generateJSON } from './geminiClient';
 import { wrapAICall } from './aiResponseValidator';
+import { recordAuditEvent } from './auditService';
 
 export interface PolicyTemplate {
   id: string;
@@ -223,14 +224,20 @@ export async function savePolicyDraft(
   title: string,
   content: string
 ): Promise<boolean> {
-  const { error } = await (supabase as any)
+  const userId = (await supabase.auth.getUser()).data.user?.id;
+  const { data, error } = await (supabase as any)
     .from('policy_drafts')
     .insert({
       company_id: companyId,
-      user_id: (await supabase.auth.getUser()).data.user?.id,
+      user_id: userId,
       title,
       content,
-    });
+    })
+    .select('id')
+    .single();
+  if (!error && userId) {
+    try { await recordAuditEvent({ userId, companyId, action: 'policy.draft_saved', entityType: 'policy_draft', entityId: data?.id ?? companyId, metadata: { title }, captureEvidence: false }); } catch { /* non-blocking */ }
+  }
   return !error;
 }
 

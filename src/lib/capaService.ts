@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 export type CapaSource = 'audit_finding' | 'compliance_failure' | 'near_miss' | 'customer_complaint' | 'regulatory_action' | 'internal_review';
 export type CapaType = 'corrective' | 'preventive' | 'both';
@@ -34,26 +35,30 @@ export async function createCapa(companyId: string, userId: string, c: { title: 
     root_cause: c.root_cause || null, due_date: c.due_date || null, owner_name: c.owner_name || null, created_by: userId,
   }).select().single();
   if (error) { logger.error('createCapa:', error); return null; }
+  try { await recordAuditEvent({ userId, companyId, action: 'capa.created', entityType: 'capa', entityId: data.id, metadata: { title: c.title, source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium' }, captureEvidence: false }); } catch { /* non-blocking */ }
   return data;
 }
 
-export async function updateCapaStatus(capaId: string, status: CapaStatus): Promise<boolean> {
+export async function updateCapaStatus(capaId: string, status: CapaStatus, companyId: string, userId: string): Promise<boolean> {
   const updates: any = { status };
   if (status === 'closed') updates.closed_at = new Date().toISOString();
   const { error } = await (supabase as any).from('capa_records').update(updates).eq('id', capaId);
   if (error) { logger.error('updateCapaStatus:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'capa.status_changed', entityType: 'capa', entityId: capaId, metadata: { status }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 
-export async function addCapaAction(capaId: string, a: { action_type: string; description: string; assigned_to?: string; due_date?: string }): Promise<boolean> {
-  const { error } = await (supabase as any).from('capa_actions').insert({ capa_id: capaId, action_type: a.action_type, description: a.description, assigned_to: a.assigned_to || null, status: 'pending', due_date: a.due_date || null });
+export async function addCapaAction(capaId: string, a: { action_type: string; description: string; assigned_to?: string; due_date?: string }, companyId: string, userId: string): Promise<boolean> {
+  const { data, error } = await (supabase as any).from('capa_actions').insert({ capa_id: capaId, action_type: a.action_type, description: a.description, assigned_to: a.assigned_to || null, status: 'pending', due_date: a.due_date || null }).select().single();
   if (error) { logger.error('addCapaAction:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'capa.action_added', entityType: 'capa', entityId: capaId, metadata: { action_type: a.action_type, description: a.description }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 
-export async function completeCapaAction(actionId: string): Promise<boolean> {
+export async function completeCapaAction(actionId: string, companyId: string, userId: string): Promise<boolean> {
   const { error } = await (supabase as any).from('capa_actions').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', actionId);
   if (error) { logger.error('completeCapaAction:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'capa.action_completed', entityType: 'capa', entityId: actionId, metadata: { action_id: actionId }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 

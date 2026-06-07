@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { recordAuditEvent } from './auditService';
 
 /* ═══════════════════════════════════════════════════════════════
    License Expiry Auto-Pilot — Service Layer
@@ -304,6 +305,7 @@ export async function createLicense(license: Omit<License, 'id' | 'created_at' |
         await generateAndSaveRenewalTasks(saved.id, saved.expiry_date);
     }
 
+    try { await recordAuditEvent({ userId: license.uploaded_by, companyId: license.company_id, action: 'license.created', entityType: 'license', entityId: saved.id, metadata: { product_name: license.product_name, nafdac_reg_number: license.nafdac_reg_number, category: license.category, expiry_date: license.expiry_date }, captureEvidence: false }); } catch { /* non-blocking */ }
     return saved;
 }
 
@@ -339,13 +341,19 @@ export async function toggleTask(taskId: string, completed: boolean, userId: str
     } as any).eq('id', taskId);
 }
 
-export async function updateLicenseStatus(licenseId: string, status: string, renewalStatus?: string): Promise<void> {
+export async function updateLicenseStatus(licenseId: string, status: string, renewalStatus?: string, companyId?: string, userId?: string): Promise<void> {
     const update: any = { status, updated_at: new Date().toISOString() };
     if (renewalStatus) update.renewal_status = renewalStatus;
     await supabase.from('licenses' as any).update(update).eq('id', licenseId);
+    if (companyId && userId) {
+        try { await recordAuditEvent({ userId, companyId, action: 'license.status_updated', entityType: 'license', entityId: licenseId, metadata: { status, renewal_status: renewalStatus }, captureEvidence: false }); } catch { /* non-blocking */ }
+    }
 }
 
-export async function deleteLicense(licenseId: string): Promise<void> {
+export async function deleteLicense(licenseId: string, companyId?: string, userId?: string): Promise<void> {
+    if (companyId && userId) {
+        try { await recordAuditEvent({ userId, companyId, action: 'license.deleted', entityType: 'license', entityId: licenseId, metadata: { license_id: licenseId }, captureEvidence: false }); } catch { /* non-blocking */ }
+    }
     await supabase.from('license_renewal_tasks' as any).delete().eq('license_id', licenseId);
     await supabase.from('licenses' as any).delete().eq('id', licenseId);
 }

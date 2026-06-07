@@ -52,7 +52,8 @@ export default function WhistleblowerPage() {
     }
 
     async function handleStatusChange(reportId: string, status: ReportStatus) {
-        await updateReportStatus(reportId, status);
+        if (!companyId || !user) return;
+        await updateReportStatus(reportId, status, companyId, user.id);
         load(); setSelectedReport(null);
     }
 

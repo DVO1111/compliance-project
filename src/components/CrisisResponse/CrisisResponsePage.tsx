@@ -65,9 +65,9 @@ export default function CrisisResponsePage() {
     }
 
     async function handleGlobalQuarantine() {
-        if (!selectedCrisis) return;
+        if (!selectedCrisis || !companyId || !user) return;
         setSaving(true);
-        await quarantineAllMaterials(selectedCrisis.id);
+        await quarantineAllMaterials(selectedCrisis.id, companyId, user.id);
         const mats = await getAffectedMaterials(selectedCrisis.id);
         setMaterials(mats);
         setSaving(false);
@@ -87,7 +87,8 @@ export default function CrisisResponsePage() {
     }
 
     async function handleStatusChange(crisisId: string, status: CrisisStatus) {
-        await updateCrisisStatus(crisisId, status);
+        if (!companyId || !user) return;
+        await updateCrisisStatus(crisisId, status, companyId, user.id);
         load();
         setSelectedCrisis(null);
     }

@@ -78,7 +78,7 @@ export default function LicenseDetailModal({ license, onClose, onUpdated }: Prop
     const handleMarkRenewed = async () => {
         setMarkingRenewed(true);
         try {
-            await updateLicenseStatus(license.id, 'renewed', 'completed');
+            await updateLicenseStatus(license.id, 'renewed', 'completed', license.company_id, user?.id);
             showToast({ type: 'success', message: 'License marked as renewed.' });
             onUpdated();
         } catch {

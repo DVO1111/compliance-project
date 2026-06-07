@@ -3,6 +3,7 @@
  */
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 export type CrisisLevel = 'watch' | 'alert' | 'critical' | 'recall';
 export type CrisisStatus = 'active' | 'contained' | 'resolved' | 'closed';
@@ -83,10 +84,11 @@ export async function createCrisisEvent(companyId: string, userId: string, event
   // Auto-add first timeline entry
   await addTimelineEntry(data.id, 'Crisis triggered', 'System', `Crisis event created: ${event.title}`, false);
 
+  try { await recordAuditEvent({ userId, companyId, action: 'crisis.created', entityType: 'crisis_event', entityId: data.id, metadata: { title: event.title, level: event.level, product: event.product }, captureEvidence: false }); } catch { /* non-blocking */ }
   return data;
 }
 
-export async function updateCrisisStatus(crisisId: string, status: CrisisStatus): Promise<boolean> {
+export async function updateCrisisStatus(crisisId: string, status: CrisisStatus, companyId: string, userId: string): Promise<boolean> {
   const updates: any = { status };
   if (status === 'resolved' || status === 'closed') updates.resolved_at = new Date().toISOString();
 
@@ -96,6 +98,7 @@ export async function updateCrisisStatus(crisisId: string, status: CrisisStatus)
     .eq('id', crisisId);
 
   if (error) { logger.error('updateCrisisStatus error:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'crisis.status_changed', entityType: 'crisis_event', entityId: crisisId, metadata: { status }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
 
@@ -200,7 +203,7 @@ export async function activateAutomatedProtocol(crisisId: string, product: strin
 /**
  * Bulk withdraws all flagged materials for a crisis.
  */
-export async function quarantineAllMaterials(crisisId: string): Promise<boolean> {
+export async function quarantineAllMaterials(crisisId: string, companyId?: string, userId?: string): Promise<boolean> {
   // 1. Bulk update status to withdrawn
   const { error } = await (supabase as any)
     .from('crisis_affected_materials')
@@ -234,6 +237,9 @@ export async function quarantineAllMaterials(crisisId: string): Promise<boolean>
     true
   );
 
+  if (companyId && userId) {
+    try { await recordAuditEvent({ userId, companyId, action: 'crisis.quarantine_executed', entityType: 'crisis_event', entityId: crisisId, metadata: { withdrawn_count: withdrawn, total_count: total }, captureEvidence: false }); } catch { /* non-blocking */ }
+  }
   return true;
 }
 
