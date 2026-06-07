@@ -55,6 +55,7 @@ import {
   BookMarked,
   PackageCheck,
   Factory,
+  Award,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 
@@ -149,7 +150,9 @@ export type PageId =
   // Tier 1 — Continuous Control Monitoring
   | 'control-monitoring'
   // Regulatory Affairs (NAPAMS + Licences + Labelling)
-  | 'regulatory-affairs';
+  | 'regulatory-affairs'
+  // SON Compliance Tracker
+  | 'son-compliance';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -256,6 +259,7 @@ export default function MainLayout({
       { id: 'framework-library', label: 'Framework Library', icon: Layers, category: 'Regulatory Intelligence' },
       { id: 'control-monitoring', label: 'Control Health', icon: ClipboardCheck, category: 'Regulatory Intelligence' },
       { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch, category: 'Regulatory Intelligence' },
+      { id: 'son-compliance',     label: 'SON Compliance',     icon: Award,      category: 'Regulatory Intelligence' },
       { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory Intelligence' },
       { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory Intelligence', hidden: !perms.canViewRegulatoryLibrary },
       { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewHorizonScanning },

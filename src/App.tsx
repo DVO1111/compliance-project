@@ -104,6 +104,7 @@ import FrameworkLibraryPage from './components/FrameworkLibrary/FrameworkLibrary
 import ControlHealthDashboard from './components/ControlMonitoring/ControlHealthDashboard';
 import RegulatoryAffairsPage from './components/RegulatoryAffairs/RegulatoryAffairsPage';
 import GmpInspectionPage from './components/GmpInspection/GmpInspectionPage';
+import SONCompliancePage from './components/SONCompliance/SONCompliancePage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -760,6 +761,9 @@ function AppContent() {
 
       case 'regulatory-affairs':
         return <RegulatoryAffairsPage />;
+
+      case 'son-compliance':
+        return <SONCompliancePage />;
 
       default:
         return <DashboardPage />;
