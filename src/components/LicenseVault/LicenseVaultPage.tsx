@@ -79,7 +79,7 @@ export default function LicenseVaultPage() {
         if (!confirm('Delete this license and its tasks? This cannot be undone.')) return;
         setDeletingId(id);
         try {
-            await deleteLicense(id, profile?.company_id, profile?.id);
+            await deleteLicense(id, profile?.company_id ?? undefined, profile?.id ?? undefined);
             setLicenses(prev => prev.filter(l => l.id !== id));
         } catch { }
         setDeletingId(null);
