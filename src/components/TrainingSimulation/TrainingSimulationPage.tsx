@@ -39,7 +39,7 @@ export default function TrainingSimulationPage() {
     async function handleSubmit() {
         if (!user || !activeScenario || !response) return;
         setSaving(true);
-        const r = await submitAttempt(activeScenario.id, user.id, response, activeScenario.correct_response, companyId);
+        const r = await submitAttempt(activeScenario.id, user.id, response, activeScenario.correct_response, companyId ?? undefined);
         setResult(r); setSaving(false); load();
     }
 
