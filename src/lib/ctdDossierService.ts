@@ -266,10 +266,9 @@ export async function createDossier(
     await recordAuditEvent({
       companyId: dossier.company_id,
       userId,
-      event_type: 'ctd.dossier_created',
-      entity_type: 'ctd_dossier',
-      entity_id: data.id,
-      description: `CTD dossier created: ${dossier.product_name} (${APPLICATION_TYPE_LABELS[dossier.application_type]})`,
+      action: `ctd.dossier_created: ${dossier.product_name} (${APPLICATION_TYPE_LABELS[dossier.application_type]})`,
+      entityType: 'ctd_dossier',
+      entityId: data.id,
       metadata: { product: dossier.product_name, type: dossier.application_type },
       captureEvidence: false,
     });
@@ -294,10 +293,9 @@ export async function updateDossierStatus(
     await recordAuditEvent({
       companyId,
       userId,
-      event_type: 'ctd.status_changed',
-      entity_type: 'ctd_dossier',
-      entity_id: dossierId,
-      description: `CTD dossier status changed to ${DOSSIER_STATUS_LABELS[status]}`,
+      action: `ctd.status_changed: ${DOSSIER_STATUS_LABELS[status]}`,
+      entityType: 'ctd_dossier',
+      entityId: dossierId,
       metadata: { status },
       captureEvidence: false,
     });
@@ -313,10 +311,9 @@ export async function deleteDossier(
     await recordAuditEvent({
       companyId,
       userId,
-      event_type: 'ctd.dossier_deleted',
-      entity_type: 'ctd_dossier',
-      entity_id: dossierId,
-      description: 'CTD dossier deleted',
+      action: 'ctd.dossier_deleted',
+      entityType: 'ctd_dossier',
+      entityId: dossierId,
       metadata: {},
       captureEvidence: false,
     });
