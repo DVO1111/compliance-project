@@ -419,12 +419,15 @@ export async function recordTest(
   testedBy: string
 ): Promise<TestLogRow | null> {
   try {
-    const { data, error } = await (await db() as any)
+    const client = await db() as any;
+
+    const { data, error } = await client
       .from('framework_test_log')
       .insert({ company_id: companyId, control_id: controlId, status, notes: notes || null, next_test_due: nextTestDue || null, tested_by: testedBy })
       .select('*')
       .single();
     if (error) { logger.error('recordTest', error); return null; }
+
     await logAudit({
       userId: testedBy, companyId,
       action: 'record_control_test',
@@ -432,6 +435,39 @@ export async function recordTest(
       entityId: controlId,
       metadata: { status, notes: notes || null, next_test_due: nextTestDue },
     });
+
+    // Auto-create CAPA on fail or partial — skip if one is already open for this control
+    if (status === 'fail' || status === 'partial') {
+      try {
+        const { createCapa, hasPendingCapaForControl } = await import('./capaService');
+        const alreadyOpen = await hasPendingCapaForControl(companyId, controlId);
+        if (!alreadyOpen) {
+          // Fetch control title + code for a meaningful CAPA title
+          const { data: ctrl } = await client
+            .from('framework_controls')
+            .select('control_code, title')
+            .eq('id', controlId)
+            .single();
+
+          const code = ctrl?.control_code ?? controlId;
+          const title = ctrl?.title ?? 'Unknown Control';
+          const isFailure = status === 'fail';
+
+          await createCapa(companyId, testedBy, {
+            title: `${isFailure ? 'Control Failure' : 'Partial Control Failure'}: [${code}] ${title}`,
+            description: `Auto-generated from test result. Control ${code} recorded as ${status.toUpperCase()} on ${new Date().toISOString().split('T')[0]}. ${notes ? `Test notes: ${notes}` : 'Immediate investigation required.'}`,
+            source: 'compliance_failure',
+            capa_type: 'corrective',
+            priority: isFailure ? 'high' : 'medium',
+            controlId,
+            controlCode: code,
+          });
+        }
+      } catch (capaErr) {
+        logger.error('recordTest: auto-CAPA creation failed', capaErr);
+      }
+    }
+
     return data;
   } catch (err) {
     logger.error('recordTest', err);

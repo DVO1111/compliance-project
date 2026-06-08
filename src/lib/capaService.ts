@@ -11,6 +11,7 @@ export type CapaRecord = {
   source: CapaSource; capa_type: CapaType; priority: string; status: CapaStatus;
   root_cause: string | null; due_date: string | null; owner_name: string | null;
   created_by: string | null; created_at: string; closed_at: string | null;
+  control_id: string | null; control_code: string | null;
   actions?: CapaAction[];
 };
 
@@ -26,17 +27,31 @@ export async function getCapas(companyId: string): Promise<CapaRecord[]> {
   return data ?? [];
 }
 
-export async function createCapa(companyId: string, userId: string, c: { title: string; description: string; source: CapaSource; capa_type: CapaType; priority?: string; due_date?: string; owner_name?: string; root_cause?: string }): Promise<CapaRecord | null> {
+export async function createCapa(companyId: string, userId: string, c: { title: string; description: string; source: CapaSource; capa_type: CapaType; priority?: string; due_date?: string; owner_name?: string; root_cause?: string; controlId?: string; controlCode?: string }): Promise<CapaRecord | null> {
   const year = new Date().getFullYear();
   const rand = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
   const { data, error } = await (supabase as any).from('capa_records').insert({
     company_id: companyId, capa_number: `CAPA-${year}-${rand}`, title: c.title, description: c.description,
     source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium', status: 'open',
     root_cause: c.root_cause || null, due_date: c.due_date || null, owner_name: c.owner_name || null, created_by: userId,
+    control_id: c.controlId || null, control_code: c.controlCode || null,
   }).select().single();
   if (error) { logger.error('createCapa:', error); return null; }
-  try { await recordAuditEvent({ userId, companyId, action: 'capa.created', entityType: 'capa', entityId: data.id, metadata: { title: c.title, source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium' }, captureEvidence: false }); } catch { /* non-blocking */ }
+  try { await recordAuditEvent({ userId, companyId, action: 'capa.created', entityType: 'capa', entityId: data.id, metadata: { title: c.title, source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium', control_id: c.controlId ?? null }, captureEvidence: false }); } catch { /* non-blocking */ }
   return data;
+}
+
+/** Returns true if an open (non-closed) CAPA already exists for this control — prevents duplicate auto-CAPAs. */
+export async function hasPendingCapaForControl(companyId: string, controlId: string): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .from('capa_records')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('control_id', controlId)
+    .neq('status', 'closed')
+    .limit(1);
+  if (error) { logger.error('hasPendingCapaForControl:', error); return false; }
+  return (data ?? []).length > 0;
 }
 
 export async function updateCapaStatus(capaId: string, status: CapaStatus, companyId: string, userId: string): Promise<boolean> {
