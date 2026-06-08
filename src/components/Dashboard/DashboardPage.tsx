@@ -44,6 +44,9 @@ import {
   ShieldAlert,
   ClipboardList,
   Building2,
+  ClipboardCheck,
+  Key,
+  Activity,
 } from "lucide-react";
 import { logger } from '../../lib/logger';
 
@@ -75,6 +78,11 @@ type ModuleMetrics = {
   overdue_obligations: number;
   draft_policies: number;
   active_vendors: number;
+  grc_failing_controls: number;
+  capa_open: number;
+  capa_overdue: number;
+  licences_expiring: number;
+  licences_expired: number;
 };
 
 type IconType = ComponentType<{ className?: string }>;
@@ -187,7 +195,7 @@ export default function DashboardPage({
     if (!companyId) return;
     // If user has no access to any cross-module data, skip entirely
     if (!canGrc && !canPolicies && !canVendors) {
-      setModuleMetrics({ open_risks: 0, critical_risks: 0, overdue_obligations: 0, draft_policies: 0, active_vendors: 0 });
+      setModuleMetrics({ open_risks: 0, critical_risks: 0, overdue_obligations: 0, draft_policies: 0, active_vendors: 0, grc_failing_controls: 0, capa_open: 0, capa_overdue: 0, licences_expiring: 0, licences_expired: 0 });
       return;
     }
 
@@ -241,6 +249,36 @@ export default function DashboardPage({
         });
       }
 
+      if (canGrc) {
+        // GRC: latest test result per control — fetch recent test log, pick first per control_id
+        fetches.push({
+          key: 'grc_tests',
+          promise: (supabase as any)
+            .from('framework_test_log')
+            .select('control_id, status')
+            .eq('company_id', companyId)
+            .order('tested_at', { ascending: false })
+            .limit(2000),
+        });
+        // CAPA: open (non-closed) records with due_date for overdue calc
+        fetches.push({
+          key: 'capas',
+          promise: (supabase as any)
+            .from('capa_records')
+            .select('status, due_date')
+            .eq('company_id', companyId)
+            .neq('status', 'closed'),
+        });
+        // Regulatory licences: expiry_date for alert calc
+        fetches.push({
+          key: 'reg_licences',
+          promise: (supabase as any)
+            .from('regulatory_licences')
+            .select('expiry_date')
+            .eq('company_id', companyId),
+        });
+      }
+
       const settled = await Promise.allSettled(fetches.map(f => f.promise));
       if (cancelled) return;
 
@@ -253,12 +291,37 @@ export default function DashboardPage({
       const policyRows = resultMap.policies?.status === 'fulfilled' ? (resultMap.policies.value.data ?? []) : [];
       const vendorRows = resultMap.vendors?.status === 'fulfilled' ? (resultMap.vendors.value.data ?? []) : [];
 
+      // GRC: latest test per control_id — first occurrence = most recent (ordered desc)
+      const testRows: { control_id: string; status: string }[] = resultMap.grc_tests?.status === 'fulfilled' ? (resultMap.grc_tests.value.data ?? []) : [];
+      const latestByControl = new Map<string, string>();
+      for (const t of testRows) {
+        if (!latestByControl.has(t.control_id)) latestByControl.set(t.control_id, t.status);
+      }
+      const grc_failing_controls = [...latestByControl.values()].filter(s => s === 'fail').length;
+
+      // CAPA
+      const capaRows: { status: string; due_date: string | null }[] = resultMap.capas?.status === 'fulfilled' ? (resultMap.capas.value.data ?? []) : [];
+      const today = new Date();
+      const capa_open = capaRows.length;
+      const capa_overdue = capaRows.filter(c => c.due_date && new Date(c.due_date) < today).length;
+
+      // Licences
+      const licRows: { expiry_date: string | null }[] = resultMap.reg_licences?.status === 'fulfilled' ? (resultMap.reg_licences.value.data ?? []) : [];
+      const ninetyDaysOut = new Date(today.getTime() + 90 * 86_400_000);
+      const licences_expired = licRows.filter(l => l.expiry_date && new Date(l.expiry_date) < today).length;
+      const licences_expiring = licRows.filter(l => l.expiry_date && new Date(l.expiry_date) >= today && new Date(l.expiry_date) <= ninetyDaysOut).length;
+
       setModuleMetrics({
         open_risks: riskRows.length,
         critical_risks: riskRows.filter((r: any) => r.level === 'critical' || r.level === 'high').length,
         overdue_obligations: obligationRows.length,
         draft_policies: policyRows.length,
         active_vendors: vendorRows.length,
+        grc_failing_controls,
+        capa_open,
+        capa_overdue,
+        licences_expiring,
+        licences_expired,
       });
     })();
 
@@ -302,6 +365,36 @@ export default function DashboardPage({
         subtext: moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
         variant: moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'obligations' } })),
+      });
+      crossModule.push({
+        title: "GRC Failing Controls",
+        value: moduleMetrics ? String(moduleMetrics.grc_failing_controls) : "…",
+        icon: Activity,
+        subtext: moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
+        variant: moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'control-monitoring' } })),
+      });
+      crossModule.push({
+        title: "Open CAPAs",
+        value: moduleMetrics ? String(moduleMetrics.capa_open) : "…",
+        icon: ClipboardCheck,
+        subtext: moduleMetrics
+          ? moduleMetrics.capa_overdue > 0
+            ? `${moduleMetrics.capa_overdue} overdue`
+            : "None overdue"
+          : undefined,
+        variant: moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'capa-management' } })),
+      });
+      crossModule.push({
+        title: "Licence Alerts",
+        value: moduleMetrics ? String(moduleMetrics.licences_expired + moduleMetrics.licences_expiring) : "…",
+        icon: Key,
+        subtext: moduleMetrics
+          ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
+          : undefined,
+        variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'regulatory-affairs' } })),
       });
     }
 
@@ -421,7 +514,7 @@ export default function DashboardPage({
         variant: "blue" as const,
       }] : []),
     ];
-  }, [exec, loading, moduleMetrics, isExecutive, isLegal, approvalPct, rejectionPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive]);
+  }, [exec, loading, moduleMetrics, isExecutive, isLegal, isMarketing, approvalPct, rejectionPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive]);
 
   /* ─────────────────────────── Render ─────────────────────────── */
   return (
