@@ -3,6 +3,7 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -66,14 +67,14 @@ const AE_KEYWORDS: { phrase: string; severity: AdverseEvent['severity'] }[] = [
 export async function scanForAdverseEvents(
   companyId: string,
   channelId: string | null,
-  text: string
+  text: string,
+  userId?: string,
 ): Promise<AdverseEvent[]> {
   const lower = text.toLowerCase();
   const detected: AdverseEvent[] = [];
 
   for (const kw of AE_KEYWORDS) {
     if (lower.includes(kw.phrase)) {
-      // Extract surrounding context (±80 chars)
       const idx = lower.indexOf(kw.phrase);
       const start = Math.max(0, idx - 80);
       const end = Math.min(text.length, idx + kw.phrase.length + 80);
@@ -92,7 +93,20 @@ export async function scanForAdverseEvents(
         .select()
         .single();
 
-      if (!error && data) detected.push(data);
+      if (!error && data) {
+        detected.push(data);
+        try {
+          await recordAuditEvent({
+            companyId,
+            userId: userId ?? 'system',
+            action: `ae.detected: "${kw.phrase}" (${kw.severity})`,
+            entityType: 'adverse_event',
+            entityId: data.id,
+            metadata: { phrase: kw.phrase, severity: kw.severity, channelId },
+            captureEvidence: false,
+          });
+        } catch { /* audit never blocks */ }
+      }
     }
   }
 
@@ -101,14 +115,35 @@ export async function scanForAdverseEvents(
 
 /* ── Lifecycle Management ────────────────────────────── */
 
-export async function quarantineEvent(eventId: string): Promise<void> {
+export async function quarantineEvent(
+  eventId: string,
+  companyId: string,
+  userId: string,
+): Promise<void> {
   await (supabase as any)
     .from('adverse_events')
     .update({ status: 'quarantined' })
     .eq('id', eventId);
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'ae.quarantined',
+      entityType: 'adverse_event',
+      entityId: eventId,
+      metadata: {},
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
 }
 
-export async function reportEvent(eventId: string, notes: string, userId: string): Promise<void> {
+export async function reportEvent(
+  eventId: string,
+  notes: string,
+  userId: string,
+  companyId: string,
+): Promise<void> {
   await (supabase as any)
     .from('adverse_events')
     .update({
@@ -118,9 +153,25 @@ export async function reportEvent(eventId: string, notes: string, userId: string
       resolved_by: userId,
     })
     .eq('id', eventId);
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'ae.reported_to_pv',
+      entityType: 'adverse_event',
+      entityId: eventId,
+      metadata: { notes: notes.slice(0, 200) },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
 }
 
-export async function dismissEvent(eventId: string, userId: string): Promise<void> {
+export async function dismissEvent(
+  eventId: string,
+  userId: string,
+  companyId: string,
+): Promise<void> {
   await (supabase as any)
     .from('adverse_events')
     .update({
@@ -129,6 +180,18 @@ export async function dismissEvent(eventId: string, userId: string): Promise<voi
       resolved_by: userId,
     })
     .eq('id', eventId);
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'ae.dismissed',
+      entityType: 'adverse_event',
+      entityId: eventId,
+      metadata: {},
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
 }
 
 export async function getAdverseEvents(

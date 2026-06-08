@@ -3,6 +3,7 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -54,7 +55,8 @@ export async function addChannel(
   name: string,
   type: ChannelType,
   url: string | null,
-  approvedSnapshot: string | null
+  approvedSnapshot: string | null,
+  userId?: string,
 ): Promise<MonitoredChannel | null> {
   const approvedHash = approvedSnapshot ? simpleHash(approvedSnapshot) : null;
 
@@ -73,6 +75,19 @@ export async function addChannel(
     .single();
 
   if (error) { logger.error('addChannel error:', error); return null; }
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId: userId ?? 'system',
+      action: `channel.added: ${name} (${type})`,
+      entityType: 'monitored_channel',
+      entityId: data.id,
+      metadata: { name, type, url },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return data;
 }
 
@@ -88,11 +103,27 @@ export async function getChannels(companyId: string): Promise<MonitoredChannel[]
   return data ?? [];
 }
 
-export async function removeChannel(channelId: string): Promise<void> {
+export async function removeChannel(
+  channelId: string,
+  companyId: string,
+  userId: string,
+): Promise<void> {
   await (supabase as any)
     .from('monitored_channels')
     .update({ status: 'archived' })
     .eq('id', channelId);
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'channel.archived',
+      entityType: 'monitored_channel',
+      entityId: channelId,
+      metadata: {},
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
 }
 
 /* ── Drift Detection ─────────────────────────────────── */
@@ -100,7 +131,8 @@ export async function removeChannel(channelId: string): Promise<void> {
 export async function checkForDrift(
   companyId: string,
   channelId: string,
-  currentContent: string
+  currentContent: string,
+  userId?: string,
 ): Promise<DriftAlert | null> {
   const { data: channel } = await (supabase as any)
     .from('monitored_channels')
@@ -112,18 +144,15 @@ export async function checkForDrift(
 
   const currentHash = simpleHash(currentContent);
 
-  // Update last_checked_at
   await (supabase as any)
     .from('monitored_channels')
     .update({ last_checked_at: new Date().toISOString() })
     .eq('id', channelId);
 
-  // No drift if hashes match or no approved hash
   if (!channel.approved_content_hash || currentHash === channel.approved_content_hash) {
     return null;
   }
 
-  // Drift detected!
   const diffSummary = `Content hash changed from ${channel.approved_content_hash} to ${currentHash}. The approved version may have been modified without authorization.`;
 
   const { data: alert, error } = await (supabase as any)
@@ -142,6 +171,19 @@ export async function checkForDrift(
     .single();
 
   if (error) { logger.error('checkForDrift insert error:', error); return null; }
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId: userId ?? 'system',
+      action: `drift.detected: channel "${channel.channel_name}"`,
+      entityType: 'drift_alert',
+      entityId: alert.id,
+      metadata: { channelId, channelName: channel.channel_name, approvedHash: channel.approved_content_hash, currentHash },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return alert;
 }
 
@@ -162,11 +204,27 @@ export async function getAlerts(companyId: string, resolvedFilter?: boolean): Pr
   return data ?? [];
 }
 
-export async function resolveAlert(alertId: string, userId: string): Promise<void> {
+export async function resolveAlert(
+  alertId: string,
+  userId: string,
+  companyId: string,
+): Promise<void> {
   await (supabase as any)
     .from('drift_alerts')
     .update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by: userId })
     .eq('id', alertId);
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'drift.alert_resolved',
+      entityType: 'drift_alert',
+      entityId: alertId,
+      metadata: {},
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
 }
 
 export async function getDriftStats(companyId: string) {

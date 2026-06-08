@@ -289,7 +289,9 @@ export async function updateReadinessItem(
   evidenceName?: string,
   evidenceUrl?: string
 ): Promise<boolean> {
-  const { error } = await (await db() as any)
+  // Return the row id so we can use a real UUID as entityId in the audit log.
+  // (audit_logs.entity_id is uuid type — item codes like 'SITE-001' are not valid UUIDs)
+  const { data, error } = await (await db() as any)
     .from('gmp_readiness_log')
     .upsert({
       company_id: companyId,
@@ -300,7 +302,9 @@ export async function updateReadinessItem(
       evidence_url: evidenceUrl || null,
       updated_by: userId,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'company_id,item_id' });
+    }, { onConflict: 'company_id,item_id' })
+    .select('id')
+    .single();
   if (error) { logger.error('updateReadinessItem', error); return false; }
 
   const item = INSPECTION_ITEMS.find(i => i.id === itemId);
@@ -308,7 +312,7 @@ export async function updateReadinessItem(
     userId, companyId,
     action: 'update_gmp_readiness',
     entityType: 'gmp_inspection',
-    entityId: itemId,
+    entityId: data?.id ?? companyId,   // real UUID from the readiness log row
     metadata: { status, item_id: itemId, item_title: item?.title ?? itemId, area: item?.area, is_critical: item?.isCritical },
   });
   return true;

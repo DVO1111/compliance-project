@@ -32,14 +32,14 @@ export default function TrainingSimulationPage() {
     async function handleCreate() {
         if (!companyId || !form.title || !form.scenario_text || !form.correct_response || !form.explanation) return;
         setSaving(true);
-        await createScenario(companyId, form);
+        await createScenario(companyId, form, user?.id);
         setShowCreate(false); setForm({ title: '', description: '', scenario_type: 'off_label_question', difficulty: 'intermediate', scenario_text: '', correct_response: '', explanation: '' }); setSaving(false); load();
     }
 
     async function handleSubmit() {
         if (!user || !activeScenario || !response) return;
         setSaving(true);
-        const r = await submitAttempt(activeScenario.id, user.id, response, activeScenario.correct_response);
+        const r = await submitAttempt(activeScenario.id, user.id, response, activeScenario.correct_response, companyId);
         setResult(r); setSaving(false); load();
     }
 

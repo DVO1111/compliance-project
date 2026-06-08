@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 export type ScenarioType = 'off_label_question' | 'misleading_claim' | 'unsubstantiated_superlative' | 'adverse_event_report' | 'social_media_post' | 'agency_review';
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced';
@@ -21,13 +22,26 @@ export async function getScenarios(companyId: string): Promise<TrainingScenario[
   return data ?? [];
 }
 
-export async function createScenario(companyId: string, s: { title: string; description: string; scenario_type: ScenarioType; difficulty: Difficulty; scenario_text: string; correct_response: string; explanation: string }): Promise<TrainingScenario | null> {
+export async function createScenario(companyId: string, s: { title: string; description: string; scenario_type: ScenarioType; difficulty: Difficulty; scenario_text: string; correct_response: string; explanation: string }, userId?: string): Promise<TrainingScenario | null> {
   const { data, error } = await (supabase as any).from('training_scenarios').insert({ company_id: companyId, ...s, active: true }).select().single();
   if (error) { logger.error('createScenario:', error); return null; }
+
+  if (userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: `training.scenario_created: ${s.title} (${s.scenario_type})`,
+        entityType: 'training_scenario', entityId: data.id,
+        metadata: { scenarioType: s.scenario_type, difficulty: s.difficulty },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   return data;
 }
 
-export async function submitAttempt(scenarioId: string, userId: string, response: string, correctResponse: string): Promise<ScenarioAttempt | null> {
+export async function submitAttempt(scenarioId: string, userId: string, response: string, correctResponse: string, companyId?: string): Promise<ScenarioAttempt | null> {
   // Simple scoring: compare key phrases
   const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
   const correctWords = new Set(normalize(correctResponse));
@@ -39,6 +53,19 @@ export async function submitAttempt(scenarioId: string, userId: string, response
 
   const { data, error } = await (supabase as any).from('scenario_attempts').insert({ scenario_id: scenarioId, user_id: userId, user_response: response, score, passed, feedback }).select().single();
   if (error) { logger.error('submitAttempt:', error); return null; }
+
+  if (companyId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: `training.attempt_submitted: score ${score} (${passed ? 'passed' : 'failed'})`,
+        entityType: 'scenario_attempt', entityId: data.id,
+        metadata: { scenarioId, score, passed },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   return data;
 }
 

@@ -143,7 +143,7 @@ export default function DriftMonitorPage({ onNavigate }: Props) {
     const handleAddChannel = async () => {
         if (!companyId || !newName.trim()) return;
         setAdding(true);
-        await addChannel(companyId, newName, newType, newUrl || null, newSnapshot || null);
+        await addChannel(companyId, newName, newType, newUrl || null, newSnapshot || null, user?.id);
         setShowAddModal(false);
         setNewName(''); setNewUrl(''); setNewSnapshot('');
         await load();
@@ -152,27 +152,28 @@ export default function DriftMonitorPage({ onNavigate }: Props) {
 
     const handleRemoveChannel = async (id: string) => {
         if (!confirm('Archive this channel?')) return;
-        await removeChannel(id);
+        if (!companyId || !user) return;
+        await removeChannel(id, companyId, user.id);
         await load();
     };
 
     const handleCheckDrift = async () => {
         if (!companyId || !checkingChannelId || !driftCheckContent.trim()) return;
-        const result = await checkForDrift(companyId, checkingChannelId, driftCheckContent);
+        const result = await checkForDrift(companyId, checkingChannelId, driftCheckContent, user?.id);
         setCheckResult(result ? `⚠️ DRIFT DETECTED — ${result.diff_summary}` : '✅ No drift detected. Content matches approved version.');
         await load();
     };
 
     const handleResolveDrift = async (alertId: string) => {
-        if (!user) return;
-        await resolveAlert(alertId, user.id);
+        if (!user || !companyId) return;
+        await resolveAlert(alertId, user.id, companyId);
         await load();
     };
 
     const handleAEScan = async () => {
         if (!companyId || !aeScanText.trim()) return;
         setAeScanning(true);
-        const detected = await scanForAdverseEvents(companyId, null, aeScanText);
+        const detected = await scanForAdverseEvents(companyId, null, aeScanText, user?.id);
         if (detected.length === 0) {
             setCheckResult('✅ No adverse events detected in the scanned text.');
         } else {
@@ -182,11 +183,19 @@ export default function DriftMonitorPage({ onNavigate }: Props) {
         setAeScanning(false);
     };
 
-    const handleQuarantine = async (id: string) => { await quarantineEvent(id); await load(); };
-    const handleDismiss = async (id: string) => { if (!user) return; await dismissEvent(id, user.id); await load(); };
+    const handleQuarantine = async (id: string) => {
+        if (!companyId || !user) return;
+        await quarantineEvent(id, companyId, user.id);
+        await load();
+    };
+    const handleDismiss = async (id: string) => {
+        if (!user || !companyId) return;
+        await dismissEvent(id, user.id, companyId);
+        await load();
+    };
     const handleReport = async () => {
-        if (!aeReportModal || !user) return;
-        await reportEvent(aeReportModal.id, aeReportNotes, user.id);
+        if (!aeReportModal || !user || !companyId) return;
+        await reportEvent(aeReportModal.id, aeReportNotes, user.id, companyId);
         setAeReportModal(null); setAeReportNotes('');
         await load();
     };

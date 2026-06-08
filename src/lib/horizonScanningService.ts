@@ -4,6 +4,7 @@
  * and tracks consultation periods.
  */
 import { supabase } from './supabase';
+import { recordAuditEvent } from './auditService';
 
 /* ── Types ──────────────────────────────────────────────────── */
 
@@ -213,7 +214,7 @@ export async function fetchImpactAssessments(companyId: string): Promise<Regulat
   return data || [];
 }
 
-export async function generateAIAssessment(updateId: string, contentId: string, companyId: string): Promise<RegulatoryImpactAssessment> {
+export async function generateAIAssessment(updateId: string, contentId: string, companyId: string, userId?: string): Promise<RegulatoryImpactAssessment> {
   // 1. Fetch update and content details for Gemini context
   const { data: update } = await (supabase as any).from('regulation_updates').select('*, regulations(title)').eq('id', updateId).single();
   const { data: content } = await (supabase as any).from('content_submissions').select('*').eq('id', contentId).single();
@@ -238,10 +239,23 @@ export async function generateAIAssessment(updateId: string, contentId: string, 
     .single();
 
   if (error) throw error;
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId: userId ?? 'system',
+      action: 'horizon.impact_assessment_created',
+      entityType: 'regulatory_impact_assessment',
+      entityId: data.id,
+      metadata: { updateId, contentId, impactLevel: data.impactLevel },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return data;
 }
 
-export async function applyImpactRecommendation(assessmentId: string): Promise<boolean> {
+export async function applyImpactRecommendation(assessmentId: string, companyId?: string, userId?: string): Promise<boolean> {
   const { data: assessment } = await (supabase as any)
     .from('regulatory_impact_assessments')
     .select('*')
@@ -267,6 +281,20 @@ export async function applyImpactRecommendation(assessmentId: string): Promise<b
     .from('regulatory_impact_assessments')
     .update({ status: 'applied', updated_at: new Date().toISOString() })
     .eq('id', assessmentId);
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId,
+        userId,
+        action: 'horizon.recommendation_applied',
+        entityType: 'regulatory_impact_assessment',
+        entityId: assessmentId,
+        metadata: { contentId: assessment.content_id },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 
   return true;
 }

@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { generateJSON } from './geminiClient';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 export type AuthorType = 'employee' | 'agency' | 'hcp' | 'patient' | 'influencer' | 'unknown';
 export type FlagType = 'off_label' | 'undisclosed_sponsorship' | 'misleading_claim' | 'adverse_event' | 'compliant';
@@ -27,21 +28,46 @@ export async function getMentions(companyId: string): Promise<SocialMention[]> {
   return data ?? [];
 }
 
-export async function addMention(companyId: string, m: { platform: string; author: string; author_type: AuthorType; content: string; url?: string; flag_type?: FlagType; severity?: string }): Promise<SocialMention | null> {
+export async function addMention(companyId: string, m: { platform: string; author: string; author_type: AuthorType; content: string; url?: string; flag_type?: FlagType; severity?: string }, userId?: string): Promise<SocialMention | null> {
   const { data, error } = await (supabase as any).from('social_mentions').insert({ company_id: companyId, platform: m.platform, author: m.author, author_type: m.author_type, content: m.content, url: m.url || null, flag_type: m.flag_type || null, severity: m.severity || 'low', status: 'new' }).select().single();
   if (error) { logger.error('addMention:', error); return null; }
-  
+
+  if (userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: `social_listening.mention_added: ${m.platform} by ${m.author}`,
+        entityType: 'social_mention', entityId: data.id,
+        metadata: { platform: m.platform, authorType: m.author_type, flagType: m.flag_type ?? null },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   // Trigger AI analysis in the background
   runSocialAIAnalysis(data.id);
-  
+
   return data;
 }
 
-export async function updateMentionStatus(id: string, status: MentionStatus): Promise<boolean> {
+export async function updateMentionStatus(id: string, status: MentionStatus, companyId?: string, userId?: string): Promise<boolean> {
   const updates: any = { status };
   if (status === 'resolved' || status === 'dismissed') updates.resolved_at = new Date().toISOString();
   const { error } = await (supabase as any).from('social_mentions').update(updates).eq('id', id);
   if (error) { logger.error('updateMentionStatus:', error); return false; }
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: `social_listening.mention_status_changed: ${status}`,
+        entityType: 'social_mention', entityId: id,
+        metadata: { status },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   return true;
 }
 
@@ -51,15 +77,41 @@ export async function getRules(companyId: string): Promise<MonitoringRule[]> {
   return data ?? [];
 }
 
-export async function addRule(companyId: string, r: { platform: string; keywords: string[]; product?: string; rule_type: string }): Promise<MonitoringRule | null> {
+export async function addRule(companyId: string, r: { platform: string; keywords: string[]; product?: string; rule_type: string }, userId?: string): Promise<MonitoringRule | null> {
   const { data, error } = await (supabase as any).from('social_monitoring_rules').insert({ company_id: companyId, platform: r.platform, keywords: r.keywords, product: r.product || null, rule_type: r.rule_type, active: true }).select().single();
   if (error) { logger.error('addRule:', error); return null; }
+
+  if (userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: `social_listening.rule_added: ${r.rule_type} on ${r.platform}`,
+        entityType: 'social_monitoring_rule', entityId: data.id,
+        metadata: { platform: r.platform, ruleType: r.rule_type, keywordCount: r.keywords.length },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   return data;
 }
 
-export async function toggleRule(id: string, active: boolean): Promise<boolean> {
+export async function toggleRule(id: string, active: boolean, companyId?: string, userId?: string): Promise<boolean> {
   const { error } = await (supabase as any).from('social_monitoring_rules').update({ active }).eq('id', id);
   if (error) { logger.error('toggleRule:', error); return false; }
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: `social_listening.rule_${active ? 'enabled' : 'disabled'}`,
+        entityType: 'social_monitoring_rule', entityId: id,
+        metadata: { active },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   return true;
 }
 

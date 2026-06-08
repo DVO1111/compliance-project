@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { Permissions } from './permissions';
 import { SYSTEM_ROLE_DEFAULTS } from './permissions';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 /* ──────────────────────── Types ──────────────────────── */
 
@@ -130,6 +131,17 @@ export async function createCustomRole(params: {
     logger.error('createCustomRole error:', error);
     throw new Error(error.message);
   }
+
+  try {
+    await recordAuditEvent({
+      companyId: params.companyId, userId: params.createdBy,
+      action: `role.created: ${params.name}`,
+      entityType: 'custom_role', entityId: data.id,
+      metadata: { name: params.name },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return data as CustomRole;
 }
 
@@ -140,7 +152,9 @@ export async function updateCustomRole(
     name?: string;
     description?: string;
     permissions?: Partial<Permissions>;
-  }
+  },
+  companyId?: string,
+  userId?: string,
 ): Promise<void> {
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (updates.name !== undefined) payload.name = updates.name;
@@ -156,10 +170,22 @@ export async function updateCustomRole(
     logger.error('updateCustomRole error:', error);
     throw new Error(error.message);
   }
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: 'role.updated',
+        entityType: 'custom_role', entityId: roleId,
+        metadata: { fields: Object.keys(updates) },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 }
 
 /** Delete a custom role (only non-system roles) */
-export async function deleteCustomRole(roleId: string): Promise<void> {
+export async function deleteCustomRole(roleId: string, companyId?: string, userId?: string): Promise<void> {
   // First, unassign any users with this role
   await (supabase as any)
     .from('profiles')
@@ -176,22 +202,48 @@ export async function deleteCustomRole(roleId: string): Promise<void> {
     logger.error('deleteCustomRole error:', error);
     throw new Error(error.message);
   }
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: 'role.deleted',
+        entityType: 'custom_role', entityId: roleId,
+        metadata: {},
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 }
 
 /* ──────────────────────── Assignment ──────────────────────── */
 
 /** Assign a custom role to a user (sets profiles.custom_role_id) */
 export async function assignRoleToUser(
-  userId: string,
-  roleId: string | null
+  targetUserId: string,
+  roleId: string | null,
+  companyId?: string,
+  actorUserId?: string,
 ): Promise<void> {
   const { error } = await (supabase as any)
     .from('profiles')
     .update({ custom_role_id: roleId })
-    .eq('id', userId);
+    .eq('id', targetUserId);
 
   if (error) {
     logger.error('assignRoleToUser error:', error);
     throw new Error(error.message);
+  }
+
+  if (companyId && actorUserId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId: actorUserId,
+        action: roleId ? `role.assigned: role ${roleId} to user ${targetUserId}` : `role.unassigned: from user ${targetUserId}`,
+        entityType: 'custom_role', entityId: roleId ?? targetUserId,
+        metadata: { targetUserId, roleId },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
   }
 }

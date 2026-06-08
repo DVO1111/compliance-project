@@ -36,7 +36,7 @@ const TYPE_BADGE: Record<string, string> = {
 };
 
 export default function HorizonScanningPage() {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const companyId = (profile as any)?.company_id;
     const [tab, setTab] = useState<Tab>('feed');
     const [alerts, setAlerts] = useState<RegulatoryAlert[]>([]);
@@ -75,7 +75,7 @@ export default function HorizonScanningPage() {
     const handleApplyRecommendation = async (rec: RegulatoryImpactAssessment) => {
         setApplying(true);
         try {
-            const success = await applyImpactRecommendation(rec.id);
+            const success = await applyImpactRecommendation(rec.id, companyId, user?.id);
             if (success) {
                 window.dispatchEvent(new CustomEvent('global-toast', {
                     detail: { message: 'AI suggestion applied and content updated successfully', type: 'success' }

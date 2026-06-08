@@ -3,6 +3,7 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -80,14 +81,43 @@ export async function createConsent(
     .single();
 
   if (error) { logger.error('createConsent error:', error); return null; }
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: `consent.created: ${data.consentType} for ${data.patientName}`,
+      entityType: 'patient_consent',
+      entityId: consent.id,
+      metadata: { consentType: data.consentType },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return consent;
 }
 
-export async function revokeConsent(consentId: string): Promise<void> {
+export async function revokeConsent(
+  consentId: string,
+  companyId: string,
+  userId: string,
+): Promise<void> {
   await (supabase as any)
     .from('patient_consents')
     .update({ consent_status: 'revoked' })
     .eq('id', consentId);
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'consent.revoked',
+      entityType: 'patient_consent',
+      entityId: consentId,
+      metadata: {},
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
 }
 
 export async function getConsents(
@@ -131,6 +161,19 @@ export async function linkConsentToContent(
     logger.error('linkConsentToContent error:', error);
     return false;
   }
+
+  try {
+    await recordAuditEvent({
+      companyId,
+      userId,
+      action: 'consent.linked_to_content',
+      entityType: 'patient_consent',
+      entityId: consentId,
+      metadata: { contentId },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return true;
 }
 
@@ -195,6 +238,8 @@ export async function savePHIScan(
   findings: PHIFinding[],
   userId: string
 ): Promise<void> {
+  const riskLevel = getPHIRiskLevel(findings);
+
   await (supabase as any)
     .from('phi_scan_results')
     .insert({
@@ -202,7 +247,21 @@ export async function savePHIScan(
       content_id: contentId,
       scan_type: 'text',
       findings,
-      risk_level: getPHIRiskLevel(findings),
+      risk_level: riskLevel,
       scanned_by: userId,
     });
+
+  if (findings.length > 0) {
+    try {
+      await recordAuditEvent({
+        companyId,
+        userId,
+        action: `phi.scan_detected: ${findings.length} finding(s) — risk: ${riskLevel}`,
+        entityType: 'phi_scan',
+        entityId: contentId ?? companyId,
+        metadata: { findingCount: findings.length, riskLevel, types: [...new Set(findings.map(f => f.type))] },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 }

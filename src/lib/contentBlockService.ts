@@ -3,6 +3,7 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { recordAuditEvent } from './auditService';
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -59,12 +60,25 @@ export async function createBlock(
     .single();
 
   if (error) { logger.error('createBlock error:', error); return null; }
+
+  try {
+    await recordAuditEvent({
+      companyId, userId,
+      action: `content_block.created: ${data.blockName} (${data.blockType})`,
+      entityType: 'content_block', entityId: block.id,
+      metadata: { blockType: data.blockType, jurisdiction: data.jurisdiction ?? 'all' },
+      captureEvidence: false,
+    });
+  } catch { /* audit never blocks */ }
+
   return block;
 }
 
 export async function updateBlock(
   blockId: string,
-  data: { contentText?: string; blockName?: string }
+  data: { contentText?: string; blockName?: string },
+  companyId?: string,
+  userId?: string,
 ): Promise<void> {
   const updates: any = { updated_at: new Date().toISOString() };
   if (data.contentText !== undefined) updates.content_text = data.contentText;
@@ -83,9 +97,21 @@ export async function updateBlock(
     .from('content_blocks')
     .update(updates)
     .eq('id', blockId);
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: 'content_block.updated',
+        entityType: 'content_block', entityId: blockId,
+        metadata: { fields: Object.keys(data) },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 }
 
-export async function lockBlock(blockId: string, userId: string): Promise<void> {
+export async function lockBlock(blockId: string, userId: string, companyId?: string): Promise<void> {
   await (supabase as any)
     .from('content_blocks')
     .update({
@@ -94,16 +120,52 @@ export async function lockBlock(blockId: string, userId: string): Promise<void> 
       approved_by: userId,
     })
     .eq('id', blockId);
+
+  if (companyId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: 'content_block.locked',
+        entityType: 'content_block', entityId: blockId,
+        metadata: {},
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 }
 
-export async function unlockBlock(blockId: string): Promise<void> {
+export async function unlockBlock(blockId: string, userId?: string, companyId?: string): Promise<void> {
   await (supabase as any)
     .from('content_blocks')
     .update({ is_locked: false, approved_at: null, approved_by: null })
     .eq('id', blockId);
+
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: 'content_block.unlocked',
+        entityType: 'content_block', entityId: blockId,
+        metadata: {},
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
 }
 
-export async function deleteBlock(blockId: string): Promise<void> {
+export async function deleteBlock(blockId: string, companyId?: string, userId?: string): Promise<void> {
+  if (companyId && userId) {
+    try {
+      await recordAuditEvent({
+        companyId, userId,
+        action: 'content_block.deleted',
+        entityType: 'content_block', entityId: blockId,
+        metadata: {},
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
   await (supabase as any)
     .from('content_blocks')
     .delete()

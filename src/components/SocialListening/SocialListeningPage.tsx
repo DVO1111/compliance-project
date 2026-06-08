@@ -11,7 +11,7 @@ const SENTIMENT_COLOR: Record<string, string> = { positive: 'text-[var(--color-s
 type Tab = 'mentions' | 'rules';
 
 export default function SocialListeningPage() {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const companyId = profile?.company_id;
     const [tab, setTab] = useState<Tab>('mentions');
     const [mentions, setMentions] = useState<SocialMention[]>([]);
@@ -38,18 +38,18 @@ export default function SocialListeningPage() {
     async function handleAddRule() {
         if (!companyId || !rForm.keywords) return;
         setSaving(true);
-        await addRule(companyId, { platform: rForm.platform, keywords: rForm.keywords.split(',').map(k => k.trim()).filter(Boolean), product: rForm.product || undefined, rule_type: rForm.rule_type });
+        await addRule(companyId, { platform: rForm.platform, keywords: rForm.keywords.split(',').map(k => k.trim()).filter(Boolean), product: rForm.product || undefined, rule_type: rForm.rule_type }, user?.id);
         setShowAddRule(false); setRForm({ platform: 'LinkedIn', keywords: '', product: '', rule_type: 'keyword' }); setSaving(false); load();
     }
 
     async function handleAddMention() {
         if (!companyId || !mForm.content || !mForm.author) return;
         setSaving(true);
-        await addMention(companyId, { platform: mForm.platform, author: mForm.author, author_type: mForm.author_type, content: mForm.content, url: mForm.url || undefined, flag_type: (mForm.flag_type as FlagType) || undefined, severity: mForm.severity });
+        await addMention(companyId, { platform: mForm.platform, author: mForm.author, author_type: mForm.author_type, content: mForm.content, url: mForm.url || undefined, flag_type: (mForm.flag_type as FlagType) || undefined, severity: mForm.severity }, user?.id);
         setShowAddMention(false); setMForm({ platform: 'LinkedIn', author: '', author_type: 'unknown', content: '', url: '', flag_type: '', severity: 'low' }); setSaving(false); load();
     }
 
-    async function handleStatus(id: string, status: MentionStatus) { await updateMentionStatus(id, status); load(); }
+    async function handleStatus(id: string, status: MentionStatus) { await updateMentionStatus(id, status, companyId, user?.id); load(); }
 
     async function handleAIAnalysis(id: string) {
         setAnalyzingId(id);
@@ -134,7 +134,7 @@ export default function SocialListeningPage() {
                 rules.length === 0 ? <div className="dash-card rounded-2xl p-8 text-center"><Radio className="w-10 h-10 mx-auto mb-3 dash-text-tertiary" /><p className="dash-text-secondary text-sm">No monitoring rules. Add one to start.</p></div>
                     : <div className="space-y-3">{rules.map(r => (
                         <div key={r.id} className="dash-card rounded-xl p-4 border border-[var(--color-border)] flex items-center gap-4">
-                            <button onClick={() => toggleRule(r.id, !r.active).then(() => load())} className="shrink-0">{r.active ? <ToggleRight className="w-6 h-6 text-[var(--color-success)]" /> : <ToggleLeft className="w-6 h-6 dash-text-tertiary" />}</button>
+                            <button onClick={() => toggleRule(r.id, !r.active, companyId, user?.id).then(() => load())} className="shrink-0">{r.active ? <ToggleRight className="w-6 h-6 text-[var(--color-success)]" /> : <ToggleLeft className="w-6 h-6 dash-text-tertiary" />}</button>
                             <div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-0.5"><span className="text-xs px-2 py-0.5 rounded bg-[var(--color-surface-alt)] dash-text-tertiary">{r.platform}</span><span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)] dash-text-tertiary capitalize">{r.rule_type}</span></div>
                                 <p className="text-sm dash-text font-medium">{r.keywords.join(', ')}</p>
                                 {r.product && <p className="text-xs dash-text-tertiary">Product: {r.product}</p>}
