@@ -2,7 +2,7 @@
 -- can reference the framework control that triggered them.
 
 ALTER TABLE capa_records
-  ADD COLUMN IF NOT EXISTS control_id  text REFERENCES framework_controls(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS control_id  uuid REFERENCES framework_controls(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS control_code text;
 
 CREATE INDEX IF NOT EXISTS idx_capa_records_control_id
