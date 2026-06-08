@@ -4,40 +4,51 @@ import {
     fetchRegulatoryAlerts,
     findAffectedContent,
     getConsultationPeriods,
+    fetchImpactAssessments,
+    applyImpactRecommendation,
+    flagAffectedControls,
+    getControlFlags,
+    resolveControlFlag,
     type RegulatoryAlert,
     type AffectedContent,
     type ConsultationEntry,
+    type RegulatoryImpactAssessment,
+    type ControlFlag,
 } from '../../lib/horizonScanningService';
 import {
     Radar, AlertTriangle, FileSearch, CalendarClock,
-    Shield, Bell, ChevronRight, RefreshCw,
-    Sparkles, ArrowRight, CheckCircle2, X
+    Shield, Bell, ChevronRight, ChevronDown, RefreshCw,
+    Sparkles, ArrowRight, CheckCircle2, X,
+    ShieldAlert, Check,
 } from 'lucide-react';
-import {
-    fetchImpactAssessments,
-    applyImpactRecommendation,
-    type RegulatoryImpactAssessment
-} from '../../lib/horizonScanningService';
 import { logger } from '../../lib/logger';
+
 type Tab = 'feed' | 'affected' | 'consultations';
 
 const SEVERITY_BADGE: Record<string, string> = {
     critical: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
-    warning: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-    info: 'bg-[var(--color-info-soft)] text-[var(--color-info)]',
+    warning:  'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+    info:     'bg-[var(--color-info-soft)] text-[var(--color-info)]',
 };
 
 const TYPE_BADGE: Record<string, string> = {
-    guidance_update: 'bg-[var(--color-info-soft)] text-[var(--color-info)]',
-    enforcement_action: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
-    warning_letter: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-    consultation: 'bg-[var(--color-purple)]/10 text-[var(--color-purple)]',
-    recall: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
+    guidance_update:   'bg-[var(--color-info-soft)] text-[var(--color-info)]',
+    enforcement_action:'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
+    warning_letter:    'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+    consultation:      'bg-[var(--color-purple)]/10 text-[var(--color-purple)]',
+    recall:            'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
+};
+
+const FLAG_SEVERITY_CHIP: Record<string, string> = {
+    critical: 'bg-red-100 text-red-700',
+    warning:  'bg-amber-100 text-amber-700',
+    info:     'bg-blue-100 text-blue-700',
 };
 
 export default function HorizonScanningPage() {
     const { profile, user } = useAuth();
     const companyId = (profile as any)?.company_id;
+
     const [tab, setTab] = useState<Tab>('feed');
     const [alerts, setAlerts] = useState<RegulatoryAlert[]>([]);
     const [affected, setAffected] = useState<AffectedContent[]>([]);
@@ -47,23 +58,34 @@ export default function HorizonScanningPage() {
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
 
+    // GRC control flag state
+    const [controlFlags, setControlFlags] = useState<Record<string, ControlFlag[]>>({});
+    const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
+    const [flagging, setFlagging] = useState<string | null>(null);
+    const [resolving, setResolving] = useState<string | null>(null);
+
     const load = useCallback(async () => {
         setLoading(true);
         if (tab === 'feed') {
-            setAlerts(await fetchRegulatoryAlerts());
+            const fetchedAlerts = await fetchRegulatoryAlerts();
+            setAlerts(fetchedAlerts);
+            // Fetch existing control flags for all alerts in parallel
+            if (companyId) {
+                const flagResults = await Promise.all(
+                    fetchedAlerts.map(a => getControlFlags(a.id, companyId))
+                );
+                const map: Record<string, ControlFlag[]> = {};
+                fetchedAlerts.forEach((a, i) => { map[a.id] = flagResults[i]; });
+                setControlFlags(map);
+            }
         } else if (tab === 'affected' && companyId) {
             const [aff, recs] = await Promise.all([
                 findAffectedContent(companyId),
-                fetchImpactAssessments(companyId)
+                fetchImpactAssessments(companyId),
             ]);
             setAffected(aff.map(a => {
                 const rec = recs.find(r => r.contentId === a.contentId);
-                return {
-                    ...a,
-                    recommendationId: rec?.id,
-                    suggestedChange: rec?.suggestedChange,
-                    impactLevel: rec?.impactLevel
-                };
+                return { ...a, recommendationId: rec?.id, suggestedChange: rec?.suggestedChange, impactLevel: rec?.impactLevel };
             }));
             setRecommendations(recs);
         } else if (tab === 'consultations') {
@@ -72,13 +94,15 @@ export default function HorizonScanningPage() {
         setLoading(false);
     }, [tab, companyId]);
 
+    useEffect(() => { load(); }, [load]);
+
     const handleApplyRecommendation = async (rec: RegulatoryImpactAssessment) => {
         setApplying(true);
         try {
             const success = await applyImpactRecommendation(rec.id, companyId, user?.id);
             if (success) {
                 window.dispatchEvent(new CustomEvent('global-toast', {
-                    detail: { message: 'AI suggestion applied and content updated successfully', type: 'success' }
+                    detail: { message: 'AI suggestion applied and content updated successfully', type: 'success' },
                 }));
                 setSelectedRecommendation(null);
                 load();
@@ -86,14 +110,52 @@ export default function HorizonScanningPage() {
         } catch (e) {
             logger.error(e);
             window.dispatchEvent(new CustomEvent('global-toast', {
-                detail: { message: 'Failed to apply transformation', type: 'warning' }
+                detail: { message: 'Failed to apply transformation', type: 'warning' },
             }));
         } finally {
             setApplying(false);
         }
     };
 
-    useEffect(() => { load(); }, [load]);
+    const handleFlagControls = async (alert: RegulatoryAlert) => {
+        if (!companyId) return;
+        setFlagging(alert.id);
+        try {
+            const flags = await flagAffectedControls(alert.id, alert, companyId, user?.id);
+            setControlFlags(prev => ({ ...prev, [alert.id]: flags }));
+            setExpandedAlert(alert.id);
+            window.dispatchEvent(new CustomEvent('global-toast', {
+                detail: {
+                    message: flags.length
+                        ? `${flags.length} GRC control${flags.length !== 1 ? 's' : ''} flagged for review`
+                        : 'No matching GRC controls found for this alert',
+                    type: flags.length ? 'success' : 'info',
+                },
+            }));
+        } catch (e) {
+            logger.error(e);
+        } finally {
+            setFlagging(null);
+        }
+    };
+
+    const handleResolveFlag = async (flagId: string, alertId: string) => {
+        if (!companyId) return;
+        setResolving(flagId);
+        try {
+            await resolveControlFlag(flagId, companyId, user?.id);
+            setControlFlags(prev => ({
+                ...prev,
+                [alertId]: (prev[alertId] ?? []).map(f =>
+                    f.id === flagId ? { ...f, status: 'resolved' as const } : f
+                ),
+            }));
+        } catch (e) {
+            logger.error(e);
+        } finally {
+            setResolving(null);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -123,10 +185,10 @@ export default function HorizonScanningPage() {
                     { id: 'feed' as Tab, label: 'Live Feed', icon: Bell, count: alerts.length },
                     { id: 'affected' as Tab, label: 'Affected Content', icon: FileSearch, count: affected.length },
                     { id: 'consultations' as Tab, label: 'Consultation Tracker', icon: CalendarClock, count: consultations.filter(c => c.status !== 'closed').length },
-                ]).map(t => (
+                ] as const).map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
-              ${tab === t.id ? 'bg-[var(--color-surface)] dark:bg-[var(--color-surface)] shadow-sm dash-text' : 'dash-text-secondary hover:dash-text'}`}>
+              ${tab === t.id ? 'bg-[var(--color-surface)] shadow-sm dash-text' : 'dash-text-secondary hover:dash-text'}`}>
                         <t.icon className="w-4 h-4" />
                         {t.label}
                         {t.count > 0 && (
@@ -146,36 +208,122 @@ export default function HorizonScanningPage() {
             ) : tab === 'feed' ? (
                 /* ═══ Live Feed ═══ */
                 <div className="space-y-3">
-                    {alerts.map(alert => (
-                        <div key={alert.id} className="dash-card rounded-xl p-5 border border-[var(--color-border)] hover:border-[var(--color-accent)] transition-colors">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SEVERITY_BADGE[alert.severity]}`}>
-                                            {alert.severity}
-                                        </span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_BADGE[alert.alertType]}`}>
-                                            {alert.alertType.replace(/_/g, ' ')}
-                                        </span>
-                                        <span className="text-xs font-semibold dash-accent">{alert.source}</span>
+                    {alerts.map(alert => {
+                        const flags = controlFlags[alert.id] ?? [];
+                        const activeFlags = flags.filter(f => f.status !== 'resolved');
+                        const isExpanded = expandedAlert === alert.id;
+                        const isFlagging = flagging === alert.id;
+
+                        return (
+                            <div key={alert.id} className="dash-card rounded-xl border border-[var(--color-border)] hover:border-[var(--color-accent)] transition-colors overflow-hidden">
+                                {/* Alert main row */}
+                                <div className="p-5">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SEVERITY_BADGE[alert.severity]}`}>
+                                                    {alert.severity}
+                                                </span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_BADGE[alert.alertType]}`}>
+                                                    {alert.alertType.replace(/_/g, ' ')}
+                                                </span>
+                                                <span className="text-xs font-semibold dash-accent">{alert.source}</span>
+                                            </div>
+                                            <h4 className="font-semibold dash-text text-sm">{alert.title}</h4>
+                                            <p className="text-xs dash-text-secondary mt-1 line-clamp-2">{alert.body}</p>
+                                        </div>
+
+                                        <div className="flex flex-col items-end gap-2 shrink-0">
+                                            {alert.affectedContentCount > 0 && (
+                                                <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-[var(--color-danger-soft)] text-[var(--color-danger)] font-medium">
+                                                    <AlertTriangle className="w-3 h-3" />
+                                                    {alert.affectedContentCount} affected
+                                                </span>
+                                            )}
+                                            <p className="text-xs dash-text-tertiary">
+                                                {new Date(alert.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <h4 className="font-semibold dash-text text-sm">{alert.title}</h4>
-                                    <p className="text-xs dash-text-secondary mt-1 line-clamp-2">{alert.body}</p>
+
+                                    {/* GRC action row */}
+                                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[var(--color-border)]">
+                                        {activeFlags.length > 0 ? (
+                                            <button
+                                                onClick={() => setExpandedAlert(isExpanded ? null : alert.id)}
+                                                className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg hover:bg-amber-100 transition-colors">
+                                                <ShieldAlert className="w-3.5 h-3.5" />
+                                                {activeFlags.length} GRC control{activeFlags.length !== 1 ? 's' : ''} flagged
+                                                {isExpanded
+                                                    ? <ChevronDown className="w-3 h-3" />
+                                                    : <ChevronRight className="w-3 h-3" />}
+                                            </button>
+                                        ) : flags.length > 0 ? (
+                                            <span className="flex items-center gap-1.5 text-xs text-[var(--color-success)] font-medium">
+                                                <Check className="w-3.5 h-3.5" />
+                                                All controls resolved
+                                            </span>
+                                        ) : null}
+
+                                        <button
+                                            onClick={() => handleFlagControls(alert)}
+                                            disabled={isFlagging}
+                                            className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border border-[var(--color-border)] dash-text-secondary hover:border-[var(--color-accent)] hover:dash-accent transition-colors disabled:opacity-50">
+                                            {isFlagging
+                                                ? <><RefreshCw className="w-3 h-3 animate-spin" /> Scanning…</>
+                                                : <><ShieldAlert className="w-3 h-3" /> {flags.length > 0 ? 'Re-scan GRC Controls' : 'Flag GRC Controls'}</>}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="text-right shrink-0">
-                                    {alert.affectedContentCount > 0 && (
-                                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-[var(--color-danger-soft)] text-[var(--color-danger)] font-medium">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            {alert.affectedContentCount} affected
-                                        </span>
-                                    )}
-                                    <p className="text-xs dash-text-tertiary mt-1">
-                                        {new Date(alert.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    </p>
-                                </div>
+
+                                {/* Expanded control flags panel */}
+                                {isExpanded && flags.length > 0 && (
+                                    <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-alt)]/40 px-5 py-4 space-y-2">
+                                        <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wide mb-3">
+                                            Affected GRC Controls
+                                        </p>
+                                        {flags.map(flag => (
+                                            <div key={flag.id}
+                                                className={`flex items-start justify-between gap-3 rounded-lg px-3 py-2.5 border transition-all
+                                                    ${flag.status === 'resolved'
+                                                        ? 'border-[var(--color-border)] opacity-50 bg-[var(--color-surface-alt)]'
+                                                        : 'border-amber-200 bg-amber-50/60'}`}>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-xs font-mono font-bold dash-text">{flag.controlCode}</span>
+                                                        {flag.frameworkName && (
+                                                            <span className="text-xs text-gray-500">{flag.frameworkName}</span>
+                                                        )}
+                                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${FLAG_SEVERITY_CHIP[flag.severity]}`}>
+                                                            {flag.severity}
+                                                        </span>
+                                                        {flag.status === 'resolved' && (
+                                                            <span className="text-xs text-[var(--color-success)] font-medium flex items-center gap-0.5">
+                                                                <Check className="w-3 h-3" /> Resolved
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs dash-text font-medium mt-0.5 truncate">{flag.controlTitle}</p>
+                                                    <p className="text-xs dash-text-tertiary mt-0.5">{flag.reason}</p>
+                                                </div>
+                                                {flag.status !== 'resolved' && (
+                                                    <button
+                                                        onClick={() => handleResolveFlag(flag.id, alert.id)}
+                                                        disabled={resolving === flag.id}
+                                                        className="shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition-colors disabled:opacity-50">
+                                                        {resolving === flag.id
+                                                            ? <RefreshCw className="w-3 h-3 animate-spin" />
+                                                            : <Check className="w-3 h-3" />}
+                                                        Resolve
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             ) : tab === 'affected' ? (
                 /* ═══ Affected Content ═══ */
@@ -200,7 +348,7 @@ export default function HorizonScanningPage() {
                                 </div>
                                 {item.recommendationId ? (
                                     <button
-                                        onClick={() => setSelectedRecommendation(recommendations.find(r => r.id === item.recommendationId) || null)}
+                                        onClick={() => setSelectedRecommendation(recommendations.find(r => r.id === item.recommendationId) ?? null)}
                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-accent-soft)] dash-accent text-xs font-bold hover:bg-[var(--color-accent)] hover:text-white transition-all shadow-sm">
                                         <Sparkles className="w-3.5 h-3.5" />
                                         Review AI Suggestion
@@ -267,7 +415,6 @@ export default function HorizonScanningPage() {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            {/* Analysis Card */}
                             <div className="p-5 rounded-2xl bg-[var(--color-warning-soft)]/20 border border-[var(--color-warning-soft)]">
                                 <h4 className="flex items-center gap-2 font-bold dash-text text-sm mb-2">
                                     <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />
@@ -278,23 +425,18 @@ export default function HorizonScanningPage() {
                                 </p>
                             </div>
 
-                            {/* Comparison View */}
                             <div className="grid md:grid-cols-2 gap-6 relative">
                                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 hidden md:block">
                                     <div className="p-2 rounded-full bg-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/20">
                                         <ArrowRight className="w-5 h-5 text-white" />
                                     </div>
                                 </div>
-
-                                {/* Original (Pre-AI) */}
                                 <div className="space-y-3">
                                     <h5 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary">Baseline Content</h5>
                                     <div className="dash-card rounded-2xl p-5 border dash-border h-48 overflow-y-auto text-sm dash-text-secondary line-through opacity-60 italic">
                                         [Existing approved content...]
                                     </div>
                                 </div>
-
-                                {/* AI Recommendation */}
                                 <div className="space-y-3">
                                     <h5 className="text-[10px] font-bold uppercase tracking-widest dash-accent">AI Drafting Recommendation</h5>
                                     <div className="dash-card rounded-2xl p-5 border-2 border-[var(--color-accent)] h-48 overflow-y-auto text-sm dash-text bg-[var(--color-accent-soft)]/10 font-medium">
@@ -316,7 +458,6 @@ export default function HorizonScanningPage() {
                             </div>
                         </div>
 
-                        {/* Footer */}
                         <div className="p-6 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)]/30 flex items-center justify-end gap-3">
                             <button onClick={() => setSelectedRecommendation(null)}
                                 className="px-5 py-2.5 rounded-xl text-sm font-semibold dash-text-secondary hover:dash-surface-alt transition-all">

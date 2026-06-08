@@ -5,6 +5,7 @@
  */
 import { supabase } from './supabase';
 import { recordAuditEvent } from './auditService';
+import { logger } from './logger';
 
 /* ── Types ──────────────────────────────────────────────────── */
 
@@ -299,3 +300,173 @@ export async function applyImpactRecommendation(assessmentId: string, companyId?
   return true;
 }
 
+/* ── GRC Control Flagging ────────────────────────────────── */
+
+export type ControlFlag = {
+  id: string;
+  alertId: string;
+  controlId: string;
+  controlCode: string;
+  controlTitle: string;
+  frameworkName: string;
+  severity: 'info' | 'warning' | 'critical';
+  reason: string;
+  status: 'flagged' | 'reviewed' | 'resolved';
+  createdAt: string;
+};
+
+// Words too common to be useful discriminators
+const STOP_WORDS = new Set([
+  'the','a','an','and','or','for','of','in','on','at','to','is','are','has','have',
+  'with','that','this','from','by','its','which','any','been','will','new','all',
+  'more','also','may','when','was','were','their','they','about','into','than',
+  'such','each','been','would','could','should','must','shall','upon',
+]);
+
+function extractKeywords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[\s,;:.()[\]!"'?!\\/\-]+/)
+    .filter(w => w.length > 3 && !STOP_WORDS.has(w));
+}
+
+// Maps alert source label → jurisdiction strings we look for in control metadata
+const SOURCE_TO_JURISDICTIONS: Record<string, string[]> = {
+  FDA:             ['usa', 'united states', 'federal', 'fda', 'us'],
+  EMA:             ['europe', 'european', 'ema', 'eu'],
+  MHRA:            ['united kingdom', 'mhra', 'uk', 'british'],
+  TGA:             ['australia', 'tga', 'australian'],
+  NAFDAC:          ['nigeria', 'nafdac', 'nigerian', 'ng'],
+  'Health Canada': ['canada', 'canadian', 'health canada', 'ca'],
+};
+
+function mapFlag(row: any): ControlFlag {
+  return {
+    id: row.id,
+    alertId: row.alert_id,
+    controlId: row.control_id,
+    controlCode: row.control_code ?? '',
+    controlTitle: row.control_title ?? '',
+    frameworkName: row.framework_name ?? '',
+    severity: row.severity,
+    reason: row.reason ?? '',
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Keyword-match alert text against all active framework controls,
+ * then upsert flag rows into regulatory_update_control_flags.
+ * Returns the persisted flags (including any previously created ones).
+ */
+export async function flagAffectedControls(
+  alertId: string,
+  alert: RegulatoryAlert,
+  companyId: string,
+  userId?: string,
+): Promise<ControlFlag[]> {
+  const { data: controls, error } = await (supabase as any)
+    .from('framework_controls')
+    .select('id, control_code, title, description, category, jurisdiction, severity, framework_id, regulatory_frameworks(short_name, name)')
+    .eq('is_active', true);
+
+  if (error || !controls?.length) {
+    logger.error('flagAffectedControls: controls fetch failed', error);
+    return [];
+  }
+
+  const keywords = extractKeywords(`${alert.title} ${alert.body}`);
+  const sourceJurisdictions = SOURCE_TO_JURISDICTIONS[alert.source] ?? [];
+
+  const flagRows: object[] = [];
+
+  for (const ctrl of controls) {
+    const haystack = `${ctrl.control_code ?? ''} ${ctrl.title ?? ''} ${ctrl.description ?? ''} ${ctrl.category ?? ''} ${ctrl.jurisdiction ?? ''}`.toLowerCase();
+
+    const matchedKw: string[] = [];
+    for (const kw of keywords) {
+      if (haystack.includes(kw)) matchedKw.push(kw);
+    }
+    const jurisdictionMatch = sourceJurisdictions.some(j => haystack.includes(j));
+
+    if (matchedKw.length >= 2 || (matchedKw.length >= 1 && jurisdictionMatch)) {
+      const reasons: string[] = [];
+      if (matchedKw.length > 0) reasons.push(`Matched: ${matchedKw.slice(0, 4).join(', ')}`);
+      if (jurisdictionMatch) reasons.push(`Jurisdiction: ${alert.source}`);
+      flagRows.push({
+        company_id: companyId,
+        alert_id: alertId,
+        control_id: ctrl.id,
+        control_code: ctrl.control_code,
+        control_title: ctrl.title,
+        framework_id: ctrl.framework_id ?? null,
+        framework_name: ctrl.regulatory_frameworks?.short_name ?? ctrl.regulatory_frameworks?.name ?? null,
+        severity: alert.severity,
+        reason: reasons.join(' · '),
+        status: 'flagged',
+      });
+    }
+  }
+
+  if (!flagRows.length) return [];
+
+  const { data: inserted, error: upsertErr } = await (supabase as any)
+    .from('regulatory_update_control_flags')
+    .upsert(flagRows, { onConflict: 'company_id,alert_id,control_id', ignoreDuplicates: false })
+    .select();
+
+  if (upsertErr) {
+    logger.error('flagAffectedControls: upsert failed', upsertErr);
+    return [];
+  }
+
+  if (userId) {
+    try {
+      await recordAuditEvent({
+        companyId,
+        userId,
+        action: 'horizon.controls_flagged',
+        entityType: 'regulatory_update',
+        entityId: alertId,
+        metadata: { count: flagRows.length, alertTitle: alert.title },
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+
+  return (inserted ?? []).map(mapFlag);
+}
+
+export async function getControlFlags(alertId: string, companyId: string): Promise<ControlFlag[]> {
+  const { data, error } = await (supabase as any)
+    .from('regulatory_update_control_flags')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('alert_id', alertId)
+    .order('created_at', { ascending: false });
+
+  if (error) { logger.error('getControlFlags:', error); return []; }
+  return (data ?? []).map(mapFlag);
+}
+
+export async function resolveControlFlag(flagId: string, companyId: string, userId?: string): Promise<void> {
+  await (supabase as any)
+    .from('regulatory_update_control_flags')
+    .update({ status: 'resolved' })
+    .eq('id', flagId)
+    .eq('company_id', companyId);
+
+  if (userId) {
+    try {
+      await recordAuditEvent({
+        companyId,
+        userId,
+        action: 'horizon.control_flag_resolved',
+        entityType: 'regulatory_update_control_flag',
+        entityId: flagId,
+        captureEvidence: false,
+      });
+    } catch { /* audit never blocks */ }
+  }
+}
