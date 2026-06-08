@@ -74,6 +74,7 @@ export interface RegulatorySubmission {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  dossier_id: string | null;
 }
 
 export interface StatusLogEntry {
@@ -339,6 +340,20 @@ export async function listSubmissions(
   return data ?? [];
 }
 
+export async function getSubmissionsForDossier(
+  dossierId: string,
+  companyId: string
+): Promise<RegulatorySubmission[]> {
+  const { data, error } = await (await db() as any)
+    .from('regulatory_submissions')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('dossier_id', dossierId)
+    .order('created_at', { ascending: false });
+  if (error) { logger.error('getSubmissionsForDossier', error); return []; }
+  return data ?? [];
+}
+
 export async function createSubmission(
   companyId: string,
   payload: {
@@ -349,6 +364,7 @@ export async function createSubmission(
     napams_reference?: string;
     notes?: string;
     created_by: string;
+    dossier_id?: string;
   }
 ): Promise<RegulatorySubmission | null> {
   const checklist = getChecklist(payload.product_category, payload.submission_type);
@@ -358,7 +374,7 @@ export async function createSubmission(
   }
   const { data, error } = await (await db() as any)
     .from('regulatory_submissions')
-    .insert({ company_id: companyId, ...payload, document_checklist: checklistInit })
+    .insert({ company_id: companyId, ...payload, document_checklist: checklistInit, dossier_id: payload.dossier_id ?? null })
     .select('*')
     .single();
   if (error) { logger.error('createSubmission', error); return null; }

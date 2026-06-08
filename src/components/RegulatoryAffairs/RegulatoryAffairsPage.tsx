@@ -12,6 +12,7 @@ import {
   getLicenceStatus, LICENCE_STATUS_COLORS,
   getLabellingRequirements,
 } from '../../lib/regulatoryAffairsService';
+import { getDossiers, type CTDDossier } from '../../lib/ctdDossierService';
 import NewSubmissionModal from './NewSubmissionModal';
 import SubmissionDetailModal from './SubmissionDetailModal';
 import NewLicenceModal from './NewLicenceModal';
@@ -108,6 +109,7 @@ export default function RegulatoryAffairsPage() {
   const [tab, setTab] = useState<Tab>('applications');
   const [submissions, setSubmissions] = useState<RegulatorySubmission[]>([]);
   const [licences, setLicences] = useState<RegulatoryLicence[]>([]);
+  const [dossiers, setDossiers] = useState<CTDDossier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showNewSub, setShowNewSub] = useState(false);
@@ -118,9 +120,14 @@ export default function RegulatoryAffairsPage() {
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
-    const [subs, lics] = await Promise.all([listSubmissions(companyId), listLicences(companyId)]);
+    const [subs, lics, doss] = await Promise.all([
+      listSubmissions(companyId),
+      listLicences(companyId),
+      getDossiers(companyId),
+    ]);
     setSubmissions(subs);
     setLicences(lics);
+    setDossiers(doss);
     setLoading(false);
   }, [companyId]);
 
@@ -389,7 +396,8 @@ export default function RegulatoryAffairsPage() {
       {/* Modals */}
       {showNewSub && (
         <NewSubmissionModal companyId={companyId} userId={userId}
-          onClose={() => setShowNewSub(false)} onCreated={load} />
+          onClose={() => setShowNewSub(false)} onCreated={load}
+          dossiers={dossiers} />
       )}
       {showNewLic && (
         <NewLicenceModal companyId={companyId} userId={userId}
@@ -398,7 +406,8 @@ export default function RegulatoryAffairsPage() {
       {selectedSub && (
         <SubmissionDetailModal submission={selectedSub} companyId={companyId} userId={userId}
           onClose={() => setSelectedSub(null)}
-          onUpdated={() => { setSelectedSub(null); load(); }} />
+          onUpdated={() => { setSelectedSub(null); load(); }}
+          dossiers={dossiers} />
       )}
     </div>
   );

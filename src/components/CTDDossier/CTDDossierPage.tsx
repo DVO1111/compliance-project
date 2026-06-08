@@ -17,6 +17,8 @@ import {
     type CTDDossier, type CTDModuleProgress, type CTDDocument,
     type DossierStatus, type ModuleStatus, type DocumentStatus, type ApplicationType,
 } from '../../lib/ctdDossierService';
+import { getSubmissionsForDossier, STATUS_LABELS as SUB_STATUS_LABELS, STATUS_COLORS as SUB_STATUS_COLORS, type RegulatorySubmission } from '../../lib/regulatoryAffairsService';
+import NewSubmissionModal from '../RegulatoryAffairs/NewSubmissionModal';
 
 /* ── Constants ──────────────────────────────────────────────────────────────── */
 
@@ -95,10 +97,20 @@ export default function CTDDossierPage() {
     const [newStatus, setNewStatus] = useState<DossierStatus>('preparation');
     const [statusDate, setStatusDate] = useState('');
 
+    // NAPAMS submission linking
+    const [linkedSubmissions, setLinkedSubmissions] = useState<Record<string, RegulatorySubmission[]>>({});
+    const [napamsModalDossier, setNapamsModalDossier] = useState<CTDDossier | null>(null);
+
     const load = useCallback(async () => {
         if (!companyId) return;
         setLoading(true);
-        setDossiers(await getDossiers(companyId));
+        const doss = await getDossiers(companyId);
+        setDossiers(doss);
+        // Fetch linked submissions for all dossiers in parallel
+        const entries = await Promise.all(
+            doss.map(async d => [d.id, await getSubmissionsForDossier(d.id, companyId)] as [string, RegulatorySubmission[]])
+        );
+        setLinkedSubmissions(Object.fromEntries(entries));
         setLoading(false);
     }, [companyId]);
 
@@ -339,7 +351,30 @@ export default function CTDDossierPage() {
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 shrink-0">
+                                                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                                                    {/* NAPAMS submission status / create button */}
+                                                    {(() => {
+                                                        const subs = linkedSubmissions[dossier.id] ?? [];
+                                                        const latest = subs[0];
+                                                        const canCreate = ['screening_cleared', 'under_review', 'approved'].includes(dossier.status);
+                                                        if (latest) {
+                                                            const colorClass = SUB_STATUS_COLORS[latest.current_status] ?? 'text-gray-600 bg-gray-100';
+                                                            return (
+                                                                <span className={`text-[10px] px-2 py-1 rounded-full font-semibold ${colorClass}`}>
+                                                                    NAPAMS: {SUB_STATUS_LABELS[latest.current_status]}
+                                                                </span>
+                                                            );
+                                                        }
+                                                        if (canCreate) {
+                                                            return (
+                                                                <button onClick={() => setNapamsModalDossier(dossier)}
+                                                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
+                                                                    <Plus className="w-3 h-3" />NAPAMS Application
+                                                                </button>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                     <button
                                                         onClick={() => { setSelectedDossierId(dossier.id); setTab('tracker'); }}
                                                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-border)] dash-text-secondary hover:dash-text transition">
@@ -612,6 +647,18 @@ export default function CTDDossierPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* ── NAPAMS Application Modal (linked from dossier) ─────────────────── */}
+            {napamsModalDossier && companyId && user && (
+                <NewSubmissionModal
+                    companyId={companyId}
+                    userId={user.id}
+                    onClose={() => setNapamsModalDossier(null)}
+                    onCreated={() => { setNapamsModalDossier(null); load(); }}
+                    dossiers={dossiers}
+                    preselectedDossierId={napamsModalDossier.id}
+                />
             )}
 
             {/* ── Status Update Modal ────────────────────────────────────────────── */}

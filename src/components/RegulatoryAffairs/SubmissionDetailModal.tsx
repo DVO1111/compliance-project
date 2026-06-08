@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, CheckCircle2, Circle, ChevronDown, ChevronRight, FileText, AlertCircle } from 'lucide-react';
+import { X, CheckCircle2, Circle, ChevronDown, ChevronRight, FileText, AlertCircle, FileStack } from 'lucide-react';
 import {
   RegulatorySubmission, StatusLogEntry, ChecklistItem,
   SubmissionStatus, STATUS_LABELS, STATUS_COLORS, STATUS_TIMELINE,
@@ -7,6 +7,7 @@ import {
   getChecklist, getStatusLog, updateSubmissionStatus, updateDocumentCheck,
   createLicenceFromApproval,
 } from '../../lib/regulatoryAffairsService';
+import { getDossiers, calcReadinessScore, getModuleProgress, DOSSIER_STATUS_LABELS, type CTDDossier, type CTDModuleProgress } from '../../lib/ctdDossierService';
 
 interface Props {
   submission: RegulatorySubmission;
@@ -14,6 +15,7 @@ interface Props {
   userId: string;
   onClose: () => void;
   onUpdated: () => void;
+  dossiers?: CTDDossier[];
 }
 
 const NEXT_STATUSES: Partial<Record<SubmissionStatus, SubmissionStatus[]>> = {
@@ -27,9 +29,18 @@ const NEXT_STATUSES: Partial<Record<SubmissionStatus, SubmissionStatus[]>> = {
   compliance_directive: ['submitted', 'withdrawn'],
 };
 
-export default function SubmissionDetailModal({ submission, companyId, userId, onClose, onUpdated }: Props) {
+export default function SubmissionDetailModal({ submission, companyId, userId, onClose, onUpdated, dossiers = [] }: Props) {
   const [log, setLog] = useState<StatusLogEntry[]>([]);
   const [docsExpanded, setDocsExpanded] = useState(true);
+  const [dossierModules, setDossierModules] = useState<CTDModuleProgress[]>([]);
+
+  const linkedDossier = submission.dossier_id ? dossiers.find(d => d.id === submission.dossier_id) ?? null : null;
+
+  useEffect(() => {
+    if (submission.dossier_id) {
+      getModuleProgress(submission.dossier_id).then(setDossierModules);
+    }
+  }, [submission.dossier_id]);
   const [statusNote, setStatusNote] = useState('');
   const [newStatus, setNewStatus] = useState<SubmissionStatus | ''>('');
   const [napamsRef, setNapamsRef] = useState(submission.napams_reference ?? '');
@@ -116,6 +127,39 @@ export default function SubmissionDetailModal({ submission, companyId, userId, o
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+          {/* Linked CTD Dossier panel */}
+          {linkedDossier && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FileStack className="w-4 h-4 text-blue-600 shrink-0" />
+                <p className="text-sm font-semibold text-blue-800">Linked CTD Dossier</p>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-blue-900 font-medium">{linkedDossier.product_name}{linkedDossier.strength ? ` ${linkedDossier.strength}` : ''}</p>
+                  <p className="text-xs text-blue-600 mt-0.5">{linkedDossier.dosage_form}{linkedDossier.active_ingredient ? ` · ${linkedDossier.active_ingredient}` : ''} · Status: {DOSSIER_STATUS_LABELS[linkedDossier.status]}</p>
+                </div>
+                {dossierModules.length > 0 && (() => {
+                  const score = calcReadinessScore(dossierModules);
+                  const color = score >= 80 ? '#16a34a' : score >= 50 ? '#d97706' : '#dc2626';
+                  return (
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#dbeafe" strokeWidth="3.5" />
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke={color} strokeWidth="3.5"
+                            strokeDasharray={`${score} ${100 - score}`} strokeLinecap="round" />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color }}>{score}%</span>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-0.5">Readiness</p>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
 
           {/* Status Timeline */}
           <div>
