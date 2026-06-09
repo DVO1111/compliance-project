@@ -16,6 +16,7 @@ import StepRegulatoryFocus from './StepRegulatoryFocus';
 import StepRoleAssignment from './StepRoleAssignment';
 import StepLegalPartnerDetails from './StepLegalPartnerDetails';
 import { createPartnerProfile } from '../../lib/legalMarketplaceService';
+import { seedObligationsFromIndustry } from '../../lib/governance/obligationTemplates';
 import { logger } from '../../lib/logger';
 
 export interface OnboardingData {
@@ -164,6 +165,11 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
           hourly_rate: data.hourlyRate,
           bio: data.bio,
         });
+      }
+
+      // 3. Seed industry-specific obligation templates
+      if (profile?.company_id && data.industryType) {
+        await seedObligationsFromIndustry(profile.company_id, data.industryType);
       }
 
       onComplete();
