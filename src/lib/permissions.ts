@@ -435,6 +435,30 @@ function canonicalRole(role: string): string {
   return r;
 }
 
+/** Permission keys suppressed for Logistics & Courier companies (pharma/content-marketing features) */
+const LOGISTICS_SUPPRESSED: (keyof Permissions)[] = [
+  'canViewPharmaIntegrations',
+  'canViewClaimExtraction',
+  'canViewAgencyPortal',
+  'canViewChannelRules',
+  'canViewTranslationCompliance',
+  'canViewProgrammaticAd',
+  'canViewSocialListening',
+  'canViewWebsiteMonitoring',
+  'canViewContentBlocks',
+];
+
+function applyIndustrySuppression(perms: Permissions, industryType?: string | null): Permissions {
+  if (!industryType) return perms;
+  const industry = industryType.trim().toLowerCase();
+  if (industry === 'logistics & courier') {
+    const suppressed = { ...perms };
+    for (const key of LOGISTICS_SUPPRESSED) suppressed[key] = false as never;
+    return suppressed;
+  }
+  return perms;
+}
+
 /**
  * Resolve permissions for a user.
  *
@@ -443,23 +467,29 @@ function canonicalRole(role: string): string {
  *   2. `customPermissions` (from custom_roles JSONB) — if a custom role is assigned
  *   3. Legacy `profileRole` string → SYSTEM_ROLE_DEFAULTS lookup
  *   4. All-false fallback
+ *
+ * After role resolution, `industryType` applies a suppression overlay that
+ * hides sector-irrelevant modules (e.g. pharma/content modules for logistics companies).
  */
 export function getPermissions(opts?: {
   profileRole?: string | null;
   customPermissions?: Partial<Permissions> | null;
   moduleAccess?: string[] | null;
+  industryType?: string | null;
 }): Permissions {
+  let base: Permissions;
+
   // Path 1: module-level access assigned at invite time
   if (opts?.moduleAccess && opts.moduleAccess.length > 0) {
-    return moduleAccessToPermissions(opts.moduleAccess);
+    base = moduleAccessToPermissions(opts.moduleAccess);
+  } else if (opts?.customPermissions) {
+    // Path 2: custom role permissions override legacy role
+    base = { ...EMPTY_PERMISSIONS, ...opts.customPermissions };
+  } else {
+    // Path 3: legacy role string
+    const canon = canonicalRole(opts?.profileRole ?? '');
+    base = SYSTEM_ROLE_DEFAULTS[canon] ?? { ...EMPTY_PERMISSIONS };
   }
 
-  // Path 2: custom role permissions override legacy role
-  if (opts?.customPermissions) {
-    return { ...EMPTY_PERMISSIONS, ...opts.customPermissions };
-  }
-
-  // Path 3: legacy role string
-  const canon = canonicalRole(opts?.profileRole ?? '');
-  return SYSTEM_ROLE_DEFAULTS[canon] ?? { ...EMPTY_PERMISSIONS };
+  return applyIndustrySuppression(base, opts?.industryType);
 }

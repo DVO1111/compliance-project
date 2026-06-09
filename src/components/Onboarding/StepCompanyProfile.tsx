@@ -10,6 +10,10 @@ const INDUSTRY_OPTIONS = [
   'Healthcare Services',
   'Contract Research Organization',
   'Advertising & Marketing Agency',
+  'Logistics & Courier',
+  'Financial Services',
+  'Food & Beverage',
+  'Other',
 ];
 
 interface StepCompanyProfileProps {

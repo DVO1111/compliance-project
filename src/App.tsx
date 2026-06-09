@@ -390,10 +390,13 @@ function AppContent() {
     );
   }
 
+  const industryType = (profile as any)?.industry_type as string | null | undefined;
+  const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
   const perms = getPermissions({
     profileRole: profile?.role,
     customPermissions: (profile as any)?.customPermissions,
     moduleAccess: (profile as any)?.module_access,
+    industryType,
   });
 
   if (profile && !profile.company_id) {
@@ -739,7 +742,7 @@ function AppContent() {
         return perms.canViewEcosystem ? <EcosystemHubPage /> : <AccessDenied />;
 
       case 'batch-release':
-        return <BatchReleasePage />;
+        return !isLogisticsProfile ? <BatchReleasePage /> : <AccessDenied />;
 
       case 'change-control':
         return <ChangeControlPage />;
@@ -748,10 +751,12 @@ function AppContent() {
         return <SopLibraryPage />;
 
       case 'supplier-qualification':
-        return <ComingSoonPage title="Supplier Qualification" description="Manage and qualify raw material suppliers and CMOs against GMP/HACCP requirements." />;
+        return !isLogisticsProfile
+          ? <ComingSoonPage title="Supplier Qualification" description="Manage and qualify raw material suppliers and CMOs against GMP/HACCP requirements." />
+          : <AccessDenied />;
 
       case 'gmp-inspection':
-        return <GmpInspectionPage />;
+        return !isLogisticsProfile ? <GmpInspectionPage /> : <AccessDenied />;
 
       case 'ai-insights':
         return <AIInsightsPage />;
@@ -763,13 +768,13 @@ function AppContent() {
         return <ControlHealthDashboard />;
 
       case 'regulatory-affairs':
-        return <RegulatoryAffairsPage />;
+        return !isLogisticsProfile ? <RegulatoryAffairsPage /> : <AccessDenied />;
 
       case 'son-compliance':
         return <SONCompliancePage />;
 
       case 'ctd-dossier':
-        return <CTDDossierPage />;
+        return !isLogisticsProfile ? <CTDDossierPage /> : <AccessDenied />;
 
       default:
         return <DashboardPage />;

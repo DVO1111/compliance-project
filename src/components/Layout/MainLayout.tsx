@@ -180,10 +180,13 @@ export default function MainLayout({
   const [toastParams, setToastParams] = useState<{ message: string; type?: 'success' | 'warning' } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const industryType = (profile as any)?.industry_type as string | null | undefined;
+  const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
   const perms = getPermissions({
     profileRole: profile?.role,
     customPermissions: (profile as any)?.customPermissions,
     moduleAccess: (profile as any)?.module_access,
+    industryType,
   });
 
   // ✅ Listen for programmatic navigation events
@@ -230,12 +233,12 @@ export default function MainLayout({
       { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, category: 'Overview' },
 
       // ── 2. Manufacturing & Quality ───────────────────────────────────
-      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Manufacturing & Quality' },
+      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
       { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Manufacturing & Quality', hidden: !perms.canViewCapaManagement },
       { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Manufacturing & Quality' },
       { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality' },
-      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality' },
-      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality' },
+      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
+      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
 
       // ── 3. Governance & Policy ───────────────────────────────────────
       { id: 'policies', label: 'Policies', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewPolicies },
@@ -261,9 +264,9 @@ export default function MainLayout({
       // ── 5. Regulatory Intelligence ───────────────────────────────────
       { id: 'framework-library', label: 'Framework Library', icon: Layers, category: 'Regulatory Intelligence' },
       { id: 'control-monitoring', label: 'Control Health', icon: ClipboardCheck, category: 'Regulatory Intelligence' },
-      { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch,  category: 'Regulatory Intelligence' },
-      { id: 'son-compliance',     label: 'SON Compliance',     icon: Award,       category: 'Regulatory Intelligence' },
-      { id: 'ctd-dossier',        label: 'CTD Dossier Tracker', icon: FileStack,  category: 'Regulatory Intelligence' },
+      { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch,  category: 'Regulatory Intelligence', hidden: isLogisticsProfile },
+      { id: 'son-compliance',     label: 'SON Compliance',     icon: Award,       category: 'Regulatory Intelligence', hidden: isLogisticsProfile },
+      { id: 'ctd-dossier',        label: 'CTD Dossier Tracker', icon: FileStack,  category: 'Regulatory Intelligence', hidden: isLogisticsProfile },
       { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory Intelligence' },
       { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory Intelligence', hidden: !perms.canViewRegulatoryLibrary },
       { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewHorizonScanning },
