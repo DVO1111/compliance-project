@@ -160,6 +160,20 @@ export default function ComplianceReportingPage() {
     if (!report) return null;
 
     const { batch, changeControl, sop, capa, grc, content } = report;
+
+    const totalChangeControl = changeControl.draft + changeControl.pendingApproval + changeControl.approved + changeControl.implementing + changeControl.closed + changeControl.rejected;
+    const hasSopData = sop.effective + sop.inReview + sop.draft + sop.overdueReview > 0;
+
+    // Only show domain cards for modules this company actually uses
+    const visibleDomains = report.domainScores.filter(d => {
+        if (d.domain === 'Batch Release')     return batch.total > 0;
+        if (d.domain === 'Change Control')    return totalChangeControl > 0;
+        if (d.domain === 'Document Control')  return hasSopData;
+        if (d.domain === 'CAPA & Deviations') return capa.total > 0;
+        if (d.domain === 'Content Review')    return content.total > 0;
+        return true; // GRC Controls and any custom domains always shown
+    });
+
     const grade =
         report.overallScore >= 90 ? 'A' :
         report.overallScore >= 75 ? 'B' :
@@ -223,114 +237,117 @@ export default function ComplianceReportingPage() {
             <div>
                 <SectionHeading icon={TrendingUp} title="Compliance by Domain" sub="Score 0–100 per module; issues requiring attention listed below each score" />
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {report.domainScores.map(d => <DomainCard key={d.domain} d={d} />)}
+                    {visibleDomains.length > 0
+                        ? visibleDomains.map(d => <DomainCard key={d.domain} d={d} />)
+                        : <p className="text-sm dash-text-tertiary col-span-full text-center py-4">No module data yet — start using modules to see domain scores.</p>
+                    }
                 </div>
             </div>
 
-            {/* ── Manufacturing & Quality ──────────────────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                {/* Batch Release */}
-                <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
-                    <SectionHeading icon={FlaskConical} title="Batch Release" sub="Production batch QC and release status" />
-                    <div className="space-y-1">
-                        <Pill label="Released" value={batch.released} color="text-[var(--color-success)]" />
-                        <Pill label="QC In Progress" value={batch.qcInProgress} color="text-[var(--color-info)]" />
-                        <Pill label="QC Pending" value={batch.qcPending} color="text-[var(--color-warning)]" />
-                        <Pill label="On Hold" value={batch.onHold} color="text-[var(--color-danger)]" />
-                        <Pill label="Rejected" value={batch.rejected} color="text-[var(--color-danger)]" />
-                    </div>
+            {/* ── Manufacturing & Quality — only shown when this company has batch or change data ── */}
+            {(batch.total > 0 || totalChangeControl > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {batch.total > 0 && (
-                        <div className="mt-4 pt-4 border-t dash-border grid grid-cols-2 gap-3 text-center">
-                            <div>
-                                <p className="text-xs dash-text-tertiary uppercase tracking-widest">Release Rate</p>
-                                <p className={`text-xl font-bold mt-0.5 ${scoreColor(batch.releaseRate)}`}>{batch.releaseRate}%</p>
+                        <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
+                            <SectionHeading icon={FlaskConical} title="Batch Release" sub="Production batch QC and release status" />
+                            <div className="space-y-1">
+                                <Pill label="Released" value={batch.released} color="text-[var(--color-success)]" />
+                                <Pill label="QC In Progress" value={batch.qcInProgress} color="text-[var(--color-info)]" />
+                                <Pill label="QC Pending" value={batch.qcPending} color="text-[var(--color-warning)]" />
+                                <Pill label="On Hold" value={batch.onHold} color="text-[var(--color-danger)]" />
+                                <Pill label="Rejected" value={batch.rejected} color="text-[var(--color-danger)]" />
                             </div>
-                            <div>
-                                <p className="text-xs dash-text-tertiary uppercase tracking-widest">Hold Rate</p>
-                                <p className={`text-xl font-bold mt-0.5 ${batch.holdRate > 10 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>{batch.holdRate}%</p>
+                            <div className="mt-4 pt-4 border-t dash-border grid grid-cols-2 gap-3 text-center">
+                                <div>
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Release Rate</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${scoreColor(batch.releaseRate)}`}>{batch.releaseRate}%</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Hold Rate</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${batch.holdRate > 10 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>{batch.holdRate}%</p>
+                                </div>
                             </div>
                         </div>
                     )}
-                </div>
-
-                {/* Change Control */}
-                <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
-                    <SectionHeading icon={GitMerge} title="Change Control" sub="Formal change approval workflow status" />
-                    <div className="space-y-1">
-                        <Pill label="Draft" value={changeControl.draft} color="dash-text-secondary" />
-                        <Pill label="Pending Approval" value={changeControl.pendingApproval} color="text-[var(--color-warning)]" />
-                        <Pill label="Approved" value={changeControl.approved} color="text-[var(--color-info)]" />
-                        <Pill label="Implementing" value={changeControl.implementing} color="text-[var(--color-accent)]" />
-                        <Pill label="Closed" value={changeControl.closed} color="text-[var(--color-success)]" />
-                        <Pill label="Rejected" value={changeControl.rejected} color="text-[var(--color-danger)]" />
-                    </div>
-                    {changeControl.avgDaysOpen > 0 && (
-                        <div className="mt-4 pt-4 border-t dash-border text-center">
-                            <p className="text-xs dash-text-tertiary uppercase tracking-widest">Avg Days to Close</p>
-                            <p className={`text-xl font-bold mt-0.5 ${changeControl.avgDaysOpen > 30 ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}>
-                                {changeControl.avgDaysOpen}d
-                            </p>
+                    {totalChangeControl > 0 && (
+                        <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
+                            <SectionHeading icon={GitMerge} title="Change Control" sub="Formal change approval workflow status" />
+                            <div className="space-y-1">
+                                <Pill label="Draft" value={changeControl.draft} color="dash-text-secondary" />
+                                <Pill label="Pending Approval" value={changeControl.pendingApproval} color="text-[var(--color-warning)]" />
+                                <Pill label="Approved" value={changeControl.approved} color="text-[var(--color-info)]" />
+                                <Pill label="Implementing" value={changeControl.implementing} color="text-[var(--color-accent)]" />
+                                <Pill label="Closed" value={changeControl.closed} color="text-[var(--color-success)]" />
+                                <Pill label="Rejected" value={changeControl.rejected} color="text-[var(--color-danger)]" />
+                            </div>
+                            {changeControl.avgDaysOpen > 0 && (
+                                <div className="mt-4 pt-4 border-t dash-border text-center">
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Avg Days to Close</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${changeControl.avgDaysOpen > 30 ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}>
+                                        {changeControl.avgDaysOpen}d
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
-            </div>
+            )}
 
-            {/* ── Document Control & CAPA ──────────────────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                {/* SOP Library */}
-                <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
-                    <SectionHeading icon={BookMarked} title="Document Control (SOPs)" sub="SOP lifecycle and review currency" />
-                    <div className="space-y-1">
-                        <Pill label="Effective" value={sop.effective} color="text-[var(--color-success)]" />
-                        <Pill label="In Review" value={sop.inReview} color="text-[var(--color-info)]" />
-                        <Pill label="Draft" value={sop.draft} color="dash-text-secondary" />
-                    </div>
-                    <div className="mt-4 pt-4 border-t dash-border grid grid-cols-2 gap-3 text-center">
-                        <div>
-                            <p className="text-xs dash-text-tertiary uppercase tracking-widest">Overdue Review</p>
-                            <p className={`text-xl font-bold mt-0.5 ${sop.overdueReview > 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>
-                                {sop.overdueReview}
-                            </p>
+            {/* ── Document Control & CAPA — only shown when data exists ────── */}
+            {(hasSopData || capa.total > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {hasSopData && (
+                        <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
+                            <SectionHeading icon={BookMarked} title="Document Control (SOPs)" sub="SOP lifecycle and review currency" />
+                            <div className="space-y-1">
+                                <Pill label="Effective" value={sop.effective} color="text-[var(--color-success)]" />
+                                <Pill label="In Review" value={sop.inReview} color="text-[var(--color-info)]" />
+                                <Pill label="Draft" value={sop.draft} color="dash-text-secondary" />
+                            </div>
+                            <div className="mt-4 pt-4 border-t dash-border grid grid-cols-2 gap-3 text-center">
+                                <div>
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Overdue Review</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${sop.overdueReview > 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>
+                                        {sop.overdueReview}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Due in 30 Days</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${sop.expiringIn30 > 0 ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}>
+                                        {sop.expiringIn30}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-xs dash-text-tertiary uppercase tracking-widest">Due in 30 Days</p>
-                            <p className={`text-xl font-bold mt-0.5 ${sop.expiringIn30 > 0 ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}>
-                                {sop.expiringIn30}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* CAPA */}
-                <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
-                    <SectionHeading icon={AlertTriangle} title="CAPA & Deviations" sub="Corrective and preventive action tracking" />
-                    <div className="space-y-1">
-                        <Pill label="Open" value={capa.open} color="text-[var(--color-warning)]" />
-                        <Pill label="Under Investigation" value={capa.investigating} color="text-[var(--color-info)]" />
-                        <Pill label="In Progress" value={capa.inProgress} color="text-[var(--color-accent)]" />
-                        <Pill label="Overdue" value={capa.overdue} color="text-[var(--color-danger)]" />
-                        <Pill label="Closed" value={capa.closed} color="text-[var(--color-success)]" />
-                    </div>
+                    )}
                     {capa.total > 0 && (
-                        <div className="mt-4 pt-4 border-t dash-border grid grid-cols-2 gap-3 text-center">
-                            <div>
-                                <p className="text-xs dash-text-tertiary uppercase tracking-widest">Overdue Rate</p>
-                                <p className={`text-xl font-bold mt-0.5 ${capa.overdueRate > 10 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>
-                                    {capa.overdueRate}%
-                                </p>
+                        <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
+                            <SectionHeading icon={AlertTriangle} title="CAPA & Deviations" sub="Corrective and preventive action tracking" />
+                            <div className="space-y-1">
+                                <Pill label="Open" value={capa.open} color="text-[var(--color-warning)]" />
+                                <Pill label="Under Investigation" value={capa.investigating} color="text-[var(--color-info)]" />
+                                <Pill label="In Progress" value={capa.inProgress} color="text-[var(--color-accent)]" />
+                                <Pill label="Overdue" value={capa.overdue} color="text-[var(--color-danger)]" />
+                                <Pill label="Closed" value={capa.closed} color="text-[var(--color-success)]" />
                             </div>
-                            <div>
-                                <p className="text-xs dash-text-tertiary uppercase tracking-widest">Avg Days to Close</p>
-                                <p className={`text-xl font-bold mt-0.5 ${capa.avgDaysToClose > 30 ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}>
-                                    {capa.avgDaysToClose > 0 ? `${capa.avgDaysToClose}d` : '—'}
-                                </p>
+                            <div className="mt-4 pt-4 border-t dash-border grid grid-cols-2 gap-3 text-center">
+                                <div>
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Overdue Rate</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${capa.overdueRate > 10 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}`}>
+                                        {capa.overdueRate}%
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs dash-text-tertiary uppercase tracking-widest">Avg Days to Close</p>
+                                    <p className={`text-xl font-bold mt-0.5 ${capa.avgDaysToClose > 30 ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}>
+                                        {capa.avgDaysToClose > 0 ? `${capa.avgDaysToClose}d` : '—'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     )}
                 </div>
-            </div>
+            )}
 
             {/* ── GRC + Content ────────────────────────────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -391,12 +408,12 @@ export default function ComplianceReportingPage() {
             </div>
 
             {/* ── Issues summary ───────────────────────────────────────────── */}
-            {report.domainScores.some(d => d.issues.length > 0) && (
+            {visibleDomains.some(d => d.issues.length > 0) && (
                 <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
                     <SectionHeading icon={XCircle} title="Issues Requiring Attention"
                         sub="All open compliance issues across domains" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
-                        {report.domainScores.flatMap(d =>
+                        {visibleDomains.flatMap(d =>
                             d.issues.map((iss, i) => (
                                 <div key={`${d.domain}-${i}`} className="flex items-start gap-2 py-2 border-b dash-border last:border-0">
                                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${statusDot(d.status)}`} />

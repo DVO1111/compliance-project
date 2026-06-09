@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import {
     getAIInsights,
     type AIInsightsData,
@@ -9,8 +10,28 @@ import {
     Sparkles, AlertTriangle, AlertCircle, Info,
     RefreshCw, Brain, TrendingUp, FileWarning,
     ShieldAlert, ChevronRight, FlaskConical, BookMarked,
-    GitMerge, CheckCircle2, Lightbulb,
+    GitMerge, CheckCircle2, Lightbulb, Activity,
 } from 'lucide-react';
+
+const MODULE_NAMES: Record<string, string> = {
+    contraband_rejection: 'Contraband Rejection',
+    customer_flag:        'Customer Flagging',
+    risk:                 'Risk Register',
+    obligation:           'Obligations',
+    regulatory_obligation: 'Regulatory Obligations',
+    policy:               'Policy Management',
+    vendor:               'Vendor Management',
+    capa_record:          'CAPA Management',
+    content_submission:   'Content Review',
+    batch_record:         'Batch Release',
+    sop_document:         'Document Control',
+    framework_control:    'GRC Controls',
+};
+
+type UserActivityData = {
+    modules: { name: string; count: number }[];
+    recentActions: { entity_type: string; action: string; created_at: string }[];
+};
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -45,12 +66,14 @@ const DOMAIN_ICONS: Record<string, React.ElementType> = {
 /* ── Page ────────────────────────────────────────────────────────────────── */
 
 export default function AIInsightsPage() {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const companyId = (profile as any)?.company_id ?? '';
+    const userId = user?.id ?? '';
 
     const [data, setData] = useState<AIInsightsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [generatingNarrative, setGeneratingNarrative] = useState(false);
+    const [userActivity, setUserActivity] = useState<UserActivityData | null>(null);
 
     const load = useCallback(async (withNarrative = false) => {
         if (!companyId) return;
@@ -69,6 +92,37 @@ export default function AIInsightsPage() {
     };
 
     useEffect(() => { load(false); }, [load]);
+
+    /* ── User-specific activity ── */
+    useEffect(() => {
+        if (!companyId || !userId) return;
+        (supabase as any)
+            .from('audit_logs')
+            .select('action, entity_type, created_at')
+            .eq('company_id', companyId)
+            .eq('user_id', userId)
+            .gte('created_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+            .order('created_at', { ascending: false })
+            .limit(50)
+            .then(({ data: rows }: { data: any[] | null }) => {
+                if (!rows || rows.length === 0) {
+                    setUserActivity({ modules: [], recentActions: [] });
+                    return;
+                }
+                const counts: Record<string, number> = {};
+                for (const row of rows) {
+                    const name = MODULE_NAMES[row.entity_type] ?? row.entity_type.replace(/_/g, ' ');
+                    counts[name] = (counts[name] ?? 0) + 1;
+                }
+                setUserActivity({
+                    modules: Object.entries(counts)
+                        .map(([name, count]) => ({ name, count }))
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 5),
+                    recentActions: rows.slice(0, 8),
+                });
+            });
+    }, [companyId, userId]);
 
     if (loading) {
         return (
@@ -184,6 +238,51 @@ export default function AIInsightsPage() {
                     })}
                 </div>
             </div>
+
+            {/* ── Your Activity ──────────────────────────────────────────── */}
+            {userActivity && (
+                <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 rounded-xl bg-[var(--color-success-soft)]">
+                            <Activity size={16} className="text-[var(--color-success)]" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold dash-text">Your Activity</h3>
+                            <p className="text-xs dash-text-tertiary">Your module usage in the last 30 days</p>
+                        </div>
+                    </div>
+                    {userActivity.modules.length === 0 ? (
+                        <p className="text-sm dash-text-tertiary text-center py-4">
+                            No recorded activity yet — start using modules to build your history.
+                        </p>
+                    ) : (
+                        <>
+                            <div className="flex flex-wrap gap-2 mb-5">
+                                {userActivity.modules.map(m => (
+                                    <span key={m.name} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/20">
+                                        {m.name} <span className="opacity-50">·</span> {m.count}
+                                    </span>
+                                ))}
+                            </div>
+                            <div>
+                                {userActivity.recentActions.map((a, i) => (
+                                    <div key={i} className="flex items-center gap-3 py-2.5 border-b dash-border last:border-0">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] flex-shrink-0" />
+                                        <p className="text-sm dash-text flex-1">
+                                            <span className="font-medium capitalize">{a.action}</span>
+                                            {' '}
+                                            <span className="dash-text-secondary">{MODULE_NAMES[a.entity_type] ?? a.entity_type.replace(/_/g, ' ')}</span>
+                                        </p>
+                                        <span className="text-xs dash-text-tertiary flex-shrink-0">
+                                            {new Date(a.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
 
             {/* ── Pattern Analysis ─────────────────────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

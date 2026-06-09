@@ -98,6 +98,19 @@ type KpiCard = {
   variant?: "blue" | "green" | "red" | "yellow" | "purple";
 };
 
+type ModuleActivity = {
+  content: boolean;
+  risks: boolean;
+  obligations: boolean;
+  grc: boolean;
+  policies: boolean;
+  vendors: boolean;
+  capas: boolean;
+  licences: boolean;
+  contraband: boolean;
+  customerFlags: boolean;
+};
+
 /* ─────────────────────────── Helpers ─────────────────────────── */
 
 function formatHours(h: number | null) {
@@ -142,12 +155,10 @@ export default function DashboardPage({
 
   // Derived access flags for gating fetches and KPI cards
   // Content submission metrics are irrelevant for logistics companies
-  const canContent = !isLogisticsProfile && (perms.canUpload || perms.canViewLegalReview);
+  const canContent = perms.canUpload || perms.canViewLegalReview;
   const canGrc = perms.canViewGrcFrameworks;
   const canPolicies = perms.canViewPolicies;
   const canVendors = perms.canViewVendors;
-  // At least one "hero row" module is accessible
-  const hasHeroAccess = canContent || canGrc || canPolicies || canVendors;
 
   const { selectedJurisdiction } = useJurisdictionStore();
   const jurisdictionFilter = selectedJurisdiction === "all" ? null : (selectedJurisdiction ?? null);
@@ -162,6 +173,8 @@ export default function DashboardPage({
   const [exec, setExec] = useState<ExecMetrics | null>(null);
   const [moduleMetrics, setModuleMetrics] = useState<ModuleMetrics | null>(null);
   const [logisticsMetrics, setLogisticsMetrics] = useState<{ rejections_this_month: number; active_flags: number } | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [moduleActivity, setModuleActivity] = useState<ModuleActivity | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
@@ -174,10 +187,56 @@ export default function DashboardPage({
     return () => mainScroll.removeEventListener('scroll', handleScroll);
   }, []);
 
+  /* ── Module activity detection — which modules have any data ─────── */
+  useEffect(() => {
+    if (!companyId) { setActivityLoading(false); return; }
+    let cancelled = false;
+
+    type ActivityCheck = { key: keyof ModuleActivity; permission: boolean; table: string };
+    const checks: ActivityCheck[] = [
+      { key: 'content',       permission: canContent,                  table: 'content_submissions' },
+      { key: 'risks',         permission: canGrc,                      table: 'risks' },
+      { key: 'obligations',   permission: canGrc,                      table: 'regulatory_obligations' },
+      { key: 'grc',           permission: canGrc,                      table: 'framework_test_log' },
+      { key: 'policies',      permission: canPolicies,                 table: 'policies' },
+      { key: 'vendors',       permission: canVendors,                  table: 'vendors' },
+      { key: 'capas',         permission: canGrc,                      table: 'capa_records' },
+      { key: 'licences',      permission: perms.canViewLicenseVault,   table: 'regulatory_licences' },
+      { key: 'contraband',    permission: true,                        table: 'contraband_rejection_log' },
+      { key: 'customerFlags', permission: true,                        table: 'customer_flags' },
+    ];
+    const permitted = checks.filter(c => c.permission);
+
+    Promise.allSettled(
+      permitted.map(c =>
+        (supabase as any)
+          .from(c.table)
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', companyId)
+          .limit(1)
+      )
+    ).then(results => {
+      if (cancelled) return;
+      const activity: ModuleActivity = {
+        content: false, risks: false, obligations: false, grc: false,
+        policies: false, vendors: false, capas: false, licences: false,
+        contraband: false, customerFlags: false,
+      };
+      permitted.forEach((c, i) => {
+        const res = results[i];
+        activity[c.key] = res.status === 'fulfilled' && ((res.value as any).count ?? 0) > 0;
+      });
+      setModuleActivity(activity);
+      setActivityLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [companyId, canContent, canGrc, canPolicies, canVendors, perms.canViewLicenseVault]);
+
   /* ── Submission metrics (existing RPC) — gated behind content access ── */
   useEffect(() => {
     let cancelled = false;
-    if (!companyId || !canContent) { setExec(null); setLoading(false); return; }
+    if (!companyId || !canContent || !moduleActivity?.content) { setExec(null); setLoading(false); return; }
     setLoading(true);
 
     (async () => {
@@ -192,7 +251,7 @@ export default function DashboardPage({
     })();
 
     return () => { cancelled = true; };
-  }, [companyId, canContent]);
+  }, [companyId, canContent, moduleActivity]);
 
   /* ── Cross-module metrics — only fetch modules the user can access ── */
   useEffect(() => {
@@ -335,7 +394,7 @@ export default function DashboardPage({
 
   /* ── Logistics-specific metrics ─────────────────────────────── */
   useEffect(() => {
-    if (!isLogisticsProfile || !companyId) return;
+    if (!companyId || (!moduleActivity?.contraband && !moduleActivity?.customerFlags)) return;
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -354,7 +413,7 @@ export default function DashboardPage({
         active_flags: flagRes.status === 'fulfilled' ? ((flagRes.value as any).count ?? 0) : 0,
       });
     });
-  }, [companyId, isLogisticsProfile]);
+  }, [companyId, moduleActivity]);
 
   const isExecutive = role === "executive";
   const isLegal = role === "compliance" || role === "legal";
@@ -370,66 +429,77 @@ export default function DashboardPage({
     return `${Math.round((exec.rejection_rate || 0) * 100)}%`;
   }, [exec]);
 
-  /* ── KPI cards — fully permission-gated ──────────────────────── */
+  /* ── KPI cards — activity-driven: only shown when module has actual data ── */
   const kpiCards: KpiCard[] = useMemo(() => {
-    // Cross-module cards — only shown when the user has the relevant module access
-    const crossModule: KpiCard[] = [];
+    if (!moduleActivity) return [];
 
+    const cards: KpiCard[] = [];
+
+    // GRC module cards — only when the relevant table has records
     if (canGrc) {
-      crossModule.push({
-        title: "Open Risks",
-        value: moduleMetrics ? String(moduleMetrics.open_risks) : "…",
-        icon: ShieldAlert,
-        subtext: moduleMetrics?.critical_risks
-          ? `${moduleMetrics.critical_risks} critical/high`
-          : "No critical risks",
-        variant: moduleMetrics && moduleMetrics.critical_risks > 0 ? "red" : "purple",
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'risk-register' } })),
-      });
-      crossModule.push({
-        title: "Overdue Obligations",
-        value: moduleMetrics ? String(moduleMetrics.overdue_obligations) : "…",
-        icon: ClipboardList,
-        subtext: moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
-        variant: moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'obligations' } })),
-      });
-      crossModule.push({
-        title: "GRC Failing Controls",
-        value: moduleMetrics ? String(moduleMetrics.grc_failing_controls) : "…",
-        icon: Activity,
-        subtext: moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
-        variant: moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'control-monitoring' } })),
-      });
-      crossModule.push({
-        title: "Open CAPAs",
-        value: moduleMetrics ? String(moduleMetrics.capa_open) : "…",
-        icon: ClipboardCheck,
-        subtext: moduleMetrics
-          ? moduleMetrics.capa_overdue > 0
-            ? `${moduleMetrics.capa_overdue} overdue`
-            : "None overdue"
-          : undefined,
-        variant: moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'capa-management' } })),
-      });
-      crossModule.push({
-        title: "Licence Alerts",
-        value: moduleMetrics ? String(moduleMetrics.licences_expired + moduleMetrics.licences_expiring) : "…",
-        icon: Key,
-        subtext: moduleMetrics
-          ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
-          : undefined,
-        variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
-        // Logistics users can't access regulatory-affairs — redirect to licence vault instead
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: isLogisticsProfile ? 'license-vault' : 'regulatory-affairs' } })),
-      });
+      if (moduleActivity.risks) {
+        cards.push({
+          title: "Open Risks",
+          value: moduleMetrics ? String(moduleMetrics.open_risks) : "…",
+          icon: ShieldAlert,
+          subtext: moduleMetrics?.critical_risks
+            ? `${moduleMetrics.critical_risks} critical/high`
+            : "No critical risks",
+          variant: moduleMetrics && moduleMetrics.critical_risks > 0 ? "red" : "purple",
+          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'risk-register' } })),
+        });
+      }
+      if (moduleActivity.obligations) {
+        cards.push({
+          title: "Overdue Obligations",
+          value: moduleMetrics ? String(moduleMetrics.overdue_obligations) : "…",
+          icon: ClipboardList,
+          subtext: moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
+          variant: moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
+          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'obligations' } })),
+        });
+      }
+      if (moduleActivity.grc) {
+        cards.push({
+          title: "GRC Failing Controls",
+          value: moduleMetrics ? String(moduleMetrics.grc_failing_controls) : "…",
+          icon: Activity,
+          subtext: moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
+          variant: moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
+          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'control-monitoring' } })),
+        });
+      }
+      if (moduleActivity.capas) {
+        cards.push({
+          title: "Open CAPAs",
+          value: moduleMetrics ? String(moduleMetrics.capa_open) : "…",
+          icon: ClipboardCheck,
+          subtext: moduleMetrics
+            ? moduleMetrics.capa_overdue > 0
+              ? `${moduleMetrics.capa_overdue} overdue`
+              : "None overdue"
+            : undefined,
+          variant: moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
+          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'capa-management' } })),
+        });
+      }
+      if (moduleActivity.licences) {
+        cards.push({
+          title: "Licence Alerts",
+          value: moduleMetrics ? String(moduleMetrics.licences_expired + moduleMetrics.licences_expiring) : "…",
+          icon: Key,
+          subtext: moduleMetrics
+            ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
+            : undefined,
+          variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
+          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: isLogisticsProfile ? 'license-vault' : 'regulatory-affairs' } })),
+        });
+      }
     }
 
-    // Logistics-specific KPI cards
-    if (isLogisticsProfile) {
-      crossModule.push({
+    // Contraband / flagging — appears for any company that has used these modules
+    if (moduleActivity.contraband) {
+      cards.push({
         title: "Contraband Rejections",
         value: logisticsMetrics ? String(logisticsMetrics.rejections_this_month) : "…",
         icon: ShieldAlert,
@@ -437,7 +507,9 @@ export default function DashboardPage({
         variant: logisticsMetrics && logisticsMetrics.rejections_this_month > 0 ? "red" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
       });
-      crossModule.push({
+    }
+    if (moduleActivity.customerFlags) {
+      cards.push({
         title: "Flagged Senders",
         value: logisticsMetrics ? String(logisticsMetrics.active_flags) : "…",
         icon: Activity,
@@ -447,10 +519,9 @@ export default function DashboardPage({
       });
     }
 
-    // Content submission cards — only shown when user can upload or view legal review
-    const base: KpiCard[] = [];
-    if (canContent) {
-      base.push(
+    // Content submission cards — any company that has submissions in the system
+    if (canContent && moduleActivity.content) {
+      cards.push(
         {
           title: "Total Submissions",
           value: exec ? String(exec.total_submitted) : loading ? "…" : "0",
@@ -469,19 +540,14 @@ export default function DashboardPage({
           variant: "yellow",
         },
       );
-    }
-
-    if (isExecutive) {
-      return [
-        ...crossModule,
-        ...base,
-        ...(canContent ? [
+      if (isExecutive) {
+        cards.push(
           {
             title: "Approval Rate",
             value: approvalPct,
             icon: CheckCircle2,
             subtext: exec ? `${exec.approved} approved` : undefined,
-            variant: "green" as const,
+            variant: "green",
           },
           {
             title: "Avg Turnaround",
@@ -490,80 +556,85 @@ export default function DashboardPage({
             subtext: "submitted → decided",
             trendData: exec?.avg_turnaround_trend,
             trendValue: exec?.avg_turnaround_change,
-            variant: "purple" as const,
+            variant: "purple",
           },
-        ] : []),
-      ];
-    }
-
-    if (isLegal) {
-      return [
-        ...crossModule,
-        ...base,
-        ...(canContent ? [
+        );
+      }
+      if (isLegal) {
+        cards.push(
           {
             title: "Approved",
             value: exec ? String(exec.approved) : loading ? "…" : "0",
             icon: CheckCircle2,
             trendData: exec?.approved_trend,
             trendValue: exec?.approved_change,
-            variant: "green" as const,
+            variant: "green",
           },
           {
             title: "Turnaround",
             value: exec ? formatHours(exec.avg_turnaround_hours) : loading ? "…" : "—",
             icon: Timer,
-            variant: "blue" as const,
+            variant: "blue",
           },
-        ] : []),
-        ...(canPolicies ? [{
-          title: "Draft Policies",
-          value: moduleMetrics ? String(moduleMetrics.draft_policies) : "…",
-          icon: FileText,
-          subtext: "awaiting publication",
-          variant: (moduleMetrics && moduleMetrics.draft_policies > 0 ? "yellow" : "green") as "yellow" | "green",
-          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'policies' } })),
-        }] : []),
-      ];
+        );
+      }
+      if (isMarketing) {
+        cards.push(
+          {
+            title: "Ready to Publish",
+            value: exec ? String(exec.approved) : loading ? "…" : "0",
+            icon: CheckCircle2,
+            subtext: "Signed off / approved",
+            variant: "green",
+          },
+          {
+            title: "Needs Rework",
+            value: exec ? String(exec.rejected) : loading ? "…" : "0",
+            icon: XCircle,
+            subtext: "Rejected / changes",
+            variant: "red",
+          },
+        );
+      }
     }
 
-    // Marketing / fallback — gate each card individually
-    return [
-      ...crossModule,
-      ...base,
-      ...(canContent ? [
-        {
-          title: "Ready to Publish",
-          value: exec ? String(exec.approved) : loading ? "…" : "0",
-          icon: CheckCircle2,
-          subtext: "Signed off / approved",
-          variant: "green" as const,
-        },
-        {
-          title: "Needs Rework",
-          value: exec ? String(exec.rejected) : loading ? "…" : "0",
-          icon: XCircle,
-          subtext: "Rejected / changes",
-          variant: "red" as const,
-        },
-      ] : []),
-      ...(canVendors ? [{
+    // Policy card
+    if (canPolicies && moduleActivity.policies) {
+      cards.push({
+        title: "Draft Policies",
+        value: moduleMetrics ? String(moduleMetrics.draft_policies) : "…",
+        icon: FileText,
+        subtext: "awaiting publication",
+        variant: (moduleMetrics && moduleMetrics.draft_policies > 0 ? "yellow" : "green") as "yellow" | "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'policies' } })),
+      });
+    }
+
+    // Vendor card
+    if (canVendors && moduleActivity.vendors) {
+      cards.push({
         title: "Active Vendors",
         value: moduleMetrics ? String(moduleMetrics.active_vendors) : "…",
         icon: Building2,
-        variant: "purple" as const,
+        variant: "purple",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'vendors' } })),
-      }] : []),
-      ...(perms.canViewArchive ? [{
+      });
+    }
+
+    // Archive quick link
+    if (perms.canViewArchive && moduleActivity.content) {
+      cards.push({
         title: "Go to Archive",
         value: "→ View",
         icon: Upload,
         subtext: "Edit / submit / publish",
         onClick: onNavigateToArchive,
-        variant: "blue" as const,
-      }] : []),
-    ];
-  }, [exec, loading, moduleMetrics, logisticsMetrics, isLogisticsProfile, isExecutive, isLegal, isMarketing, approvalPct, rejectionPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive]);
+        variant: "blue",
+      });
+    }
+
+    return cards;
+  }, [moduleActivity, exec, loading, moduleMetrics, logisticsMetrics, isLogisticsProfile, isExecutive, isLegal, isMarketing, approvalPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive, perms.canViewLicenseVault]);
 
   /* ─────────────────────────── Render ─────────────────────────── */
   return (
@@ -595,19 +666,21 @@ export default function DashboardPage({
               Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}
             </h2>
             <p className="text-[11px] dash-text-secondary mt-0.5 font-medium">
-              {loading || pipeline.loading
+              {activityLoading
+                ? "Loading your workspace…"
+                : loading || pipeline.loading
                 ? "Refreshing your compliance dashboard…"
-                : isLogisticsProfile
-                ? moduleMetrics
-                  ? `${moduleMetrics.overdue_obligations} overdue obligations · ${moduleMetrics.open_risks} open risks · ${logisticsMetrics?.rejections_this_month ?? 0} contraband rejections this month.`
-                  : "Loading your logistics compliance metrics…"
-                : !exec
-                ? "Submit content to begin tracking progress."
-                : isExecutive
-                ? `Compliance at ${approvalPct}, ${formatHours(exec.avg_turnaround_hours)} avg turnaround.`
-                : isMarketing
-                ? `${pipeline.payload?.awaiting_legal?.length || 0} in review, ${pipeline.payload?.ready_to_publish?.length || 0} ready to publish.`
-                : `${exec.in_legal_queue} in review, ${approvalPct} compliance rate.`}
+                : !moduleActivity || !Object.values(moduleActivity).some(Boolean)
+                ? "Your workspace is ready — start using modules to see your dashboard."
+                : exec
+                ? isExecutive
+                  ? `Compliance at ${approvalPct}, ${formatHours(exec.avg_turnaround_hours)} avg turnaround.`
+                  : isMarketing
+                  ? `${pipeline.payload?.awaiting_legal?.length || 0} in review, ${pipeline.payload?.ready_to_publish?.length || 0} ready to publish.`
+                  : `${exec.in_legal_queue} in review, ${approvalPct} compliance rate.`
+                : moduleMetrics
+                ? `${moduleMetrics.overdue_obligations} overdue obligations · ${moduleMetrics.open_risks} open risks.`
+                : "Your compliance workspace is up to date."}
             </p>
           </div>
 
@@ -641,12 +714,21 @@ export default function DashboardPage({
         animate="visible"
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 max-w-[1600px] mx-auto items-stretch auto-rows-fr"
       >
-        {loading
+        {activityLoading
           ? Array.from({ length: 6 }).map((_, i) => (
             <motion.div key={`sk-${i}`} variants={fadeUp} className="h-full">
               <SkeletonMetric className="h-full" />
             </motion.div>
           ))
+          : kpiCards.length === 0
+          ? (
+            <motion.div variants={fadeUp} className="col-span-full">
+              <div className="dash-card border dash-border rounded-2xl p-8 text-center">
+                <p className="text-sm font-semibold dash-text mb-1">Your workspace is ready</p>
+                <p className="text-xs dash-text-secondary">Start using any module — compliance data will appear here automatically.</p>
+              </div>
+            </motion.div>
+          )
           : kpiCards.map((c, idx) => (
             <motion.div key={`${c.title}-${idx}`} variants={fadeUp} className="h-full">
               <MetricCard
@@ -674,7 +756,7 @@ export default function DashboardPage({
       {/* ── Hero Row: Needs Attention + Activity Feed ──────────── */}
       {/* Health score / compliance rates live in Compliance Report.  */}
       {/* Dashboard shows operational: what to act on, what just happened. */}
-      {companyId && hasHeroAccess && (
+      {companyId && moduleActivity && Object.values(moduleActivity).some(Boolean) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-[1600px] mx-auto">
           <NeedsAttentionWidget companyId={companyId} access={perms} />
           <ActivityFeedWidget companyId={companyId} limit={8} />
@@ -692,7 +774,7 @@ export default function DashboardPage({
         isExecutive={isExecutive}
         isLegal={isLegal}
         isMarketing={isMarketing}
-        isLogisticsProfile={isLogisticsProfile}
+        moduleActivity={moduleActivity}
         onNavigateToArchive={onNavigateToArchive}
       />
 
@@ -718,7 +800,7 @@ function WidgetArea({
   isExecutive,
   isLegal,
   isMarketing,
-  isLogisticsProfile,
+  moduleActivity,
   onNavigateToArchive,
 }: {
   role: string;
@@ -730,210 +812,83 @@ function WidgetArea({
   isExecutive: boolean;
   isLegal: boolean;
   isMarketing: boolean;
-  isLogisticsProfile: boolean;
+  moduleActivity: ModuleActivity | null;
   onNavigateToArchive?: () => void;
 }) {
   const defaultWidgets = useMemo((): WidgetConfig[] => {
     const widgets: WidgetConfig[] = [];
-    const isModuleUser = !isExecutive && !isLegal && !isMarketing;
+    if (!companyId) return widgets;
 
-    if (isExecutive && companyId) {
-      // Content-submission widgets hidden for logistics executives
-      if (!isLogisticsProfile) {
+    const hasContent = !!(moduleActivity?.content && (perms.canUpload || perms.canViewLegalReview));
+    const hasRisks   = !!(moduleActivity?.risks && perms.canViewGrcFrameworks);
+    const hasObligations = !!(moduleActivity?.obligations && perms.canViewGrcFrameworks);
+    const hasCapas   = !!(moduleActivity?.capas && perms.canViewGrcFrameworks);
+    const hasAnyActivity = !!(moduleActivity && Object.values(moduleActivity).some(Boolean));
+
+    // Content widgets — role determines which; moduleActivity determines whether they mount
+    if (hasContent) {
+      if (isExecutive) {
         widgets.push(
-          {
-            id: "exec-trends",
-            colSpan: 2,
-            render: () => (
-              <ExecutiveTrendsWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-            ),
-          },
-          {
-            id: "exec-breakdown",
-            colSpan: 1,
-            render: () => (
-              <ExecBreakdownWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-            ),
-          },
-          {
-            id: "exec-longest-wait",
-            colSpan: 1,
-            render: () => (
-              <LongestWaitingItemsWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-            ),
-          },
-          {
-            id: "exec-sla",
-            colSpan: 2,
-            render: () => <ExecutiveSlaWidget companyId={companyId} />,
-          },
+          { id: "exec-trends",       colSpan: 2, render: () => <ExecutiveTrendsWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+          { id: "exec-breakdown",    colSpan: 1, render: () => <ExecBreakdownWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+          { id: "exec-longest-wait", colSpan: 1, render: () => <LongestWaitingItemsWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+          { id: "exec-sla",          colSpan: 2, render: () => <ExecutiveSlaWidget companyId={companyId} /> },
         );
       }
-      widgets.push(
-        {
-          id: "exec-risk-dist",
-          colSpan: 1,
-          render: () => (
-            <RiskDistributionWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
-        {
-          id: "exec-deadlines",
-          colSpan: 1,
-          render: () => <UpcomingDeadlinesWidget companyId={companyId} />,
-        },
-        {
-          id: "exec-activity",
-          colSpan: 1,
-          render: () => <ActivityFeedWidget companyId={companyId} limit={5} />,
-        },
-        {
-          id: "exec-risk-causes",
-          colSpan: 3,
-          render: () => (
-            <TopRiskCausesWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
-      );
-    }
-
-    if (isLegal && companyId) {
-      // Content-submission widgets hidden for logistics compliance officers
-      if (!isLogisticsProfile) {
+      if (isLegal) {
         widgets.push(
-          {
-            id: "legal-queue",
-            colSpan: 3,
-            render: () => (
-              <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} />
-            ),
-          },
-          {
-            id: "legal-sla",
-            colSpan: 3,
-            render: () => <LegalSlaWidget companyId={companyId} />,
-          },
+          { id: "legal-queue", colSpan: 3, render: () => <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} /> },
+          { id: "legal-sla",   colSpan: 3, render: () => <LegalSlaWidget companyId={companyId} /> },
         );
       }
+      if (isMarketing && userId) {
+        widgets.push(
+          { id: "mkt-pipeline",  colSpan: 3, render: () => <MarketingPipelineWidget companyId={companyId} loading={pipeline.loading} errorMsg={pipeline.errorMsg} payload={pipeline.payload} onRefresh={pipeline.refresh} /> },
+          { id: "mkt-schedule",  colSpan: 1, render: () => <ScheduleWidget companyId={companyId} userId={userId} jurisdiction={jurisdictionFilter} /> },
+          { id: "mkt-stats",     colSpan: 1, render: () => <MyStatsWidget companyId={companyId} userId={userId} /> },
+          { id: "mkt-quiz",      colSpan: 3, render: () => <DailyQuizWidget /> },
+        );
+      }
+      // Module-access users (not a named role) with content review permission
+      if (!isExecutive && !isLegal && !isMarketing && perms.canViewLegalReview) {
+        widgets.push({ id: 'mod-legal-queue', colSpan: 3, render: () => <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} /> });
+      }
+    }
+
+    // Risk widgets — only when this workspace has risk data
+    if (hasRisks) {
       widgets.push(
-        {
-          id: "legal-risk-causes",
-          colSpan: 3,
-          render: () => (
-            <TopRiskCausesWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
+        { id: "risk-dist",   colSpan: 1, render: () => <RiskDistributionWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+        { id: "risk-causes", colSpan: isExecutive ? 3 : 2, render: () => <TopRiskCausesWidget companyId={companyId} jurisdiction={jurisdictionFilter} userId={!isExecutive && !isLegal ? userId : undefined} /> },
       );
     }
 
-    if (isMarketing && companyId && userId && !isLogisticsProfile) {
-      widgets.push(
-        {
-          id: "mkt-pipeline",
-          colSpan: 3,
-          render: () => (
-            <MarketingPipelineWidget
-              companyId={companyId}
-              loading={pipeline.loading}
-              errorMsg={pipeline.errorMsg}
-              payload={pipeline.payload}
-              onRefresh={pipeline.refresh}
-            />
-          ),
-        },
-        {
-          id: "mkt-schedule",
-          colSpan: 1,
-          render: () => (
-            <ScheduleWidget companyId={companyId} userId={userId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
-        {
-          id: "mkt-deadlines",
-          colSpan: 1,
-          render: () => <UpcomingDeadlinesWidget companyId={companyId} />,
-        },
-        {
-          id: "mkt-stats",
-          colSpan: 1,
-          render: () => <MyStatsWidget companyId={companyId} userId={userId} />,
-        },
-        {
-          id: "mkt-risk-causes",
-          colSpan: 3,
-          render: () => (
-            <TopRiskCausesWidget companyId={companyId} userId={userId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
-        {
-          id: "mkt-quiz",
-          colSpan: 3,
-          render: () => <DailyQuizWidget />,
-        },
-      );
+    // Upcoming deadlines — when obligations or CAPAs exist
+    if (hasObligations || hasCapas) {
+      widgets.push({ id: "deadlines", colSpan: 1, render: () => <UpcomingDeadlinesWidget companyId={companyId} /> });
     }
 
-    // Auto-assembled widgets for module-access users (not executive/legal/marketing)
-    if (isModuleUser && companyId) {
-      if (perms.canViewLegalReview) {
-        widgets.push({
-          id: 'mod-legal-queue',
-          colSpan: 3,
-          render: () => (
-            <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} />
-          ),
-        });
-      }
-      if (perms.canViewGrcFrameworks) {
-        widgets.push({
-          id: 'mod-risk-dist',
-          colSpan: 1,
-          render: () => (
-            <RiskDistributionWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        });
-        widgets.push({
-          id: 'mod-risk-causes',
-          colSpan: 2,
-          render: () => (
-            <TopRiskCausesWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        });
-      }
-      widgets.push({
-        id: 'mod-deadlines',
-        colSpan: 1,
-        render: () => <UpcomingDeadlinesWidget companyId={companyId} />,
-      });
-      widgets.push({
-        id: 'mod-activity',
-        colSpan: 2,
-        render: () => <ActivityFeedWidget companyId={companyId} limit={5} />,
-      });
+    // Marketing: extra deadlines slot after pipeline
+    if (isMarketing && hasContent) {
+      widgets.push({ id: "mkt-deadlines", colSpan: 1, render: () => <UpcomingDeadlinesWidget companyId={companyId} /> });
     }
 
-    // Shared section — always present
-    if (companyId) {
-      widgets.push({
-        id: "shared-jurisdiction-health",
-        colSpan: 1,
-        render: () => <JurisdictionHealthWidget companyId={companyId} />,
-      });
+    // Activity feed — when any module has been used
+    if (hasAnyActivity) {
+      widgets.push({ id: "activity", colSpan: 2, render: () => <ActivityFeedWidget companyId={companyId} limit={5} /> });
     }
 
-    widgets.push({
-      id: "shared-compliance-matrix",
-      colSpan: companyId ? 2 : 3,
-      render: () => (
-        <ComplianceMatrixWidget onNavigateToArchive={onNavigateToArchive} />
-      ),
-    });
+    // Always present
+    widgets.push(
+      { id: "shared-jurisdiction-health", colSpan: 1, render: () => <JurisdictionHealthWidget companyId={companyId} /> },
+      { id: "shared-compliance-matrix",   colSpan: 2, render: () => <ComplianceMatrixWidget onNavigateToArchive={onNavigateToArchive} /> },
+    );
 
     return widgets;
   }, [
     companyId, userId, jurisdictionFilter, pipeline,
-    isExecutive, isLegal, isMarketing, isLogisticsProfile, onNavigateToArchive,
-    perms.canViewLegalReview, perms.canViewGrcFrameworks,
+    moduleActivity, isExecutive, isLegal, isMarketing, onNavigateToArchive,
+    perms.canUpload, perms.canViewLegalReview, perms.canViewGrcFrameworks,
   ]);
 
   const { orderedWidgets, moveWidget, resetLayout } = useDashboardLayout(role, defaultWidgets);
