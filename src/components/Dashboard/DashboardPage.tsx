@@ -130,15 +130,19 @@ export default function DashboardPage({
   const role = String(profile?.role || "marketing").toLowerCase();
   const companyId = ((profile as any)?.company_id as string | undefined) || undefined;
   const userId = user?.id || undefined;
+  const industryType = (profile as any)?.industry_type as string | null | undefined;
+  const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
 
   const perms = getPermissions({
     profileRole: profile?.role,
     customPermissions: (profile as any)?.customPermissions,
     moduleAccess: (profile as any)?.module_access,
+    industryType,
   });
 
   // Derived access flags for gating fetches and KPI cards
-  const canContent = perms.canUpload || perms.canViewLegalReview;
+  // Content submission metrics are irrelevant for logistics companies
+  const canContent = !isLogisticsProfile && (perms.canUpload || perms.canViewLegalReview);
   const canGrc = perms.canViewGrcFrameworks;
   const canPolicies = perms.canViewPolicies;
   const canVendors = perms.canViewVendors;
@@ -157,6 +161,7 @@ export default function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [exec, setExec] = useState<ExecMetrics | null>(null);
   const [moduleMetrics, setModuleMetrics] = useState<ModuleMetrics | null>(null);
+  const [logisticsMetrics, setLogisticsMetrics] = useState<{ rejections_this_month: number; active_flags: number } | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
@@ -328,6 +333,29 @@ export default function DashboardPage({
     return () => { cancelled = true; };
   }, [companyId, canGrc, canPolicies, canVendors]);
 
+  /* ── Logistics-specific metrics ─────────────────────────────── */
+  useEffect(() => {
+    if (!isLogisticsProfile || !companyId) return;
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    Promise.allSettled([
+      (supabase as any).from('contraband_rejection_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .gte('created_at', startOfMonth.toISOString()),
+      (supabase as any).from('customer_flags')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('status', 'active'),
+    ]).then(([rejRes, flagRes]) => {
+      setLogisticsMetrics({
+        rejections_this_month: rejRes.status === 'fulfilled' ? ((rejRes.value as any).count ?? 0) : 0,
+        active_flags: flagRes.status === 'fulfilled' ? ((flagRes.value as any).count ?? 0) : 0,
+      });
+    });
+  }, [companyId, isLogisticsProfile]);
+
   const isExecutive = role === "executive";
   const isLegal = role === "compliance" || role === "legal";
   const isMarketing = role === "marketing";
@@ -394,7 +422,28 @@ export default function DashboardPage({
           ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
           : undefined,
         variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'regulatory-affairs' } })),
+        // Logistics users can't access regulatory-affairs — redirect to licence vault instead
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: isLogisticsProfile ? 'license-vault' : 'regulatory-affairs' } })),
+      });
+    }
+
+    // Logistics-specific KPI cards
+    if (isLogisticsProfile) {
+      crossModule.push({
+        title: "Contraband Rejections",
+        value: logisticsMetrics ? String(logisticsMetrics.rejections_this_month) : "…",
+        icon: ShieldAlert,
+        subtext: "this month",
+        variant: logisticsMetrics && logisticsMetrics.rejections_this_month > 0 ? "red" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
+      });
+      crossModule.push({
+        title: "Flagged Senders",
+        value: logisticsMetrics ? String(logisticsMetrics.active_flags) : "…",
+        icon: Activity,
+        subtext: logisticsMetrics?.active_flags === 0 ? "No active flags" : "Active blacklist entries",
+        variant: logisticsMetrics && logisticsMetrics.active_flags > 0 ? "yellow" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
       });
     }
 
@@ -514,7 +563,7 @@ export default function DashboardPage({
         variant: "blue" as const,
       }] : []),
     ];
-  }, [exec, loading, moduleMetrics, isExecutive, isLegal, isMarketing, approvalPct, rejectionPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive]);
+  }, [exec, loading, moduleMetrics, logisticsMetrics, isLogisticsProfile, isExecutive, isLegal, isMarketing, approvalPct, rejectionPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive]);
 
   /* ─────────────────────────── Render ─────────────────────────── */
   return (
@@ -547,7 +596,11 @@ export default function DashboardPage({
             </h2>
             <p className="text-[11px] dash-text-secondary mt-0.5 font-medium">
               {loading || pipeline.loading
-                ? "Refreshing your latest dashboard metrics…"
+                ? "Refreshing your compliance dashboard…"
+                : isLogisticsProfile
+                ? moduleMetrics
+                  ? `${moduleMetrics.overdue_obligations} overdue obligations · ${moduleMetrics.open_risks} open risks · ${logisticsMetrics?.rejections_this_month ?? 0} contraband rejections this month.`
+                  : "Loading your logistics compliance metrics…"
                 : !exec
                 ? "Submit content to begin tracking progress."
                 : isExecutive
@@ -639,6 +692,7 @@ export default function DashboardPage({
         isExecutive={isExecutive}
         isLegal={isLegal}
         isMarketing={isMarketing}
+        isLogisticsProfile={isLogisticsProfile}
         onNavigateToArchive={onNavigateToArchive}
       />
 
@@ -664,6 +718,7 @@ function WidgetArea({
   isExecutive,
   isLegal,
   isMarketing,
+  isLogisticsProfile,
   onNavigateToArchive,
 }: {
   role: string;
@@ -675,6 +730,7 @@ function WidgetArea({
   isExecutive: boolean;
   isLegal: boolean;
   isMarketing: boolean;
+  isLogisticsProfile: boolean;
   onNavigateToArchive?: () => void;
 }) {
   const defaultWidgets = useMemo((): WidgetConfig[] => {
@@ -682,33 +738,43 @@ function WidgetArea({
     const isModuleUser = !isExecutive && !isLegal && !isMarketing;
 
     if (isExecutive && companyId) {
+      // Content-submission widgets hidden for logistics executives
+      if (!isLogisticsProfile) {
+        widgets.push(
+          {
+            id: "exec-trends",
+            colSpan: 2,
+            render: () => (
+              <ExecutiveTrendsWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
+            ),
+          },
+          {
+            id: "exec-breakdown",
+            colSpan: 1,
+            render: () => (
+              <ExecBreakdownWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
+            ),
+          },
+          {
+            id: "exec-longest-wait",
+            colSpan: 1,
+            render: () => (
+              <LongestWaitingItemsWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
+            ),
+          },
+          {
+            id: "exec-sla",
+            colSpan: 2,
+            render: () => <ExecutiveSlaWidget companyId={companyId} />,
+          },
+        );
+      }
       widgets.push(
-        {
-          id: "exec-trends",
-          colSpan: 2,
-          render: () => (
-            <ExecutiveTrendsWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
         {
           id: "exec-risk-dist",
           colSpan: 1,
           render: () => (
             <RiskDistributionWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
-        {
-          id: "exec-breakdown",
-          colSpan: 1,
-          render: () => (
-            <ExecBreakdownWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
-          ),
-        },
-        {
-          id: "exec-longest-wait",
-          colSpan: 1,
-          render: () => (
-            <LongestWaitingItemsWidget companyId={companyId} jurisdiction={jurisdictionFilter} />
           ),
         },
         {
@@ -722,11 +788,6 @@ function WidgetArea({
           render: () => <ActivityFeedWidget companyId={companyId} limit={5} />,
         },
         {
-          id: "exec-sla",
-          colSpan: 2,
-          render: () => <ExecutiveSlaWidget companyId={companyId} />,
-        },
-        {
           id: "exec-risk-causes",
           colSpan: 3,
           render: () => (
@@ -737,19 +798,24 @@ function WidgetArea({
     }
 
     if (isLegal && companyId) {
+      // Content-submission widgets hidden for logistics compliance officers
+      if (!isLogisticsProfile) {
+        widgets.push(
+          {
+            id: "legal-queue",
+            colSpan: 3,
+            render: () => (
+              <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} />
+            ),
+          },
+          {
+            id: "legal-sla",
+            colSpan: 3,
+            render: () => <LegalSlaWidget companyId={companyId} />,
+          },
+        );
+      }
       widgets.push(
-        {
-          id: "legal-queue",
-          colSpan: 3,
-          render: () => (
-            <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} />
-          ),
-        },
-        {
-          id: "legal-sla",
-          colSpan: 3,
-          render: () => <LegalSlaWidget companyId={companyId} />,
-        },
         {
           id: "legal-risk-causes",
           colSpan: 3,
@@ -760,7 +826,7 @@ function WidgetArea({
       );
     }
 
-    if (isMarketing && companyId && userId) {
+    if (isMarketing && companyId && userId && !isLogisticsProfile) {
       widgets.push(
         {
           id: "mkt-pipeline",
@@ -866,7 +932,7 @@ function WidgetArea({
     return widgets;
   }, [
     companyId, userId, jurisdictionFilter, pipeline,
-    isExecutive, isLegal, isMarketing, onNavigateToArchive,
+    isExecutive, isLegal, isMarketing, isLogisticsProfile, onNavigateToArchive,
     perms.canViewLegalReview, perms.canViewGrcFrameworks,
   ]);
 
