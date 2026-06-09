@@ -54,6 +54,7 @@ import {
   GitMerge,
   BookMarked,
   PackageCheck,
+  PackageX,
   Factory,
   Award,
   FileStack,
@@ -155,7 +156,9 @@ export type PageId =
   // SON Compliance Tracker
   | 'son-compliance'
   // CTD Dossier Tracker
-  | 'ctd-dossier';
+  | 'ctd-dossier'
+  // Logistics — Contraband Rejection Workflow
+  | 'contraband-rejection';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -239,6 +242,7 @@ export default function MainLayout({
       { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality' },
       { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
       { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
+      { id: 'contraband-rejection', label: 'Contraband Rejection', icon: PackageX, category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
 
       // ── 3. Governance & Policy ───────────────────────────────────────
       { id: 'policies', label: 'Policies', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewPolicies },

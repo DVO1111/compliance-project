@@ -106,6 +106,7 @@ import RegulatoryAffairsPage from './components/RegulatoryAffairs/RegulatoryAffa
 import GmpInspectionPage from './components/GmpInspection/GmpInspectionPage';
 import SONCompliancePage from './components/SONCompliance/SONCompliancePage';
 import CTDDossierPage from './components/CTDDossier/CTDDossierPage';
+import ContrabandRejectionPage from './components/ContrabandRejection/ContrabandRejectionPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -191,7 +192,8 @@ function isValidPageId(value: any): value is PageId {
     value === 'control-monitoring' ||
     value === 'regulatory-affairs' ||
     value === 'son-compliance' ||
-    value === 'ctd-dossier'
+    value === 'ctd-dossier' ||
+    value === 'contraband-rejection'
   );
 }
 
@@ -775,6 +777,9 @@ function AppContent() {
 
       case 'ctd-dossier':
         return !isLogisticsProfile ? <CTDDossierPage /> : <AccessDenied />;
+
+      case 'contraband-rejection':
+        return isLogisticsProfile ? <ContrabandRejectionPage /> : <AccessDenied />;
 
       default:
         return <DashboardPage />;
