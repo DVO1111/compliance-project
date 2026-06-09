@@ -53,8 +53,8 @@ export const REJECTION_REASONS = [
 // ── Rejection Log ─────────────────────────────────────────────
 
 export async function listRejections(companyId: string): Promise<ContrabandRejection[]> {
-  const { data, error } = await (supabase
-    .from('contraband_rejection_log') as any)
+  const { data, error } = await (supabase as any)
+    .from('contraband_rejection_log')
     .select('*, reporter:profiles!reporter_id(full_name)')
     .eq('company_id', companyId)
     .order('rejection_date', { ascending: false });
@@ -77,8 +77,8 @@ export async function createRejection(
     status?: 'pending' | 'rejected' | 'escalated';
   },
 ): Promise<ContrabandRejection> {
-  const { data, error } = await (supabase
-    .from('contraband_rejection_log') as any)
+  const { data, error } = await (supabase as any)
+    .from('contraband_rejection_log')
     .insert([{ ...payload, company_id: companyId, reporter_id: userId }])
     .select()
     .single();
@@ -107,8 +107,8 @@ export async function updateRejectionStatus(
   rejectionId: string,
   status: 'pending' | 'rejected' | 'escalated',
 ): Promise<void> {
-  const { error } = await (supabase
-    .from('contraband_rejection_log') as any)
+  const { error } = await (supabase as any)
+    .from('contraband_rejection_log')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', rejectionId)
     .eq('company_id', companyId);
@@ -128,8 +128,8 @@ export async function updateRejectionStatus(
 // ── Customer Flags ────────────────────────────────────────────
 
 export async function listCustomerFlags(companyId: string): Promise<CustomerFlag[]> {
-  const { data, error } = await (supabase
-    .from('customer_flags') as any)
+  const { data, error } = await (supabase as any)
+    .from('customer_flags')
     .select('*, flagged_by_profile:profiles!flagged_by(full_name)')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
@@ -150,8 +150,8 @@ export async function flagCustomer(
     related_rejection_id?: string;
   },
 ): Promise<CustomerFlag> {
-  const { data, error } = await (supabase
-    .from('customer_flags') as any)
+  const { data, error } = await (supabase as any)
+    .from('customer_flags')
     .upsert(
       [{
         ...payload,
@@ -188,8 +188,8 @@ export async function clearCustomerFlag(
   userId: string,
   flagId: string,
 ): Promise<void> {
-  const { error } = await (supabase
-    .from('customer_flags') as any)
+  const { error } = await (supabase as any)
+    .from('customer_flags')
     .update({ status: 'cleared', updated_at: new Date().toISOString() })
     .eq('id', flagId)
     .eq('company_id', companyId);
@@ -211,8 +211,8 @@ export async function checkSenderFlag(
   identifierType: CustomerFlag['identifier_type'],
   identifierValue: string,
 ): Promise<CustomerFlag | null> {
-  const { data, error } = await (supabase
-    .from('customer_flags') as any)
+  const { data, error } = await (supabase as any)
+    .from('customer_flags')
     .select('*')
     .eq('company_id', companyId)
     .eq('identifier_type', identifierType)

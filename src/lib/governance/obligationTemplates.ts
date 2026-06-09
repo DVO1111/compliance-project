@@ -85,7 +85,7 @@ export async function seedObligationsFromIndustry(
       company_id: companyId,
     }));
 
-    const { error } = await (supabase.from('regulatory_obligations') as any).insert(rows);
+    const { error } = await (supabase as any).from('regulatory_obligations').insert(rows);
     if (error) {
       logger.error('seedObligationsFromIndustry: insert failed', error);
     }
