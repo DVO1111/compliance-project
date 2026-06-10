@@ -15,21 +15,24 @@ BEGIN
   END IF;
 END $$;
 
--- 2. Drop the existing category CHECK constraint (search by constraint definition, not name)
+-- 2. Drop ALL category CHECK constraints by name and by definition (handles any naming)
+ALTER TABLE public.vendors DROP CONSTRAINT IF EXISTS vendors_category_check;
+
 DO $$
 DECLARE
   v_constraint text;
 BEGIN
-  SELECT conname INTO v_constraint
-  FROM pg_constraint
-  WHERE conrelid = 'public.vendors'::regclass
-    AND contype   = 'c'
-    AND pg_get_constraintdef(oid) ILIKE '%category%'
-  LIMIT 1;
+  LOOP
+    SELECT conname INTO v_constraint
+    FROM pg_constraint
+    WHERE conrelid = 'public.vendors'::regclass
+      AND contype   = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%category%'
+    LIMIT 1;
 
-  IF v_constraint IS NOT NULL THEN
+    EXIT WHEN v_constraint IS NULL;
     EXECUTE format('ALTER TABLE public.vendors DROP CONSTRAINT %I', v_constraint);
-  END IF;
+  END LOOP;
 END $$;
 
 -- 3. Add expanded category constraint
