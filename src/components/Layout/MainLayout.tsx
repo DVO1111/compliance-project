@@ -58,6 +58,8 @@ import {
   Factory,
   Award,
   FileStack,
+  Truck,
+  ScrollText,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 
@@ -157,8 +159,10 @@ export type PageId =
   | 'son-compliance'
   // CTD Dossier Tracker
   | 'ctd-dossier'
-  // Logistics — Contraband Rejection Workflow
-  | 'contraband-rejection';
+  // Logistics modules
+  | 'contraband-rejection'
+  | 'shipment-event-log'
+  | 'cn-declarations';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -242,7 +246,9 @@ export default function MainLayout({
       { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality' },
       { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
       { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
-      { id: 'contraband-rejection', label: 'Contraband Rejection', icon: PackageX, category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
+      { id: 'contraband-rejection', label: 'Contraband Rejection', icon: PackageX,    category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
+      { id: 'shipment-event-log',  label: 'Shipment Event Log',  icon: Truck,       category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
+      { id: 'cn-declarations',     label: 'CN22/CN23 Declarations', icon: ScrollText, category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
 
       // ── 3. Governance & Policy ───────────────────────────────────────
       { id: 'policies', label: 'Policies', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewPolicies },

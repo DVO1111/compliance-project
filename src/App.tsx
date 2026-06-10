@@ -107,6 +107,8 @@ import GmpInspectionPage from './components/GmpInspection/GmpInspectionPage';
 import SONCompliancePage from './components/SONCompliance/SONCompliancePage';
 import CTDDossierPage from './components/CTDDossier/CTDDossierPage';
 import ContrabandRejectionPage from './components/ContrabandRejection/ContrabandRejectionPage';
+import ShipmentEventLogPage from './components/Logistics/ShipmentEventLogPage';
+import CN2223DeclarationPage from './components/Logistics/CN2223DeclarationPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -193,7 +195,9 @@ function isValidPageId(value: any): value is PageId {
     value === 'regulatory-affairs' ||
     value === 'son-compliance' ||
     value === 'ctd-dossier' ||
-    value === 'contraband-rejection'
+    value === 'contraband-rejection' ||
+    value === 'shipment-event-log' ||
+    value === 'cn-declarations'
   );
 }
 
@@ -780,6 +784,12 @@ function AppContent() {
 
       case 'contraband-rejection':
         return isLogisticsProfile ? <ContrabandRejectionPage /> : <AccessDenied />;
+
+      case 'shipment-event-log':
+        return isLogisticsProfile ? <ShipmentEventLogPage /> : <AccessDenied />;
+
+      case 'cn-declarations':
+        return isLogisticsProfile ? <CN2223DeclarationPage /> : <AccessDenied />;
 
       default:
         return <DashboardPage />;
