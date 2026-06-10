@@ -54,7 +54,9 @@ export type ConsultationEntry = {
 
 /* ── AI-generated regulatory alerts ──────────────────────── */
 
-export async function fetchRegulatoryAlerts(): Promise<RegulatoryAlert[]> {
+export async function fetchRegulatoryAlerts(industryType?: string): Promise<RegulatoryAlert[]> {
+  const isLogistics = industryType?.trim().toLowerCase() === 'logistics & courier';
+
   // Pull from regulation_updates table (populated by sync)
   const { data } = await (supabase as any)
     .from('regulation_updates')
@@ -63,8 +65,7 @@ export async function fetchRegulatoryAlerts(): Promise<RegulatoryAlert[]> {
     .limit(30);
 
   if (!data || !data.length) {
-    // Return sample alerts if no updates exist yet
-    return generateSampleAlerts();
+    return isLogistics ? generateLogisticsSampleAlerts() : generateSampleAlerts();
   }
 
   return data.map((u: any) => ({
@@ -173,8 +174,47 @@ export async function findAffectedContent(companyId: string, regulationSource?: 
 
 /* ── Consultation tracker ────────────────────────────────── */
 
-export function getConsultationPeriods(): ConsultationEntry[] {
+export function getConsultationPeriods(industryType?: string): ConsultationEntry[] {
   const now = new Date();
+  const isLogistics = industryType?.trim().toLowerCase() === 'logistics & courier';
+
+  if (isLogistics) {
+    return [
+      {
+        id: 'log-consult-1',
+        title: 'HMRC: Changes to AEO Authorisation Process — Public Consultation',
+        body: 'HMRC is consulting on proposed changes to the UK AEO (Authorised Economic Operator) authorisation process, including new self-assessment requirements and mutual recognition updates post-Brexit.',
+        deadline: new Date(now.getTime() + 38 * 86400000).toISOString(),
+        daysRemaining: 38,
+        status: 'open',
+      },
+      {
+        id: 'log-consult-2',
+        title: 'NCS: Revised Prohibited and Restricted Items List 2026',
+        body: 'Nigerian Customs Service has issued a public notice on proposed revisions to the list of prohibited and restricted imports, with specific additions related to electronics and food products.',
+        deadline: new Date(now.getTime() + 52 * 86400000).toISOString(),
+        daysRemaining: 52,
+        status: 'open',
+      },
+      {
+        id: 'log-consult-3',
+        title: 'ICO: UK GDPR Guidance on International Data Transfers — Comment Period',
+        body: 'The ICO has opened a comment period on updated guidance covering international data transfers, particularly relevant for UK-Nigeria data flows and adequacy decisions.',
+        deadline: new Date(now.getTime() + 9 * 86400000).toISOString(),
+        daysRemaining: 9,
+        status: 'closing_soon',
+      },
+      {
+        id: 'log-consult-4',
+        title: 'ECJU: Open General Export Licence Review — Annual Update',
+        body: 'The Export Control Joint Unit is reviewing conditions attached to the Open General Export Licence (OGEL) for dual-use items, with proposed changes to reporting obligations for exporters.',
+        deadline: new Date(now.getTime() - 4 * 86400000).toISOString(),
+        daysRemaining: -4,
+        status: 'closed',
+      },
+    ];
+  }
+
   return [
     {
       id: 'consult-1',
@@ -338,6 +378,15 @@ const SOURCE_TO_JURISDICTIONS: Record<string, string[]> = {
   TGA:             ['australia', 'tga', 'australian'],
   NAFDAC:          ['nigeria', 'nafdac', 'nigerian', 'ng'],
   'Health Canada': ['canada', 'canadian', 'health canada', 'ca'],
+  // Logistics sources
+  HMRC:            ['uk', 'united kingdom', 'customs', 'vat', 'aeo', 'hmrc', 'tariff'],
+  NCS:             ['nigeria', 'nigerian', 'customs', 'ng', 'import', 'export', 'duty'],
+  ICO:             ['uk', 'data protection', 'gdpr', 'ico', 'data controller'],
+  NITDA:           ['nigeria', 'data', 'ndpa', 'nitda', 'personal data'],
+  NCAA:            ['nigeria', 'aviation', 'air', 'cargo', 'ncaa'],
+  TAPA:            ['security', 'freight', 'supply chain', 'tapa', 'facility', 'trucking'],
+  ECJU:            ['uk', 'export', 'control', 'dual-use', 'ecju'],
+  'C-TPAT':        ['usa', 'us', 'customs', 'security', 'supply chain', 'cbp'],
 };
 
 function mapFlag(row: any): ControlFlag {
@@ -470,3 +519,196 @@ export async function resolveControlFlag(flagId: string, companyId: string, user
     } catch { /* audit never blocks */ }
   }
 }
+
+/* ── Logistics Horizon Scanning ──────────────────────────────── */
+
+function generateLogisticsSampleAlerts(): RegulatoryAlert[] {
+  const now = new Date();
+  return [
+    {
+      id: 'log-sample-1',
+      title: 'HMRC Updates AEO Mutual Recognition Requirements Post-Brexit',
+      body: 'HMRC has issued updated guidance on the UK AEO mutual recognition arrangements with the EU and key trading partners following post-Brexit trade framework revisions. Businesses must review their AEO-S (security and safety) authorisation documentation to confirm ongoing compliance with the revised criteria, particularly around cargo security procedures and staff vetting standards.',
+      source: 'HMRC',
+      alertType: 'guidance_update',
+      severity: 'warning',
+      publishedAt: new Date(now.getTime() - 6 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-2',
+      title: 'Nigerian Customs Service Revises Import Duty Rates — 2026 Tariff Schedule',
+      body: 'The Nigerian Customs Service has published the revised 2026 customs tariff schedule with changes to duty rates on electronics, textiles, and food products. Several categories relevant to personal effects and courier shipments have been reclassified. Businesses operating on the UK-Nigeria corridor should review the new HS code classifications to ensure accurate customs declarations.',
+      source: 'NCS',
+      alertType: 'guidance_update',
+      severity: 'critical',
+      publishedAt: new Date(now.getTime() - 10 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-3',
+      title: 'ICO Issues Enforcement Notice on International Data Transfer Clauses',
+      body: 'The ICO has issued an enforcement notice to a logistics operator concerning inadequate safeguards for international personal data transfers from the UK to non-adequate third countries. The case highlights the need for Standard Contractual Clauses (SCCs) or Transfer Risk Assessments (TRAs) when transferring customer data to Nigerian-based processing partners.',
+      source: 'ICO',
+      alertType: 'enforcement_action',
+      severity: 'warning',
+      publishedAt: new Date(now.getTime() - 14 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-4',
+      title: 'TAPA Issues FSR Supplement — Enhanced CCTV Specifications for A-Class Facilities',
+      body: 'TAPA has released a supplementary bulletin to FSR:2020 clarifying minimum CCTV resolution requirements for Class A certified facilities. The bulletin specifies that 720p minimum now applies at the point of upload to monitoring systems, not at point of recording. Facilities due for recertification in 2026 should confirm their CCTV management systems comply with the revised interpretation.',
+      source: 'TAPA',
+      alertType: 'guidance_update',
+      severity: 'warning',
+      publishedAt: new Date(now.getTime() - 18 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-5',
+      title: 'NCAA Mandates Enhanced Screening Procedures for Air Cargo on Nigeria-UK Corridor',
+      body: 'The Nigerian Civil Aviation Authority has issued a directive requiring enhanced security screening for all air cargo departing Nigeria for the United Kingdom, effective from Q2 2026. Air cargo agents must demonstrate compliance with the new pre-loading inspection regime. Agents failing to comply face suspension of approval.',
+      source: 'NCAA',
+      alertType: 'guidance_update',
+      severity: 'critical',
+      publishedAt: new Date(now.getTime() - 22 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-6',
+      title: 'ECJU Consultation: Updated OGEL Conditions for Dual-Use Electronic Components',
+      body: 'The Export Control Joint Unit has published a consultation on proposed changes to the Open General Export Licence (OGEL) for dual-use electronic components, including new record-keeping obligations and expanded exclusions for certain consumer electronics. Logistics operators handling electronics exports should review the proposed changes and respond before the consultation closes.',
+      source: 'ECJU',
+      alertType: 'consultation',
+      severity: 'info',
+      publishedAt: new Date(now.getTime() - 28 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-7',
+      title: 'NITDA: New NDPA Compliance Audit Guidelines for Data Controllers',
+      body: 'NITDA has released updated compliance audit guidelines under the Nigeria Data Protection Act (NDPA). Organisations that process Nigerian personal data — including logistics companies holding customer and recipient data — must submit an annual data audit report. The new guidelines clarify acceptable audit methodology and introduce a self-declaration option for small organisations.',
+      source: 'NITDA',
+      alertType: 'guidance_update',
+      severity: 'info',
+      publishedAt: new Date(now.getTime() - 35 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+    {
+      id: 'log-sample-8',
+      title: 'C-TPAT: CBP Expands Minimum Security Criteria for Air Freight Consolidators',
+      body: 'US Customs and Border Protection has expanded the C-TPAT Minimum Security Criteria to include specific requirements for air freight consolidators and indirect air carriers. If your organisation consolidates shipments destined for the USA, review the new container inspection and document integrity requirements to maintain C-TPAT good standing.',
+      source: 'C-TPAT',
+      alertType: 'guidance_update',
+      severity: 'warning',
+      publishedAt: new Date(now.getTime() - 42 * 86400000).toISOString(),
+      affectedContentCount: 0,
+    },
+  ];
+}
+
+export type WatchLevel = 'critical' | 'active' | 'watch';
+
+export type WatchListEntry = {
+  id: string;
+  agency: string;
+  shortName: string;
+  jurisdiction: string;
+  topics: string[];
+  watchLevel: WatchLevel;
+  lastKnownUpdate: string;
+  updateFrequency: string;
+  relevance: string;
+};
+
+export const LOGISTICS_WATCHLIST: WatchListEntry[] = [
+  {
+    id: 'hmrc',
+    agency: 'HM Revenue & Customs',
+    shortName: 'HMRC',
+    jurisdiction: 'UK',
+    topics: ['Customs Tariffs', 'AEO Authorisation', 'Import VAT', 'Trade Facilitation'],
+    watchLevel: 'critical',
+    lastKnownUpdate: '2 weeks ago',
+    updateFrequency: 'Monthly',
+    relevance: 'Governs UK customs clearance, import VAT, and AEO status — directly impacts your corridor operations.',
+  },
+  {
+    id: 'ncs',
+    agency: 'Nigerian Customs Service',
+    shortName: 'NCS',
+    jurisdiction: 'Nigeria',
+    topics: ['Import Duties', 'Prohibited Goods', 'Tariff Schedule', 'Corridor Controls'],
+    watchLevel: 'critical',
+    lastKnownUpdate: '3 weeks ago',
+    updateFrequency: 'Quarterly',
+    relevance: 'Controls all import/export duties and prohibited items on the Nigeria side of the corridor.',
+  },
+  {
+    id: 'ico',
+    agency: "Information Commissioner's Office",
+    shortName: 'ICO',
+    jurisdiction: 'UK',
+    topics: ['UK GDPR', 'Data Subject Rights', 'International Transfers', 'Enforcement'],
+    watchLevel: 'active',
+    lastKnownUpdate: '3 weeks ago',
+    updateFrequency: 'Bi-monthly',
+    relevance: 'Required for UK data controller registration; enforcement focus on international data transfers.',
+  },
+  {
+    id: 'ncaa',
+    agency: 'Nigerian Civil Aviation Authority',
+    shortName: 'NCAA',
+    jurisdiction: 'Nigeria',
+    topics: ['Air Cargo Security', 'Agent Approvals', 'Dangerous Goods', 'Prohibited Items'],
+    watchLevel: 'active',
+    lastKnownUpdate: '5 weeks ago',
+    updateFrequency: 'Quarterly',
+    relevance: 'Licenses air cargo agents; sets security and screening requirements for Nigeria departures.',
+  },
+  {
+    id: 'tapa',
+    agency: 'Transported Asset Protection Association',
+    shortName: 'TAPA',
+    jurisdiction: 'International',
+    topics: ['FSR Facility Security', 'TSR Trucking Security', 'Incident Bulletins', 'Certification'],
+    watchLevel: 'active',
+    lastKnownUpdate: '5 weeks ago',
+    updateFrequency: 'Annual standard cycles + ad-hoc bulletins',
+    relevance: 'Core security certification for facility and in-transit operations; supplements ISO 28000.',
+  },
+  {
+    id: 'nitda',
+    agency: 'National Information Technology Development Agency',
+    shortName: 'NITDA',
+    jurisdiction: 'Nigeria',
+    topics: ['NDPA Compliance', 'Annual Data Audit', 'Processor Registration', 'Cross-border Data'],
+    watchLevel: 'watch',
+    lastKnownUpdate: '6 weeks ago',
+    updateFrequency: 'Annual',
+    relevance: 'Annual data audit report required when processing Nigerian customers\' personal data.',
+  },
+  {
+    id: 'ecju',
+    agency: 'Export Control Joint Unit',
+    shortName: 'ECJU',
+    jurisdiction: 'UK',
+    topics: ['Export Licences', 'Dual-Use Goods', 'Embargoed Destinations', 'OGEL Conditions'],
+    watchLevel: 'watch',
+    lastKnownUpdate: '7 weeks ago',
+    updateFrequency: 'As needed',
+    relevance: 'Controls export of dual-use and strategic goods; monitor OGEL conditions for electronics.',
+  },
+  {
+    id: 'ctpat',
+    agency: 'US Customs and Border Protection',
+    shortName: 'C-TPAT / CBP',
+    jurisdiction: 'USA',
+    topics: ['C-TPAT Criteria', 'Minimum Security Standards', 'Partner Vetting', 'CBP Notices'],
+    watchLevel: 'watch',
+    lastKnownUpdate: '8 weeks ago',
+    updateFrequency: 'As needed',
+    relevance: 'Relevant if your corridor includes USA-bound consolidations; reduces inspection rates.',
+  },
+];

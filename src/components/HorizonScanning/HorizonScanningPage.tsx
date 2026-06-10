@@ -9,17 +9,19 @@ import {
     flagAffectedControls,
     getControlFlags,
     resolveControlFlag,
+    LOGISTICS_WATCHLIST,
     type RegulatoryAlert,
     type AffectedContent,
     type ConsultationEntry,
     type RegulatoryImpactAssessment,
     type ControlFlag,
+    type WatchLevel,
 } from '../../lib/horizonScanningService';
 import {
     Radar, AlertTriangle, FileSearch, CalendarClock,
     Shield, Bell, ChevronRight, ChevronDown, RefreshCw,
     Sparkles, ArrowRight, CheckCircle2, X,
-    ShieldAlert, Check,
+    ShieldAlert, Check, Radio,
 } from 'lucide-react';
 import { logger } from '../../lib/logger';
 
@@ -45,9 +47,30 @@ const FLAG_SEVERITY_CHIP: Record<string, string> = {
     info:     'bg-blue-100 text-blue-700',
 };
 
+const WATCH_LEVEL_COLORS: Record<WatchLevel, string> = {
+    critical: 'bg-red-500/20 text-red-300 border border-red-500/30',
+    active:   'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
+    watch:    'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+};
+
+const WATCH_LEVEL_DOT: Record<WatchLevel, string> = {
+    critical: 'bg-red-400 animate-pulse',
+    active:   'bg-yellow-400',
+    watch:    'bg-blue-400',
+};
+
+const JURISDICTION_BADGE: Record<string, string> = {
+    UK:            'bg-blue-500/15 text-blue-300',
+    Nigeria:       'bg-green-500/15 text-green-300',
+    USA:           'bg-purple-500/15 text-purple-300',
+    International: 'bg-gray-500/15 text-gray-300',
+};
+
 export default function HorizonScanningPage() {
     const { profile, user } = useAuth();
     const companyId = (profile as any)?.company_id;
+    const industryType = (profile as any)?.industry_type as string | undefined;
+    const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
 
     const [tab, setTab] = useState<Tab>('feed');
     const [alerts, setAlerts] = useState<RegulatoryAlert[]>([]);
@@ -67,7 +90,7 @@ export default function HorizonScanningPage() {
     const load = useCallback(async () => {
         setLoading(true);
         if (tab === 'feed') {
-            const fetchedAlerts = await fetchRegulatoryAlerts();
+            const fetchedAlerts = await fetchRegulatoryAlerts(industryType);
             setAlerts(fetchedAlerts);
             // Fetch existing control flags for all alerts in parallel
             if (companyId) {
@@ -89,7 +112,7 @@ export default function HorizonScanningPage() {
             }));
             setRecommendations(recs);
         } else if (tab === 'consultations') {
-            setConsultations(getConsultationPeriods());
+            setConsultations(getConsultationPeriods(industryType));
         }
         setLoading(false);
     }, [tab, companyId]);
@@ -178,6 +201,53 @@ export default function HorizonScanningPage() {
                     Refresh
                 </button>
             </div>
+
+            {/* Logistics Regulatory Radar — only shown for logistics profiles */}
+            {isLogisticsProfile && (
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                        <Radio className="w-4 h-4 text-[var(--color-accent)]" />
+                        <h3 className="text-sm font-semibold dash-text">Logistics Regulatory Radar</h3>
+                        <span className="text-xs dash-text-secondary">— agencies to watch on the UK-Nigeria corridor</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {LOGISTICS_WATCHLIST.map(entry => (
+                            <div
+                                key={entry.id}
+                                className="dash-card border dash-border rounded-xl p-4 space-y-2.5"
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-xs font-semibold text-white leading-tight">{entry.shortName}</p>
+                                        <p className="text-xs text-white/40 mt-0.5 leading-snug">{entry.agency}</p>
+                                    </div>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${WATCH_LEVEL_COLORS[entry.watchLevel]}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${WATCH_LEVEL_DOT[entry.watchLevel]}`} />
+                                        {entry.watchLevel === 'critical' ? 'Priority' : entry.watchLevel === 'active' ? 'Active' : 'Watch'}
+                                    </span>
+                                </div>
+
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${JURISDICTION_BADGE[entry.jurisdiction] ?? 'bg-gray-500/15 text-gray-300'}`}>
+                                    {entry.jurisdiction}
+                                </span>
+
+                                <div className="flex flex-wrap gap-1">
+                                    {entry.topics.slice(0, 2).map(t => (
+                                        <span key={t} className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/50">{t}</span>
+                                    ))}
+                                    {entry.topics.length > 2 && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/30">+{entry.topics.length - 2}</span>
+                                    )}
+                                </div>
+
+                                <p className="text-xs text-white/40 leading-relaxed">{entry.relevance}</p>
+
+                                <p className="text-xs text-white/30">Updated {entry.lastKnownUpdate} · {entry.updateFrequency}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="flex gap-1 p-1 rounded-xl bg-[var(--color-surface-alt)] w-fit">
