@@ -1,17 +1,30 @@
 -- B2: Vendor Management – carrier-specific fields
 -- Adds logistics carrier categories and a carrier profile table
 
--- 1. Expand vendor category CHECK constraint (explicit schema; drop by name lookup to survive auto-naming)
+-- 1. Ensure 'category' column exists (guard against missing column)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'vendors'
+      AND column_name  = 'category'
+  ) THEN
+    ALTER TABLE public.vendors
+      ADD COLUMN category text NOT NULL DEFAULT 'cloud';
+  END IF;
+END $$;
+
+-- 2. Drop the existing category CHECK constraint (search by constraint definition, not name)
 DO $$
 DECLARE
   v_constraint text;
 BEGIN
-  SELECT constraint_name INTO v_constraint
-  FROM information_schema.table_constraints
-  WHERE table_schema = 'public'
-    AND table_name   = 'vendors'
-    AND constraint_type = 'CHECK'
-    AND constraint_name ILIKE '%category%'
+  SELECT conname INTO v_constraint
+  FROM pg_constraint
+  WHERE conrelid = 'public.vendors'::regclass
+    AND contype   = 'c'
+    AND pg_get_constraintdef(oid) ILIKE '%category%'
   LIMIT 1;
 
   IF v_constraint IS NOT NULL THEN
@@ -19,6 +32,7 @@ BEGIN
   END IF;
 END $$;
 
+-- 3. Add expanded category constraint
 ALTER TABLE public.vendors
   ADD CONSTRAINT vendors_category_check
   CHECK (category IN ('cloud','payment','marketing','legal','logistics_carrier','customs_broker','last_mile'));
