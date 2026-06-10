@@ -17,6 +17,8 @@ import StepRoleAssignment from './StepRoleAssignment';
 import StepLegalPartnerDetails from './StepLegalPartnerDetails';
 import { createPartnerProfile } from '../../lib/legalMarketplaceService';
 import { seedObligationsFromIndustry } from '../../lib/governance/obligationTemplates';
+import { seedLicencesFromIndustry } from '../../lib/governance/licenceSeedTemplates';
+import { seedPoliciesFromIndustry } from '../../lib/governance/policyTemplates';
 import { logger } from '../../lib/logger';
 
 export interface OnboardingData {
@@ -167,9 +169,13 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         });
       }
 
-      // 3. Seed industry-specific obligation templates
+      // 3. Seed industry-specific data (obligations, licences, policies)
       if (profile?.company_id && data.industryType) {
-        await seedObligationsFromIndustry(profile.company_id, data.industryType);
+        await Promise.all([
+          seedObligationsFromIndustry(profile.company_id, data.industryType),
+          seedLicencesFromIndustry(profile.company_id, data.industryType),
+          seedPoliciesFromIndustry(profile.company_id, data.industryType),
+        ]);
       }
 
       onComplete();

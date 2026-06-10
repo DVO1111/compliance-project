@@ -7,8 +7,13 @@
 
 DO $$
 DECLARE
-  v_company_id uuid := '863e9f8b-2a8e-4927-9fc3-42c00b7a895d';
+  v_company_id uuid;
 BEGIN
+  -- Pick the first company in the database (the demo workspace)
+  SELECT id INTO v_company_id FROM public.companies ORDER BY created_at LIMIT 1;
+  IF v_company_id IS NULL THEN
+    RAISE EXCEPTION 'No company found. Create a company first.';
+  END IF;
 
   -- ── Batch Records ──────────────────────────────────────────────────────────
 
