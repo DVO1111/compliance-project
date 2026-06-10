@@ -7,6 +7,7 @@ import {
     type VendorCategory,
     type VendorRiskLevel,
     VENDOR_CATEGORIES,
+    LOGISTICS_VENDOR_CATEGORIES,
     RISK_LEVELS,
 } from '../../lib/vendorService';
 import {
@@ -26,6 +27,9 @@ import { SkeletonLine } from '../Dashboard/ui/Skeleton';
 export default function VendorsPage() {
     const { profile, user } = useAuth();
     const companyId = (profile as any)?.company_id;
+    const industryType = (profile as any)?.industry_type as string | undefined;
+    const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
+    const categories = isLogisticsProfile ? LOGISTICS_VENDOR_CATEGORIES : VENDOR_CATEGORIES;
 
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [loading, setLoading] = useState(true);
@@ -164,7 +168,7 @@ export default function VendorsPage() {
                         className="bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2 text-sm dash-text focus:outline-none"
                     >
                         <option value="">All Categories</option>
-                        {VENDOR_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </select>
                     <select
                         value={filterRisk}
@@ -312,7 +316,7 @@ export default function VendorsPage() {
                                         value={formCategory} onChange={e => setFormCategory(e.target.value as VendorCategory)}
                                         className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none"
                                     >
-                                        {VENDOR_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                                        {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                                     </select>
                                 </div>
                                 <div>

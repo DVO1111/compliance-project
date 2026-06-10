@@ -19,6 +19,7 @@ import { createPartnerProfile } from '../../lib/legalMarketplaceService';
 import { seedObligationsFromIndustry } from '../../lib/governance/obligationTemplates';
 import { seedLicencesFromIndustry } from '../../lib/governance/licenceSeedTemplates';
 import { seedPoliciesFromIndustry } from '../../lib/governance/policyTemplates';
+import { seedRisksFromIndustry } from '../../lib/governance/riskSeedTemplates';
 import { logger } from '../../lib/logger';
 
 export interface OnboardingData {
@@ -175,6 +176,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
           seedObligationsFromIndustry(profile.company_id, data.industryType),
           seedLicencesFromIndustry(profile.company_id, data.industryType),
           seedPoliciesFromIndustry(profile.company_id, data.industryType),
+          seedRisksFromIndustry(profile.company_id, data.industryType),
         ]);
       }
 

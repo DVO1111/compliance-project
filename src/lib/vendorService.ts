@@ -5,7 +5,7 @@ import { recordAuditEvent } from './auditService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type VendorCategory = 'cloud' | 'payment' | 'marketing' | 'legal';
+export type VendorCategory = 'cloud' | 'payment' | 'marketing' | 'legal' | 'logistics_carrier' | 'customs_broker' | 'last_mile';
 export type VendorRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type VendorStatus = 'active' | 'archived';
 export type SecurityReviewStatus = 'pending' | 'in_progress' | 'completed' | 'overdue';
@@ -26,6 +26,25 @@ export interface Vendor {
   created_at: string;
   // joined
   risk_profile?: VendorRiskProfile | null;
+}
+
+export interface VendorCarrierProfile {
+  id: string;
+  vendor_id: string;
+  shipping_modes: string[];
+  route_coverage: Record<string, boolean>;
+  last_mile_areas: string[];
+  on_time_delivery_rate: number | null;
+  damage_rate: number | null;
+  carrier_licence_type: string | null;
+  insurance_coverage_gbp: number | null;
+  insurance_expiry: string | null;
+  anti_bribery_ack: boolean;
+  due_diligence_completed: boolean;
+  last_due_diligence_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface VendorRiskProfile {
@@ -70,6 +89,27 @@ export const VENDOR_CATEGORIES: { id: VendorCategory; label: string }[] = [
   { id: 'payment', label: 'Payment' },
   { id: 'marketing', label: 'Marketing' },
   { id: 'legal', label: 'Legal' },
+];
+
+export const LOGISTICS_VENDOR_CATEGORIES: { id: VendorCategory; label: string }[] = [
+  { id: 'cloud', label: 'Cloud' },
+  { id: 'payment', label: 'Payment' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'legal', label: 'Legal' },
+  { id: 'logistics_carrier', label: 'Carrier / Freight' },
+  { id: 'customs_broker', label: 'Customs Broker' },
+  { id: 'last_mile', label: 'Last-Mile Partner' },
+];
+
+export const CARRIER_SHIPPING_MODES = ['Air', 'Road', 'Sea', 'Last Mile', 'Rail'];
+export const CARRIER_LAST_MILE_AREAS = ['Lagos', 'Abuja', 'Port Harcourt', 'Kano', 'Ibadan', 'London', 'Manchester', 'Birmingham'];
+export const CARRIER_ROUTE_KEYS: { key: string; label: string }[] = [
+  { key: 'uk_to_ng', label: 'UK → Nigeria' },
+  { key: 'ng_to_uk', label: 'Nigeria → UK' },
+  { key: 'domestic_ng', label: 'Domestic Nigeria' },
+  { key: 'domestic_uk', label: 'Domestic UK' },
+  { key: 'eu_to_ng', label: 'EU → Nigeria' },
+  { key: 'ng_to_eu', label: 'Nigeria → EU' },
 ];
 
 export const RISK_LEVELS: { id: VendorRiskLevel; label: string; color: string }[] = [
@@ -312,5 +352,28 @@ export async function updateQuestionnaireStatus(
     .eq('id', id);
   if (error) { logger.error('updateQuestionnaireStatus:', error); return false; }
   try { await recordAuditEvent({ userId, companyId, action: 'vendor.questionnaire_updated', entityType: 'vendor', entityId: id, metadata: { status }, captureEvidence: false }); } catch { /* non-blocking */ }
+  return true;
+}
+
+// ─── Carrier Profiles ────────────────────────────────────────────────────────
+
+export async function getCarrierProfile(vendorId: string): Promise<VendorCarrierProfile | null> {
+  const { data, error } = await (supabase as any)
+    .from('vendor_carrier_profiles')
+    .select('*')
+    .eq('vendor_id', vendorId)
+    .maybeSingle();
+  if (error) { logger.error('getCarrierProfile:', error); return null; }
+  return data;
+}
+
+export async function upsertCarrierProfile(
+  vendorId: string,
+  profile: Partial<Omit<VendorCarrierProfile, 'id' | 'vendor_id' | 'created_at' | 'updated_at'>>
+): Promise<boolean> {
+  const { error } = await (supabase as any)
+    .from('vendor_carrier_profiles')
+    .upsert({ vendor_id: vendorId, ...profile, updated_at: new Date().toISOString() }, { onConflict: 'vendor_id' });
+  if (error) { logger.error('upsertCarrierProfile:', error); return false; }
   return true;
 }

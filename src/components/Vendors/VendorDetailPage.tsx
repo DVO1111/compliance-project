@@ -10,8 +10,11 @@ import {
     getVendorQuestionnaires,
     createQuestionnaire,
     updateQuestionnaireStatus,
+    getCarrierProfile,
+    upsertCarrierProfile,
     type Vendor,
     type VendorRiskProfile,
+    type VendorCarrierProfile,
     type VendorDocument,
     type VendorQuestionnaire,
     type VendorRiskLevel,
@@ -24,6 +27,9 @@ import {
     SECURITY_REVIEW_STATUSES,
     DOC_TYPES,
     QUESTIONNAIRE_TYPES,
+    CARRIER_SHIPPING_MODES,
+    CARRIER_LAST_MILE_AREAS,
+    CARRIER_ROUTE_KEYS,
 } from '../../lib/vendorService';
 import { supabase } from '../../lib/supabase';
 import {
@@ -44,9 +50,10 @@ import {
     Globe,
     Activity,
     Save,
+    Truck,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'risk' | 'documents' | 'questionnaires';
+type Tab = 'overview' | 'risk' | 'documents' | 'questionnaires' | 'carrier';
 
 interface Props {
     vendorId: string | null;
@@ -57,9 +64,12 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
     const { profile } = useAuth();
     const companyId = (profile as any)?.company_id;
     const userId = profile?.id ?? '';
+    const industryType = (profile as any)?.industry_type as string | undefined;
+    const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
 
     const [vendor, setVendor] = useState<Vendor | null>(null);
     const [riskProfile, setRiskProfile] = useState<VendorRiskProfile | null>(null);
+    const [carrierProfile, setCarrierProfile] = useState<VendorCarrierProfile | null>(null);
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
     const [questionnaires, setQuestionnaires] = useState<VendorQuestionnaire[]>([]);
     const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -86,6 +96,21 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
     const [showQForm, setShowQForm] = useState(false);
     const [qType, setQType] = useState<QuestionnaireType>('security');
 
+    // Carrier profile form
+    const [cpShippingModes, setCpShippingModes] = useState<string[]>([]);
+    const [cpRoutes, setCpRoutes] = useState<Record<string, boolean>>({});
+    const [cpLastMile, setCpLastMile] = useState<string[]>([]);
+    const [cpOtdRate, setCpOtdRate] = useState('');
+    const [cpDamageRate, setCpDamageRate] = useState('');
+    const [cpLicenceType, setCpLicenceType] = useState('');
+    const [cpInsuranceGbp, setCpInsuranceGbp] = useState('');
+    const [cpInsuranceExpiry, setCpInsuranceExpiry] = useState('');
+    const [cpAntiB, setCpAntiB] = useState(false);
+    const [cpDdCompleted, setCpDdCompleted] = useState(false);
+    const [cpDdDate, setCpDdDate] = useState('');
+    const [cpNotes, setCpNotes] = useState('');
+    const [cpSaving, setCpSaving] = useState(false);
+
     const load = useCallback(async () => {
         if (!companyId || !vendorId) return;
         setLoading(true);
@@ -94,14 +119,16 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
         setVendor(v);
 
         if (v) {
-            const [rp, docs, qs] = await Promise.all([
+            const [rp, docs, qs, cp] = await Promise.all([
                 getVendorRiskProfile(v.id),
                 getVendorDocuments(v.id),
                 getVendorQuestionnaires(v.id),
+                isLogisticsProfile ? getCarrierProfile(v.id) : Promise.resolve(null),
             ]);
             setRiskProfile(rp);
             setDocuments(docs);
             setQuestionnaires(qs);
+            setCarrierProfile(cp);
 
             // Populate risk form
             if (rp) {
@@ -112,9 +139,25 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
                 setRpLastReview(rp.last_review_date ? rp.last_review_date.split('T')[0] : '');
                 setRpNextReview(rp.next_review_date ? rp.next_review_date.split('T')[0] : '');
             }
+
+            // Populate carrier form
+            if (cp) {
+                setCpShippingModes(cp.shipping_modes ?? []);
+                setCpRoutes(cp.route_coverage ?? {});
+                setCpLastMile(cp.last_mile_areas ?? []);
+                setCpOtdRate(cp.on_time_delivery_rate != null ? String(cp.on_time_delivery_rate) : '');
+                setCpDamageRate(cp.damage_rate != null ? String(cp.damage_rate) : '');
+                setCpLicenceType(cp.carrier_licence_type ?? '');
+                setCpInsuranceGbp(cp.insurance_coverage_gbp != null ? String(cp.insurance_coverage_gbp) : '');
+                setCpInsuranceExpiry(cp.insurance_expiry ?? '');
+                setCpAntiB(cp.anti_bribery_ack);
+                setCpDdCompleted(cp.due_diligence_completed);
+                setCpDdDate(cp.last_due_diligence_date ?? '');
+                setCpNotes(cp.notes ?? '');
+            }
         }
         setLoading(false);
-    }, [companyId, vendorId]);
+    }, [companyId, vendorId, isLogisticsProfile]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -176,6 +219,31 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
         await load();
     };
 
+    const saveCarrierProfile = async () => {
+        if (!vendorId) return;
+        setCpSaving(true);
+        await upsertCarrierProfile(vendorId, {
+            shipping_modes: cpShippingModes,
+            route_coverage: cpRoutes,
+            last_mile_areas: cpLastMile,
+            on_time_delivery_rate: cpOtdRate !== '' ? parseFloat(cpOtdRate) : null,
+            damage_rate: cpDamageRate !== '' ? parseFloat(cpDamageRate) : null,
+            carrier_licence_type: cpLicenceType || null,
+            insurance_coverage_gbp: cpInsuranceGbp !== '' ? parseFloat(cpInsuranceGbp) : null,
+            insurance_expiry: cpInsuranceExpiry || null,
+            anti_bribery_ack: cpAntiB,
+            due_diligence_completed: cpDdCompleted,
+            last_due_diligence_date: cpDdDate || null,
+            notes: cpNotes || null,
+        });
+        await load();
+        setCpSaving(false);
+    };
+
+    const toggleMulti = (arr: string[], val: string, set: (v: string[]) => void) => {
+        set(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
+    };
+
     // ─── Helpers ────────────────────────────────────────────────────────
     const riskColor = (level: VendorRiskLevel) =>
         RISK_LEVELS.find(r => r.id === level)?.color ?? '#888';
@@ -199,6 +267,7 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
     const tabs: { id: Tab; label: string; icon: typeof Building2 }[] = [
         { id: 'overview', label: 'Overview', icon: Building2 },
         { id: 'risk', label: 'Risk Profile', icon: Shield },
+        ...(isLogisticsProfile ? [{ id: 'carrier' as Tab, label: 'Carrier Details', icon: Truck }] : []),
         { id: 'documents', label: 'Security Documents', icon: FileText },
         { id: 'questionnaires', label: 'Questionnaires', icon: ClipboardList },
     ];
@@ -356,6 +425,134 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
                             <span className="text-xs dash-text-secondary">Tier: <strong className="capitalize">{riskProfile.risk_tier}</strong></span>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ─── Tab: Carrier Details ─────────────────────────────────────── */}
+            {activeTab === 'carrier' && isLogisticsProfile && (
+                <div className="space-y-5">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold dash-text uppercase tracking-wider">Carrier Profile</h3>
+                        <button onClick={saveCarrierProfile} disabled={cpSaving}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-md disabled:opacity-50 transition-all"
+                            style={{ background: 'var(--color-accent)' }}>
+                            <Save size={14} />{cpSaving ? 'Saving…' : 'Save'}
+                        </button>
+                    </div>
+
+                    {/* Shipping Modes */}
+                    <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm space-y-3">
+                        <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wider">Shipping Modes</p>
+                        <div className="flex flex-wrap gap-2">
+                            {CARRIER_SHIPPING_MODES.map(m => (
+                                <button key={m} onClick={() => toggleMulti(cpShippingModes, m, setCpShippingModes)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${cpShippingModes.includes(m) ? 'text-white border-transparent' : 'dash-text-secondary dash-border hover:dash-text'}`}
+                                    style={cpShippingModes.includes(m) ? { background: 'var(--color-accent)', borderColor: 'var(--color-accent)' } : {}}>
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Route Coverage */}
+                    <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm space-y-3">
+                        <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wider">Route Coverage</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {CARRIER_ROUTE_KEYS.map(({ key, label }) => (
+                                <label key={key} className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={!!cpRoutes[key]}
+                                        onChange={e => setCpRoutes(prev => ({ ...prev, [key]: e.target.checked }))}
+                                        className="rounded" />
+                                    <span className="text-sm dash-text">{label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Last-Mile Areas */}
+                    <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm space-y-3">
+                        <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wider">Last-Mile Areas</p>
+                        <div className="flex flex-wrap gap-2">
+                            {CARRIER_LAST_MILE_AREAS.map(a => (
+                                <button key={a} onClick={() => toggleMulti(cpLastMile, a, setCpLastMile)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${cpLastMile.includes(a) ? 'text-white border-transparent' : 'dash-text-secondary dash-border hover:dash-text'}`}
+                                    style={cpLastMile.includes(a) ? { background: 'var(--color-accent)', borderColor: 'var(--color-accent)' } : {}}>
+                                    {a}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Performance & Insurance */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm space-y-4">
+                            <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wider">Performance</p>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">On-Time Delivery Rate (%)</label>
+                                <input type="number" min={0} max={100} step={0.1} value={cpOtdRate}
+                                    onChange={e => setCpOtdRate(e.target.value)}
+                                    placeholder="e.g. 94.5"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none focus:ring-1"
+                                    style={{ '--tw-ring-color': 'var(--color-accent)' } as any} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Damage Rate (%)</label>
+                                <input type="number" min={0} max={100} step={0.01} value={cpDamageRate}
+                                    onChange={e => setCpDamageRate(e.target.value)}
+                                    placeholder="e.g. 0.3"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none focus:ring-1"
+                                    style={{ '--tw-ring-color': 'var(--color-accent)' } as any} />
+                            </div>
+                        </div>
+                        <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm space-y-4">
+                            <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wider">Insurance & Licence</p>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Carrier Licence Type</label>
+                                <input type="text" value={cpLicenceType} onChange={e => setCpLicenceType(e.target.value)}
+                                    placeholder="e.g. NCS_agent, NCAA_approved"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none focus:ring-1"
+                                    style={{ '--tw-ring-color': 'var(--color-accent)' } as any} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Insurance Coverage (£)</label>
+                                <input type="number" min={0} value={cpInsuranceGbp} onChange={e => setCpInsuranceGbp(e.target.value)}
+                                    placeholder="e.g. 1000000"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none focus:ring-1"
+                                    style={{ '--tw-ring-color': 'var(--color-accent)' } as any} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Insurance Expiry</label>
+                                <input type="date" value={cpInsuranceExpiry} onChange={e => setCpInsuranceExpiry(e.target.value)}
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Due Diligence */}
+                    <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm space-y-4">
+                        <p className="text-xs font-semibold dash-text-secondary uppercase tracking-wider">Due Diligence</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" checked={cpAntiB} onChange={e => setCpAntiB(e.target.checked)} className="rounded w-4 h-4" />
+                                <span className="text-sm dash-text">Anti-bribery acknowledgement received</span>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" checked={cpDdCompleted} onChange={e => setCpDdCompleted(e.target.checked)} className="rounded w-4 h-4" />
+                                <span className="text-sm dash-text">Due diligence completed</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Last Due Diligence Date</label>
+                            <input type="date" value={cpDdDate} onChange={e => setCpDdDate(e.target.value)}
+                                className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Notes</label>
+                            <textarea value={cpNotes} onChange={e => setCpNotes(e.target.value)} rows={3}
+                                placeholder="Any additional notes about this carrier…"
+                                className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none resize-none" />
+                        </div>
+                    </div>
                 </div>
             )}
 
