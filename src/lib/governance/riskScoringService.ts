@@ -22,6 +22,10 @@ export interface CompanyRiskPosture {
   audit_signal_score: number;
   highest_risk_level: string;
   open_risks_count: number;
+  critical_risks_count: number;
+  high_risks_count: number;
+  medium_risks_count: number;
+  low_risks_count: number;
   updated_at: string;
 }
 
@@ -175,6 +179,8 @@ export async function recomputeCompanyRiskPosture(companyId: string): Promise<Co
                        openRisks.some((r: { status: string; risk_level: string }) => r.risk_level === 'high') ? 'high' :
                        openRisks.some((r: { status: string; risk_level: string }) => r.risk_level === 'medium') ? 'medium' : 'low';
 
+  const countByLevel = (level: string) => openRisks.filter((r: { risk_level: string }) => r.risk_level === level).length;
+
   const upsertData: any = {
     company_id: companyId,
     posture_score: Math.round(postureScore * 100) / 100,
@@ -185,6 +191,10 @@ export async function recomputeCompanyRiskPosture(companyId: string): Promise<Co
     audit_signal_score: Math.round(aud * 100) / 100,
     highest_risk_level: highestLevel,
     open_risks_count: openRisks.length,
+    critical_risks_count: countByLevel('critical'),
+    high_risks_count: countByLevel('high'),
+    medium_risks_count: countByLevel('medium'),
+    low_risks_count: countByLevel('low'),
     updated_at: new Date().toISOString(),
   };
 

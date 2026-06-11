@@ -12,6 +12,7 @@ export type CapaRecord = {
   root_cause: string | null; due_date: string | null; owner_name: string | null;
   created_by: string | null; created_at: string; closed_at: string | null;
   control_id: string | null; control_code: string | null;
+  source_risk_id: string | null;
   actions?: CapaAction[];
 };
 
@@ -27,7 +28,7 @@ export async function getCapas(companyId: string): Promise<CapaRecord[]> {
   return data ?? [];
 }
 
-export async function createCapa(companyId: string, userId: string, c: { title: string; description: string; source: CapaSource; capa_type: CapaType; priority?: string; due_date?: string; owner_name?: string; root_cause?: string; controlId?: string; controlCode?: string }): Promise<CapaRecord | null> {
+export async function createCapa(companyId: string, userId: string, c: { title: string; description: string; source: CapaSource; capa_type: CapaType; priority?: string; due_date?: string; owner_name?: string; root_cause?: string; controlId?: string; controlCode?: string; sourceRiskId?: string }): Promise<CapaRecord | null> {
   const year = new Date().getFullYear();
   const rand = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
   const { data, error } = await (supabase as any).from('capa_records').insert({
@@ -35,6 +36,7 @@ export async function createCapa(companyId: string, userId: string, c: { title: 
     source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium', status: 'open',
     root_cause: c.root_cause || null, due_date: c.due_date || null, owner_name: c.owner_name || null, created_by: userId,
     control_id: c.controlId || null, control_code: c.controlCode || null,
+    source_risk_id: c.sourceRiskId || null,
   }).select().single();
   if (error) { logger.error('createCapa:', error); return null; }
   try { await recordAuditEvent({ userId, companyId, action: 'capa.created', entityType: 'capa', entityId: data.id, metadata: { title: c.title, source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium', control_id: c.controlId ?? null }, captureEvidence: false }); } catch { /* non-blocking */ }

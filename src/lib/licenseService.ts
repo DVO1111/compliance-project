@@ -408,12 +408,25 @@ export async function fetchRenewalTasks(licenseId: string): Promise<RenewalTask[
     return (data ?? []) as any as RenewalTask[];
 }
 
-export async function toggleTask(taskId: string, completed: boolean, userId: string): Promise<void> {
-    await supabase.from('license_renewal_tasks' as any).update({
+export async function toggleTask(taskId: string, completed: boolean, userId: string, companyId?: string): Promise<void> {
+    const { data } = await (supabase.from('license_renewal_tasks' as any).update({
         is_completed: completed,
         completed_at: completed ? new Date().toISOString() : null,
         completed_by: completed ? userId : null,
-    } as any).eq('id', taskId);
+    } as any).eq('id', taskId).select('id, license_id, title') as any);
+    if (companyId && data?.[0]) {
+        try {
+            await recordAuditEvent({
+                userId,
+                companyId,
+                action: completed ? 'license.renewal_task_completed' : 'license.renewal_task_reopened',
+                entityType: 'license_renewal_task',
+                entityId: taskId,
+                metadata: { license_id: data[0].license_id, task_title: data[0].title },
+                captureEvidence: false,
+            });
+        } catch { /* non-blocking */ }
+    }
 }
 
 export async function updateLicenseStatus(licenseId: string, status: string, renewalStatus?: string, companyId?: string, userId?: string): Promise<void> {

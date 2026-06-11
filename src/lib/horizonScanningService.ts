@@ -568,6 +568,19 @@ export async function createObligationFromAlert(
     status: 'identified',
   });
 
+  if (obligation?.id) {
+    try {
+      await recordAuditEvent({
+        companyId,
+        userId,
+        action: 'horizon.obligation_tracked',
+        entityType: 'regulatory_obligation',
+        entityId: obligation.id,
+        metadata: { alert_id: alert.id, alert_title: alert.title, source: alert.source },
+      });
+    } catch { /* non-blocking */ }
+  }
+
   return { created: true, obligationId: obligation?.id ?? null };
 }
 

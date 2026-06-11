@@ -372,7 +372,80 @@ export async function uploadVendorDocument(
     });
   if (error) { logger.error('uploadVendorDocument:', error); return false; }
   try { await recordAuditEvent({ userId: uploadedBy, companyId, action: 'vendor.document_uploaded', entityType: 'vendor', entityId: vendorId, metadata: { file_name: file.fileName, document_type: documentType }, captureEvidence: false }); } catch { /* non-blocking */ }
+  // Mirror compliance documents into framework_evidence for Control Health visibility (non-blocking)
+  await maybeMirrorVendorDocToFrameworkEvidence(companyId, vendorId, uploadedBy, file, documentType);
   return true;
+}
+
+const DOC_TYPE_KEYWORDS: Record<VendorDocumentType, string[]> = {
+  soc2:     ['soc', 'service organisation', 'third.party', 'vendor'],
+  iso27001: ['information security', 'iso 27001', 'isms', 'vendor'],
+  pentest:  ['penetration', 'security test', 'vulnerability'],
+  dpa:      ['data protection', 'data processing', 'gdpr', 'privacy'],
+  nda:      ['confidentiality', 'nda', 'vendor'],
+  insurance: ['insurance', 'liability'],
+  other:    ['vendor', 'supplier', 'third.party'],
+};
+
+async function maybeMirrorVendorDocToFrameworkEvidence(
+  companyId: string,
+  vendorId: string,
+  userId: string,
+  file: { fileName: string; fileUrl: string },
+  documentType: VendorDocumentType,
+): Promise<void> {
+  try {
+    const keywords = DOC_TYPE_KEYWORDS[documentType] ?? ['vendor'];
+
+    const { data: wf } = await (supabase as any)
+      .from('workspace_frameworks')
+      .select('framework_id')
+      .eq('company_id', companyId);
+    if (!wf || wf.length === 0) return;
+
+    const frameworkIds = wf.map((r: any) => r.framework_id);
+
+    const { data: vendor } = await (supabase as any)
+      .from('vendors')
+      .select('name')
+      .eq('id', vendorId)
+      .maybeSingle();
+    const vendorName: string = vendor?.name ?? 'Unknown Vendor';
+
+    const { data: controls } = await (supabase as any)
+      .from('framework_controls')
+      .select('id')
+      .in('framework_id', frameworkIds)
+      .eq('is_active', true)
+      .or(keywords.slice(0, 3).map((k: string) => `title.ilike.%${k}%`).join(','))
+      .limit(2);
+
+    if (!controls || controls.length === 0) return;
+
+    const { addEvidence } = await import('./controlMonitoringService');
+    for (const ctrl of controls) {
+      const { data: existing } = await (supabase as any)
+        .from('framework_evidence')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('control_id', ctrl.id)
+        .eq('file_url', file.fileUrl)
+        .maybeSingle();
+
+      if (existing?.id) continue;
+
+      await addEvidence(companyId, ctrl.id, {
+        title: `Vendor Document: ${file.fileName} (${vendorName})`,
+        description: `Uploaded via Vendor Management — ${vendorName}. Document type: ${documentType}`,
+        evidence_type: 'document',
+        file_name: file.fileName,
+        file_url: file.fileUrl,
+        uploaded_by: userId,
+      });
+    }
+  } catch (err) {
+    logger.warn('maybeMirrorVendorDocToFrameworkEvidence: non-blocking', err);
+  }
 }
 
 export async function unlinkVendorDocument(docId: string, companyId: string, userId: string): Promise<boolean> {

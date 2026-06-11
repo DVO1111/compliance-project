@@ -548,6 +548,7 @@ async function maybePropagateTestToRiskRegister(
     const isFailure = status === 'fail';
     const riskLevel = isFailure ? 'high' : 'medium';
 
+    let riskId: string | null = existingRiskId;
     if (existingRiskId) {
       await updateRisk(companyId, userId, existingRiskId, { risk_level: riskLevel, status: 'identified' });
     } else {
@@ -558,7 +559,21 @@ async function maybePropagateTestToRiskRegister(
         risk_level: riskLevel,
         status: 'identified',
       });
-      if (risk) await addRiskLink(companyId, userId, risk.id, 'control', controlId);
+      if (risk) {
+        await addRiskLink(companyId, userId, risk.id, 'control', controlId);
+        riskId = risk.id;
+      }
+    }
+
+    // Back-populate source_risk_id on the associated open CAPA for this control
+    if (riskId) {
+      await client
+        .from('capa_records')
+        .update({ source_risk_id: riskId })
+        .eq('company_id', companyId)
+        .eq('control_id', controlId)
+        .is('source_risk_id', null)
+        .neq('status', 'closed');
     }
   } catch (err) {
     logger.warn('maybePropagateTestToRiskRegister: non-blocking', err);

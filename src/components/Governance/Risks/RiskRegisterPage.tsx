@@ -185,9 +185,20 @@ export default function RiskRegisterPage() {
                     </div>
 
                     <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm">
-                        <p className="text-[11px] font-bold dash-text-tertiary uppercase tracking-wider mb-1">Open Risks</p>
-                        <p className="text-3xl font-bold dash-text">{posture.open_risks_count}</p>
-                        <p className="text-xs dash-text-tertiary mt-1">Requires mitigation attention</p>
+                        <p className="text-[11px] font-bold dash-text-tertiary uppercase tracking-wider mb-2">Open Risks — {posture.open_risks_count} total</p>
+                        <div className="space-y-1.5">
+                            {[
+                                { label: 'Critical', count: posture.critical_risks_count ?? 0, color: 'text-red-600 bg-red-50' },
+                                { label: 'High',     count: posture.high_risks_count     ?? 0, color: 'text-orange-600 bg-orange-50' },
+                                { label: 'Medium',   count: posture.medium_risks_count   ?? 0, color: 'text-amber-600 bg-amber-50' },
+                                { label: 'Low',      count: posture.low_risks_count      ?? 0, color: 'text-emerald-600 bg-emerald-50' },
+                            ].map(({ label, count, color }) => (
+                                <div key={label} className="flex items-center justify-between">
+                                    <span className="text-xs dash-text-secondary">{label}</span>
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${color}`}>{count}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     <div className="dash-card border dash-border rounded-2xl p-5 shadow-sm bg-[var(--color-surface-alt)]">

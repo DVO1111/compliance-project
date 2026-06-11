@@ -321,6 +321,11 @@ export async function updateReadinessItem(
     await maybePropagateToRiskRegister(companyId, userId, item, status, data.id);
   }
 
+  // Mirror evidence into framework_evidence so Control Health dashboard picks it up (non-blocking)
+  if (evidenceName && evidenceUrl && item && (status === 'ready' || status === 'in_progress')) {
+    await maybeMirrorToFrameworkEvidence(companyId, userId, item, evidenceName, evidenceUrl);
+  }
+
   return true;
 }
 
@@ -370,6 +375,77 @@ async function maybePropagateToRiskRegister(
     }
   } catch (err) {
     logger.warn('maybePropagateToRiskRegister: non-blocking', err);
+  }
+}
+
+const AREA_KEYWORDS: Record<string, string[]> = {
+  'Site & Facility':                   ['facility', 'premises', 'site', 'building', 'infrastructure'],
+  'Personnel & Training':              ['personnel', 'training', 'staff', 'competence', 'qualification'],
+  'Production Process':                ['production', 'manufacturing', 'process', 'batch'],
+  'Quality Control & Laboratory':      ['quality', 'laboratory', 'testing', 'analytical', 'qc'],
+  'Sanitation & Hygiene':              ['sanitation', 'hygiene', 'cleaning', 'pest'],
+  'Documentation & Records':           ['documentation', 'records', 'document control'],
+  'Warehouse & Materials':             ['warehouse', 'storage', 'materials', 'inventory'],
+  'Water & Utilities':                 ['water', 'utilities', 'hvac', 'environment'],
+  'NAFDAC-Specific Requirements':      ['regulatory', 'compliance', 'registration', 'nafdac'],
+};
+
+async function maybeMirrorToFrameworkEvidence(
+  companyId: string,
+  userId: string,
+  item: InspectionItem,
+  evidenceName: string,
+  evidenceUrl: string,
+): Promise<void> {
+  try {
+    const client = await db() as any;
+    const keywords = AREA_KEYWORDS[item.area] ?? [];
+    if (keywords.length === 0) return;
+
+    // Find enabled framework controls for this company that match the GMP area
+    const { data: wf } = await client
+      .from('workspace_frameworks')
+      .select('framework_id')
+      .eq('company_id', companyId);
+    if (!wf || wf.length === 0) return;
+
+    const frameworkIds = wf.map((r: any) => r.framework_id);
+
+    // Search controls whose title or description contains any area keyword (limit to 3 matches)
+    const { data: controls } = await client
+      .from('framework_controls')
+      .select('id, title')
+      .in('framework_id', frameworkIds)
+      .eq('is_active', true)
+      .or(keywords.slice(0, 3).map((k: string) => `title.ilike.%${k}%`).join(','))
+      .limit(3);
+
+    if (!controls || controls.length === 0) return;
+
+    const { addEvidence } = await import('./controlMonitoringService');
+    for (const ctrl of controls) {
+      // Dedup: skip if this exact file_url is already attached
+      const { data: existing } = await client
+        .from('framework_evidence')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('control_id', ctrl.id)
+        .eq('file_url', evidenceUrl)
+        .maybeSingle();
+
+      if (existing?.id) continue;
+
+      await addEvidence(companyId, ctrl.id, {
+        title: `GMP Evidence: ${item.title}`,
+        description: `Linked from GMP Inspection Readiness — ${item.area}. Original item: ${item.id}`,
+        evidence_type: 'document',
+        file_name: evidenceName,
+        file_url: evidenceUrl,
+        uploaded_by: userId,
+      });
+    }
+  } catch (err) {
+    logger.warn('maybeMirrorToFrameworkEvidence: non-blocking', err);
   }
 }
 
