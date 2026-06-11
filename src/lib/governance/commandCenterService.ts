@@ -60,15 +60,15 @@ export async function getDashboardMetrics(companyId: string): Promise<DashboardM
       .eq('status', 'pending')
   ]);
 
-  const postureRaw = postureRes.data as any;
-  const posture: import('./riskScoringService').CompanyRiskPosture | null = postureRaw
-    ? {
-        ...postureRaw,
-        critical_risks_count: postureRaw.critical_risks_count ?? 0,
-        high_risks_count:     postureRaw.high_risks_count     ?? 0,
-        medium_risks_count:   postureRaw.medium_risks_count   ?? 0,
-        low_risks_count:      postureRaw.low_risks_count      ?? 0,
-      }
+  const postureRow = postureRes.data as any;
+  const posture: CompanyRiskPosture | null = postureRow
+    ? ({
+        ...postureRow,
+        critical_risks_count: postureRow.critical_risks_count ?? 0,
+        high_risks_count:     postureRow.high_risks_count     ?? 0,
+        medium_risks_count:   postureRow.medium_risks_count   ?? 0,
+        low_risks_count:      postureRow.low_risks_count      ?? 0,
+      } as CompanyRiskPosture)
     : null;
 
   return {
