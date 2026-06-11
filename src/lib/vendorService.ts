@@ -225,13 +225,93 @@ export async function getVendorRiskProfile(vendorId: string): Promise<VendorRisk
 
 export async function upsertVendorRiskProfile(
   vendorId: string,
-  profile: Partial<Omit<VendorRiskProfile, 'id' | 'vendor_id'>>
+  profile: Partial<Omit<VendorRiskProfile, 'id' | 'vendor_id'>>,
+  companyId?: string,
+  userId?: string
 ): Promise<boolean> {
   const { error } = await (supabase as any)
     .from('vendor_risk_profiles')
     .upsert({ vendor_id: vendorId, ...profile }, { onConflict: 'vendor_id' });
   if (error) { logger.error('upsertVendorRiskProfile:', error); return false; }
+
+  if (companyId && userId &&
+      (profile.risk_score !== undefined || profile.risk_tier !== undefined)) {
+    await maybePropagateVendorRiskToRegister(
+      vendorId, companyId, userId,
+      profile.risk_score ?? null,
+      profile.risk_tier ?? null
+    );
+  }
+
   return true;
+}
+
+const VENDOR_RISK_HIGH_THRESHOLD = 70;
+const VENDOR_RISK_CRITICAL_THRESHOLD = 85;
+
+async function maybePropagateVendorRiskToRegister(
+  vendorId: string,
+  companyId: string,
+  userId: string,
+  riskScore: number | null,
+  riskTier: VendorRiskLevel | null
+): Promise<void> {
+  try {
+    const isHighOrAbove =
+      (riskScore !== null && riskScore >= VENDOR_RISK_HIGH_THRESHOLD) ||
+      riskTier === 'high' || riskTier === 'critical';
+
+    const derivedLevel: 'high' | 'critical' =
+      (riskScore !== null && riskScore >= VENDOR_RISK_CRITICAL_THRESHOLD) ||
+      riskTier === 'critical' ? 'critical' : 'high';
+
+    // Fetch vendor name for the risk title
+    const { data: vendorRow } = await (supabase as any)
+      .from('vendors')
+      .select('name')
+      .eq('id', vendorId)
+      .maybeSingle();
+    const vendorName: string = vendorRow?.name ?? 'Unknown Vendor';
+
+    const { createRisk, updateRisk, addRiskLink } = await import('./governance/riskRegisterService');
+
+    // Find the most recent risk link for this vendor (if any)
+    const { data: links } = await (supabase as any)
+      .from('risk_links')
+      .select('risk_id')
+      .eq('company_id', companyId)
+      .eq('link_type', 'vendor')
+      .eq('linked_entity_id', vendorId)
+      .limit(1);
+
+    const existingRiskId: string | null = links?.[0]?.risk_id ?? null;
+
+    if (isHighOrAbove) {
+      if (existingRiskId) {
+        // Risk already registered — update level in case it escalated
+        await updateRisk(companyId, userId, existingRiskId, {
+          risk_level: derivedLevel,
+          status: 'identified',
+        });
+      } else {
+        const risk = await createRisk(companyId, userId, {
+          title: `Vendor Risk Escalation — ${vendorName}`,
+          description: `"${vendorName}" has a risk score of ${riskScore ?? '—'} (tier: ${riskTier ?? '—'}), exceeding the acceptable threshold. Review vendor due diligence, security posture, and contractual controls.`,
+          risk_category: 'operational',
+          risk_level: derivedLevel,
+          status: 'identified',
+        });
+        if (risk) {
+          await addRiskLink(companyId, userId, risk.id, 'vendor', vendorId);
+        }
+      }
+    } else if (existingRiskId) {
+      // Score dropped below threshold — downgrade linked risk to monitored
+      await updateRisk(companyId, userId, existingRiskId, { status: 'monitored' });
+    }
+  } catch (err) {
+    logger.warn('maybePropagateVendorRiskToRegister: non-blocking', err);
+  }
 }
 
 // ─── Vendor Documents (Archive link) ────────────────────────────────────────

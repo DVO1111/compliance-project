@@ -172,7 +172,7 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
             security_review_status: rpReviewStatus,
             last_review_date: rpLastReview || null,
             next_review_date: rpNextReview || null,
-        });
+        }, companyId, userId);
         await load();
         setRpSaving(false);
     };
