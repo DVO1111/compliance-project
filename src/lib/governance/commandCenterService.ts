@@ -60,8 +60,19 @@ export async function getDashboardMetrics(companyId: string): Promise<DashboardM
       .eq('status', 'pending')
   ]);
 
+  const postureRaw = postureRes.data as any;
+  const posture: import('./riskScoringService').CompanyRiskPosture | null = postureRaw
+    ? {
+        ...postureRaw,
+        critical_risks_count: postureRaw.critical_risks_count ?? 0,
+        high_risks_count:     postureRaw.high_risks_count     ?? 0,
+        medium_risks_count:   postureRaw.medium_risks_count   ?? 0,
+        low_risks_count:      postureRaw.low_risks_count      ?? 0,
+      }
+    : null;
+
   return {
-    posture: postureRes.data,
+    posture,
     overdueAuditsCount: auditsRes.count || 0,
     aiGovernance: {
       flaggedUsage: aiUsageRes.count || 0,
