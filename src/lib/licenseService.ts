@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { recordAuditEvent } from './auditService';
+import { logger } from './logger';
 
 /* ═══════════════════════════════════════════════════════════════
    License Expiry Auto-Pilot — Service Layer
@@ -271,6 +272,77 @@ export function generateRenewalTaskDates(expiryDate: string): { title: string; d
     });
 }
 
+// ── Cross-module propagation ─────────────────────────────────
+
+async function maybePropagateToRiskAndObligation(
+    license: License,
+    companyId: string,
+    userId: string,
+    status: LicenseStatus,
+): Promise<void> {
+    try {
+        if (status === 'active') return;
+
+        const isExpired = status === 'expired';
+        const riskLevel = isExpired ? 'critical' : 'high';
+        const riskTitle = isExpired
+            ? `Licence Expired — ${license.product_name}`
+            : `Licence Expiring Soon — ${license.product_name}`;
+
+        const { createRisk, updateRisk, addRiskLink } = await import('./governance/riskRegisterService');
+
+        // Dedup: check for existing risk link on this license
+        const { data: links } = await (supabase as any)
+            .from('risk_links')
+            .select('risk_id')
+            .eq('company_id', companyId)
+            .eq('link_type', 'license')
+            .eq('linked_entity_id', license.id)
+            .limit(1);
+
+        const existingRiskId: string | null = links?.[0]?.risk_id ?? null;
+
+        if (existingRiskId) {
+            await updateRisk(companyId, userId, existingRiskId, {
+                risk_level: riskLevel,
+                status: 'identified',
+                title: riskTitle,
+            });
+        } else {
+            const risk = await createRisk(companyId, userId, {
+                title: riskTitle,
+                description: `Licence "${license.product_name}" (${license.nafdac_reg_number}) issued by ${license.issuing_authority} ${isExpired ? 'has expired' : `expires on ${license.expiry_date}`}. Immediate renewal action required.`,
+                risk_category: 'compliance',
+                risk_level: riskLevel,
+                status: 'identified',
+            });
+            if (risk) await addRiskLink(companyId, userId, risk.id, 'license', license.id);
+        }
+
+        // Obligation — dedup by title
+        const obligationTitle = `Licence Renewal: ${license.product_name} (${license.nafdac_reg_number})`;
+        const { data: existing } = await (supabase as any)
+            .from('regulatory_obligations')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('title', obligationTitle)
+            .maybeSingle();
+
+        if (!existing?.id) {
+            const { createObligation } = await import('./governance/obligationService');
+            await createObligation(companyId, userId, {
+                title: obligationTitle,
+                description: `${license.issuing_authority} registration certificate for "${license.product_name}" (Reg. No: ${license.nafdac_reg_number}) ${isExpired ? 'has expired' : `expires on ${license.expiry_date}`}. Renewal must be completed to remain compliant.`,
+                jurisdiction: 'Nigeria',
+                category: 'regulatory',
+                status: 'identified',
+            });
+        }
+    } catch (err) {
+        logger.warn('licenseService: maybePropagateToRiskAndObligation non-blocking', err);
+    }
+}
+
 // ── DB Operations ────────────────────────────────────────────
 
 export async function fetchLicenses(companyId: string): Promise<License[]> {
@@ -304,6 +376,9 @@ export async function createLicense(license: Omit<License, 'id' | 'created_at' |
     if (status === 'expiring') {
         await generateAndSaveRenewalTasks(saved.id, saved.expiry_date);
     }
+
+    // Propagate expiring/expired licences to Risk Register + Obligations
+    await maybePropagateToRiskAndObligation(saved, license.company_id, license.uploaded_by, status);
 
     try { await recordAuditEvent({ userId: license.uploaded_by, companyId: license.company_id, action: 'license.created', entityType: 'license', entityId: saved.id, metadata: { product_name: license.product_name, nafdac_reg_number: license.nafdac_reg_number, category: license.category, expiry_date: license.expiry_date }, captureEvidence: false }); } catch { /* non-blocking */ }
     return saved;
@@ -347,6 +422,12 @@ export async function updateLicenseStatus(licenseId: string, status: string, ren
     await supabase.from('licenses' as any).update(update).eq('id', licenseId);
     if (companyId && userId) {
         try { await recordAuditEvent({ userId, companyId, action: 'license.status_updated', entityType: 'license', entityId: licenseId, metadata: { status, renewal_status: renewalStatus }, captureEvidence: false }); } catch { /* non-blocking */ }
+
+        // Propagate expiry changes to Risk Register + Obligations
+        if (status === 'expiring' || status === 'expired') {
+            const { data: lic } = await (supabase as any).from('licenses').select('*').eq('id', licenseId).maybeSingle();
+            if (lic) await maybePropagateToRiskAndObligation(lic as License, companyId, userId, status as LicenseStatus);
+        }
     }
 }
 

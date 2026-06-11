@@ -520,6 +520,57 @@ export async function resolveControlFlag(flagId: string, companyId: string, user
   }
 }
 
+/* ── Alert → Obligation Bridge ───────────────────────────────── */
+
+const SOURCE_TO_JURISDICTION: Record<string, string> = {
+  FDA: 'United States', EMA: 'European Union', MHRA: 'United Kingdom',
+  TGA: 'Australia', NAFDAC: 'Nigeria', SON: 'Nigeria',
+  'Health Canada': 'Canada', HMRC: 'United Kingdom', NCS: 'Nigeria',
+  ICO: 'United Kingdom', NITDA: 'Nigeria', NCAA: 'Nigeria',
+  TAPA: 'International', ECJU: 'United Kingdom',
+  'C-TPAT': 'United States', CBP: 'United States',
+};
+
+const ALERT_TYPE_TO_CATEGORY: Record<string, string> = {
+  guidance_update: 'regulatory', enforcement_action: 'regulatory',
+  warning_letter: 'regulatory', consultation: 'regulatory', recall: 'operational',
+};
+
+/**
+ * Creates a regulatory obligation from a horizon scanning alert.
+ * Dedup-safe: if an obligation with the same derived title already exists
+ * for this company it returns the existing record without creating a duplicate.
+ */
+export async function createObligationFromAlert(
+  alert: RegulatoryAlert,
+  companyId: string,
+  userId: string
+): Promise<{ created: boolean; obligationId: string | null }> {
+  const title = `Regulatory Alert: ${alert.title}`;
+
+  // Dedup guard — avoid creating duplicate obligations for the same alert
+  const { data: existing } = await (supabase as any)
+    .from('regulatory_obligations')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('title', title)
+    .maybeSingle();
+
+  if (existing?.id) return { created: false, obligationId: existing.id };
+
+  const { createObligation } = await import('./governance/obligationService');
+
+  const obligation = await createObligation(companyId, userId, {
+    title,
+    description: `${alert.body}\n\nSource: ${alert.source} | Type: ${alert.alertType.replace(/_/g, ' ')} | Published: ${new Date(alert.publishedAt).toLocaleDateString()}`,
+    jurisdiction: SOURCE_TO_JURISDICTION[alert.source] ?? alert.source,
+    category: ALERT_TYPE_TO_CATEGORY[alert.alertType] ?? 'regulatory',
+    status: 'identified',
+  });
+
+  return { created: true, obligationId: obligation?.id ?? null };
+}
+
 /* ── Logistics Horizon Scanning ──────────────────────────────── */
 
 function generateLogisticsSampleAlerts(): RegulatoryAlert[] {

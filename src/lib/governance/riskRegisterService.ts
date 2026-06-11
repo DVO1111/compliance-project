@@ -10,7 +10,7 @@ import { logger } from '../logger';
 export type RiskCategory = 'security' | 'privacy' | 'operational' | 'financial' | 'legal' | 'compliance';
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type RiskStatus = 'identified' | 'mitigating' | 'monitored' | 'closed';
-export type RiskLinkType = 'control' | 'policy' | 'vendor' | 'audit_request' | 'automation_test';
+export type RiskLinkType = 'control' | 'policy' | 'vendor' | 'audit_request' | 'automation_test' | 'license';
 
 export interface Risk {
   id: string;

@@ -93,6 +93,8 @@ export interface ControlHealth {
   expiringEvidenceCount: number;
   ownerId: string | null;
   testIntervalDays: number;
+  openFlagCount: number;
+  criticalFlagCount: number;
 }
 
 export interface FrameworkHealth {
@@ -132,7 +134,8 @@ function computeStatus(
   latestTest: TestLogRow | null,
   evidence: EvidenceRow[],
   config: ControlConfigRow | null,
-  severityHint: string
+  severityHint: string,
+  openFlags: { severity: string }[]
 ): { status: ControlStatus; daysOverdue: number | null; nextDue: string | null } {
   if (config && !config.is_applicable) {
     return { status: 'not_applicable', daysOverdue: null, nextDue: null };
@@ -145,6 +148,10 @@ function computeStatus(
   const intervalDays = config?.test_interval_days ?? defaultInterval;
 
   if (!latestTest) {
+    // Open critical flag on untested control → mark failing so it surfaces
+    if (openFlags.some(f => f.severity === 'critical')) {
+      return { status: 'failing', daysOverdue: null, nextDue: null };
+    }
     return { status: 'untested', daysOverdue: null, nextDue: null };
   }
 
@@ -185,6 +192,14 @@ function computeStatus(
 
   if (expiringCount > 0) {
     return { status: 'evidence_expiring', daysOverdue: null, nextDue: nextDueDate.toISOString().split('T')[0] };
+  }
+
+  // Degrade an otherwise-compliant control if it has open regulatory flags
+  if (openFlags.some(f => f.severity === 'critical')) {
+    return { status: 'failing', daysOverdue: null, nextDue: nextDueDate.toISOString().split('T')[0] };
+  }
+  if (openFlags.some(f => f.severity === 'warning')) {
+    return { status: 'partial', daysOverdue: null, nextDue: nextDueDate.toISOString().split('T')[0] };
   }
 
   return { status: 'compliant', daysOverdue: null, nextDue: nextDueDate.toISOString().split('T')[0] };
@@ -281,6 +296,20 @@ export async function getCompanyHealthReport(companyId: string): Promise<Company
       configByControl.set(c.control_id, c);
     }
 
+    // 6b. Get open regulatory update flags for these controls
+    const { data: allFlags } = await client
+      .from('regulatory_update_control_flags')
+      .select('control_id, severity')
+      .eq('company_id', companyId)
+      .eq('status', 'flagged')
+      .in('control_id', controlIds);
+
+    const flagsByControl = new Map<string, { severity: string }[]>();
+    for (const f of (allFlags ?? []) as { control_id: string; severity: string }[]) {
+      if (!flagsByControl.has(f.control_id)) flagsByControl.set(f.control_id, []);
+      flagsByControl.get(f.control_id)!.push({ severity: f.severity });
+    }
+
     // 7. Build framework map
     const fwMap = new Map<string, any>();
     for (const fw of frameworks) fwMap.set(fw.id, fw);
@@ -317,8 +346,9 @@ export async function getCompanyHealthReport(companyId: string): Promise<Company
       const latestTest = latestTests.get(ctrl.id) ?? null;
       const evidence = evidenceByControl.get(ctrl.id) ?? [];
       const config = configByControl.get(ctrl.id) ?? null;
+      const openFlags = flagsByControl.get(ctrl.id) ?? [];
 
-      const { status, daysOverdue, nextDue } = computeStatus(latestTest, evidence, config, ctrl.severity);
+      const { status, daysOverdue, nextDue } = computeStatus(latestTest, evidence, config, ctrl.severity, openFlags);
 
       const defaultInterval = ctrl.severity === 'Red' ? 180 : 365;
       const expiringCount = evidence.filter(e => {
@@ -347,6 +377,8 @@ export async function getCompanyHealthReport(companyId: string): Promise<Company
         expiringEvidenceCount: expiringCount,
         ownerId: config?.owner_id ?? null,
         testIntervalDays: config?.test_interval_days ?? defaultInterval,
+        openFlagCount: openFlags.length,
+        criticalFlagCount: openFlags.filter(f => f.severity === 'critical').length,
       };
 
       const fwHealth = frameworkHealthMap.get(ctrl.framework_id)!;

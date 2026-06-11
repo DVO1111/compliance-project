@@ -9,6 +9,7 @@ import {
     flagAffectedControls,
     getControlFlags,
     resolveControlFlag,
+    createObligationFromAlert,
     LOGISTICS_WATCHLIST,
     type RegulatoryAlert,
     type AffectedContent,
@@ -21,7 +22,7 @@ import {
     Radar, AlertTriangle, FileSearch, CalendarClock,
     Shield, Bell, ChevronRight, ChevronDown, RefreshCw,
     Sparkles, ArrowRight, CheckCircle2, X,
-    ShieldAlert, Check, Radio,
+    ShieldAlert, Check, Radio, ClipboardList,
 } from 'lucide-react';
 import { logger } from '../../lib/logger';
 
@@ -86,6 +87,10 @@ export default function HorizonScanningPage() {
     const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
     const [flagging, setFlagging] = useState<string | null>(null);
     const [resolving, setResolving] = useState<string | null>(null);
+
+    // Obligation tracking state
+    const [trackedAlertIds, setTrackedAlertIds] = useState<Set<string>>(new Set());
+    const [tracking, setTracking] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -177,6 +182,19 @@ export default function HorizonScanningPage() {
             logger.error(e);
         } finally {
             setResolving(null);
+        }
+    };
+
+    const handleTrackObligation = async (alert: RegulatoryAlert) => {
+        if (!companyId || !user?.id) return;
+        setTracking(alert.id);
+        try {
+            await createObligationFromAlert(alert, companyId, user.id);
+            setTrackedAlertIds(prev => new Set(prev).add(alert.id));
+        } catch (e) {
+            logger.error(e);
+        } finally {
+            setTracking(null);
         }
     };
 
@@ -342,6 +360,21 @@ export default function HorizonScanningPage() {
                                             {isFlagging
                                                 ? <><RefreshCw className="w-3 h-3 animate-spin" /> Scanning…</>
                                                 : <><ShieldAlert className="w-3 h-3" /> {flags.length > 0 ? 'Re-scan GRC Controls' : 'Flag GRC Controls'}</>}
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleTrackObligation(alert)}
+                                            disabled={!!tracking || trackedAlertIds.has(alert.id)}
+                                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 ${
+                                                trackedAlertIds.has(alert.id)
+                                                    ? 'border-[var(--color-success)] text-[var(--color-success)] bg-[var(--color-success)]/10'
+                                                    : 'border-[var(--color-border)] dash-text-secondary hover:border-[var(--color-accent)] hover:dash-accent'
+                                            }`}>
+                                            {tracking === alert.id
+                                                ? <><RefreshCw className="w-3 h-3 animate-spin" /> Tracking…</>
+                                                : trackedAlertIds.has(alert.id)
+                                                ? <><Check className="w-3 h-3" /> Tracked</>
+                                                : <><ClipboardList className="w-3 h-3" /> Track as Obligation</>}
                                         </button>
                                     </div>
                                 </div>
