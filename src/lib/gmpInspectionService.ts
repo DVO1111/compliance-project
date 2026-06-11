@@ -315,7 +315,62 @@ export async function updateReadinessItem(
     entityId: data?.id ?? companyId,   // real UUID from the readiness log row
     metadata: { status, item_id: itemId, item_title: item?.title ?? itemId, area: item?.area, is_critical: item?.isCritical },
   });
+
+  // Propagate critical gaps to the Risk Register (non-blocking)
+  if (item?.isCritical && data?.id) {
+    await maybePropagateToRiskRegister(companyId, userId, item, status, data.id);
+  }
+
   return true;
+}
+
+/**
+ * When a critical GMP item is set to 'gap', auto-creates a risk in the Risk Register
+ * and links it to the readiness entry. When the gap is resolved, closes the risk.
+ * Non-blocking — failure here never prevents the readiness update from completing.
+ */
+async function maybePropagateToRiskRegister(
+  companyId: string,
+  userId: string,
+  item: InspectionItem,
+  newStatus: ReadinessStatus,
+  entryId: string
+): Promise<void> {
+  try {
+    const client = await db();
+    const { createRisk, updateRisk, addRiskLink } = await import('./governance/riskRegisterService');
+
+    // Check if a risk is already linked to this readiness entry (dedup guard)
+    const { data: existingLink } = await (client as any)
+      .from('risk_links')
+      .select('risk_id')
+      .eq('link_type', 'control')
+      .eq('linked_entity_id', entryId)
+      .maybeSingle();
+
+    if (newStatus === 'gap') {
+      if (existingLink?.risk_id) return; // risk already exists for this item
+
+      const risk = await createRisk(companyId, userId, {
+        title: `GMP Critical Gap — ${item.title}`,
+        description: `Critical GMP inspection gap identified in ${item.area}. ${item.description}`,
+        risk_category: 'operational',
+        risk_level: 'critical',
+        status: 'identified',
+      });
+
+      if (risk) {
+        await addRiskLink(companyId, userId, risk.id, 'control', entryId);
+      }
+    } else {
+      // Gap resolved (ready / in_progress / not_applicable) — update linked risk
+      if (!existingLink?.risk_id) return;
+      const resolvedStatus = newStatus === 'ready' ? 'closed' : 'monitored';
+      await updateRisk(companyId, userId, existingLink.risk_id, { status: resolvedStatus });
+    }
+  } catch (err) {
+    logger.warn('maybePropagateToRiskRegister: non-blocking', err);
+  }
 }
 
 /* ── Report computation ────────────────────────────────────────────────────── */
