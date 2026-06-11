@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { validateMutation } from '../validationService';
+import { logger } from '../logger';
 
 export interface RegulatoryObligation {
   id: string;
@@ -11,6 +12,7 @@ export interface RegulatoryObligation {
   jurisdiction: string;
   category: string;
   status: 'identified' | 'implemented' | 'monitored';
+  due_date: string | null;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -148,6 +150,75 @@ export async function linkObligationEntity(
   });
 
   return data;
+}
+
+/**
+ * Find obligations in 'identified' status past their due_date and raise a CAPA for each.
+ * Safe to call on a schedule — deduplicates by checking for an existing open CAPA with the same title.
+ */
+export async function escalateOverdueObligations(companyId: string, userId: string): Promise<number> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data: overdue } = await (supabase
+      .from('regulatory_obligations') as any)
+      .select('id, title, description, jurisdiction, category, due_date')
+      .eq('company_id', companyId)
+      .eq('status', 'identified')
+      .lt('due_date', today)
+      .not('due_date', 'is', null);
+
+    if (!overdue || overdue.length === 0) return 0;
+
+    const { createCapa } = await import('../capaService');
+
+    let escalated = 0;
+    for (const ob of overdue as RegulatoryObligation[]) {
+      try {
+        const capaTitle = `Overdue Obligation: ${ob.title}`;
+
+        // Dedup — check for existing open CAPA with same title
+        const { data: existing } = await (supabase as any)
+          .from('capas')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('title', capaTitle)
+          .neq('status', 'closed')
+          .limit(1);
+
+        if (existing && existing.length > 0) continue;
+
+        await createCapa(companyId, userId, {
+          title: capaTitle,
+          description: `Regulatory obligation "${ob.title}" (${ob.jurisdiction} / ${ob.category}) was due on ${ob.due_date} and remains in 'identified' status. Immediate action required to implement or formally acknowledge this obligation.`,
+          source: 'regulatory_action',
+          capa_type: 'corrective',
+          priority: 'high',
+          due_date: ob.due_date ?? undefined,
+        });
+
+        escalated++;
+      } catch (innerErr) {
+        logger.warn(`escalateOverdueObligations: failed for obligation ${ob.id}`, innerErr);
+      }
+    }
+
+    if (escalated > 0) {
+      await recordAuditEvent({
+        userId,
+        companyId,
+        action: 'obligations.overdue_escalated',
+        entityType: 'regulatory_obligation',
+        entityId: 'batch',
+        metadata: { escalated_count: escalated },
+      });
+    }
+
+    return escalated;
+  } catch (err) {
+    logger.warn('escalateOverdueObligations: non-blocking', err);
+    return 0;
+  }
 }
 
 export async function removeObligationLink(linkId: string, userId: string, companyId: string) {

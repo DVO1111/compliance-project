@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { createJobRun, updateJobRunStatus } from '../platform/governanceJobService';
+import { logger } from '../logger';
 
 export interface CorrelationRule {
   id: string;
@@ -153,9 +154,10 @@ export async function evaluateSignalsAndTriggerEvents(companyId: string, userId:
   }
 
   if (triggeredEvents.length > 0) {
-    const { error } = await (supabase
+    const { data: insertedEvents, error } = await (supabase
       .from('correlation_events') as any)
-      .insert(triggeredEvents);
+      .insert(triggeredEvents)
+      .select('id, rule_id, severity, description');
 
     if (error) throw error;
 
@@ -167,6 +169,9 @@ export async function evaluateSignalsAndTriggerEvents(companyId: string, userId:
       entityId: 'system',
       metadata: { count: triggeredEvents.length }
     });
+
+    // Create a Risk Register entry for each triggered event and backlink it
+    await maybeCreateRisksForEvents(companyId, userId, insertedEvents ?? [], rules);
   }
 
     if (jobId) {
@@ -181,6 +186,42 @@ export async function evaluateSignalsAndTriggerEvents(companyId: string, userId:
   } catch (err: any) {
     if (jobId) await updateJobRunStatus(jobId, 'failed', { errorMessage: err.message, companyId, userId });
     throw err;
+  }
+}
+
+async function maybeCreateRisksForEvents(
+  companyId: string,
+  userId: string,
+  events: { id: string; rule_id: string; severity: string; description: string }[],
+  rules: CorrelationRule[],
+): Promise<void> {
+  try {
+    const { createRisk } = await import('./riskRegisterService');
+    const ruleMap = new Map(rules.map(r => [r.id, r]));
+
+    for (const event of events) {
+      try {
+        const rule = ruleMap.get(event.rule_id);
+        const risk = await createRisk(companyId, userId, {
+          title: `Correlation Alert: ${rule?.rule_name ?? 'Signal Threshold Breached'}`,
+          description: event.description,
+          risk_category: rule?.risk_impact ?? 'operational',
+          risk_level: (event.severity as 'low' | 'medium' | 'high' | 'critical'),
+          status: 'identified',
+        });
+
+        if (risk) {
+          await (supabase.from('correlation_events') as any)
+            .update({ linked_risk_id: risk.id })
+            .eq('id', event.id)
+            .eq('company_id', companyId);
+        }
+      } catch (innerErr) {
+        logger.warn(`maybeCreateRisksForEvents: failed for event ${event.id}`, innerErr);
+      }
+    }
+  } catch (err) {
+    logger.warn('maybeCreateRisksForEvents: non-blocking', err);
   }
 }
 

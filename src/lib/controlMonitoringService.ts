@@ -500,10 +500,68 @@ export async function recordTest(
       }
     }
 
+    // Propagate test result to Risk Register
+    await maybePropagateTestToRiskRegister(companyId, testedBy, controlId, status, client);
+
     return data;
   } catch (err) {
     logger.error('recordTest', err);
     return null;
+  }
+}
+
+async function maybePropagateTestToRiskRegister(
+  companyId: string,
+  userId: string,
+  controlId: string,
+  status: 'pass' | 'fail' | 'partial' | 'not_applicable',
+  client: any,
+): Promise<void> {
+  try {
+    const { createRisk, updateRisk, addRiskLink } = await import('./governance/riskRegisterService');
+
+    const { data: links } = await client
+      .from('risk_links')
+      .select('risk_id')
+      .eq('company_id', companyId)
+      .eq('link_type', 'control')
+      .eq('linked_entity_id', controlId)
+      .limit(1);
+    const existingRiskId: string | null = links?.[0]?.risk_id ?? null;
+
+    if (status === 'pass' || status === 'not_applicable') {
+      // Resolve any open risk linked to this control
+      if (existingRiskId) {
+        await updateRisk(companyId, userId, existingRiskId, { status: 'monitored' });
+      }
+      return;
+    }
+
+    const { data: ctrl } = await client
+      .from('framework_controls')
+      .select('control_code, title')
+      .eq('id', controlId)
+      .maybeSingle();
+
+    const code: string = ctrl?.control_code ?? controlId;
+    const title: string = ctrl?.title ?? 'Unknown Control';
+    const isFailure = status === 'fail';
+    const riskLevel = isFailure ? 'high' : 'medium';
+
+    if (existingRiskId) {
+      await updateRisk(companyId, userId, existingRiskId, { risk_level: riskLevel, status: 'identified' });
+    } else {
+      const risk = await createRisk(companyId, userId, {
+        title: `${isFailure ? 'Control Failure' : 'Partial Control Failure'}: [${code}] ${title}`,
+        description: `Control [${code}] "${title}" recorded a ${status.toUpperCase()} test result on ${new Date().toISOString().split('T')[0]}. Remediation via CAPA has been initiated.`,
+        risk_category: 'compliance',
+        risk_level: riskLevel,
+        status: 'identified',
+      });
+      if (risk) await addRiskLink(companyId, userId, risk.id, 'control', controlId);
+    }
+  } catch (err) {
+    logger.warn('maybePropagateTestToRiskRegister: non-blocking', err);
   }
 }
 
