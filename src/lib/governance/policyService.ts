@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 
 export type PolicyCategory = 'Information Security' | 'Privacy' | 'Human Resources' | 'Operations' | 'Compliance' | 'Legal';
-export type PolicyStatus = 'draft' | 'approved' | 'published' | 'archived';
+export type PolicyStatus = 'draft' | 'under_review' | 'pending_approval' | 'approved' | 'published' | 'archived' | 'retired';
 
 export interface Policy {
     id: string;
@@ -29,10 +29,21 @@ export interface PolicyVersion {
     requires_ack: boolean;
     due_days: number;
     effective_date: string | null;
+    expiry_date: string | null;
     published_at: string | null;
     published_by: string | null;
+    reviewer_id: string | null;
+    approver_id: string | null;
+    submitted_for_review_at: string | null;
+    reviewed_at: string | null;
+    approved_at: string | null;
+    rejected_at: string | null;
+    review_notes: string | null;
     created_by: string | null;
     created_at: string;
+    // joined
+    reviewer?: { full_name: string } | null;
+    approver?: { full_name: string } | null;
 }
 
 export interface PolicyAcknowledgement {
@@ -274,6 +285,118 @@ export const policyService = {
             content_id: versionId,
             created_at: new Date().toISOString()
         });
+
+        if (error) throw error;
+    },
+
+    // ─── Approval Workflow ───────────────────────────────────────────────────
+
+    async submitForReview(versionId: string, reviewerId: string | null, submittedBy: string): Promise<void> {
+        const { error } = await (supabase.from('policy_versions') as any)
+            .update({
+                status: 'under_review',
+                reviewer_id: reviewerId,
+                submitted_for_review_at: new Date().toISOString()
+            })
+            .eq('id', versionId)
+            .eq('status', 'draft');
+
+        if (error) throw error;
+
+        await (supabase.from('audit_logs') as any).insert({
+            user_id: submittedBy,
+            action: 'submit_policy_for_review',
+            entity_type: 'policy_version',
+            entity_id: versionId
+        });
+    },
+
+    async approveVersion(versionId: string, approverId: string, notes?: string): Promise<void> {
+        const { data: ver } = await (supabase.from('policy_versions') as any)
+            .select('policy_id')
+            .eq('id', versionId)
+            .single();
+        if (!ver) throw new Error('Version not found');
+
+        const { error } = await (supabase.from('policy_versions') as any)
+            .update({
+                status: 'approved',
+                approver_id: approverId,
+                approved_at: new Date().toISOString(),
+                review_notes: notes ?? null,
+                reviewed_at: new Date().toISOString()
+            })
+            .eq('id', versionId);
+
+        if (error) throw error;
+
+        // Advance to pending_approval → approved automatically mirrors reviewer → approver flow.
+        // Update policy last_reviewed_at + compute next review due.
+        await (supabase.from('policies') as any)
+            .update({ last_reviewed_at: new Date().toISOString() })
+            .eq('id', ver.policy_id);
+
+        await (supabase.from('audit_logs') as any).insert({
+            user_id: approverId,
+            action: 'approve_policy_version',
+            entity_type: 'policy_version',
+            entity_id: versionId,
+            metadata: { notes }
+        });
+    },
+
+    async rejectVersion(versionId: string, reviewerId: string, notes: string): Promise<void> {
+        const { error } = await (supabase.from('policy_versions') as any)
+            .update({
+                status: 'draft',
+                review_notes: notes,
+                reviewed_at: new Date().toISOString(),
+                rejected_at: new Date().toISOString()
+            })
+            .eq('id', versionId);
+
+        if (error) throw error;
+
+        await (supabase.from('audit_logs') as any).insert({
+            user_id: reviewerId,
+            action: 'reject_policy_version',
+            entity_type: 'policy_version',
+            entity_id: versionId,
+            metadata: { notes }
+        });
+    },
+
+    async retirePolicy(policyId: string, userId: string): Promise<void> {
+        // Archive all published versions first
+        await (supabase.from('policy_versions') as any)
+            .update({ status: 'retired' })
+            .eq('policy_id', policyId)
+            .in('status', ['published', 'approved']);
+
+        const { error } = await (supabase.from('policies') as any)
+            .update({ is_active: false })
+            .eq('id', policyId);
+
+        if (error) throw error;
+
+        await (supabase.from('audit_logs') as any).insert({
+            user_id: userId,
+            action: 'retire_policy',
+            entity_type: 'policy',
+            entity_id: policyId
+        });
+    },
+
+    async scheduleReviewCycle(policyId: string, reviewCycleMonths: number): Promise<void> {
+        const nextDue = new Date();
+        nextDue.setMonth(nextDue.getMonth() + reviewCycleMonths);
+
+        const { error } = await (supabase.from('policies') as any)
+            .update({
+                review_cycle_months: reviewCycleMonths,
+                next_review_due: nextDue.toISOString().split('T')[0]
+            })
+            .eq('id', policyId);
 
         if (error) throw error;
     }

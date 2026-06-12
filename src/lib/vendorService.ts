@@ -530,3 +530,143 @@ export async function upsertCarrierProfile(
   if (error) { logger.error('upsertCarrierProfile:', error); return false; }
   return true;
 }
+
+// ─── Vendor Contracts ────────────────────────────────────────────────────────
+
+export type ContractStatus = 'active' | 'expiring_soon' | 'expired' | 'terminated';
+
+export interface VendorContract {
+  id: string;
+  vendor_id: string;
+  company_id: string;
+  title: string;
+  contract_value: number | null;
+  currency: string;
+  start_date: string | null;
+  expiry_date: string | null;
+  auto_renewal: boolean;
+  notice_period_days: number | null;
+  sla_uptime_pct: number | null;
+  breach_penalty_clause: boolean;
+  risk_score: number;
+  status: ContractStatus;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function deriveContractStatus(expiryDate: string | null, current?: ContractStatus): ContractStatus {
+  if (!expiryDate) return 'active';
+  const expiry = new Date(expiryDate);
+  const now = new Date();
+  const daysUntilExpiry = Math.floor((expiry.getTime() - now.getTime()) / 86_400_000);
+  if (daysUntilExpiry < 0) return 'expired';
+  if (daysUntilExpiry <= 30) return 'expiring_soon';
+  return current === 'terminated' ? 'terminated' : 'active';
+}
+
+function computeContractRiskScore(c: Partial<VendorContract>): number {
+  let score = 0;
+  // Expiry risk
+  if (c.expiry_date) {
+    const days = Math.floor((new Date(c.expiry_date).getTime() - Date.now()) / 86_400_000);
+    if (days < 0) score += 40;
+    else if (days <= 30) score += 30;
+    else if (days <= 90) score += 15;
+  }
+  // High-value contract raises risk
+  if (c.contract_value && c.contract_value > 100_000) score += 20;
+  else if (c.contract_value && c.contract_value > 10_000) score += 10;
+  // Missing SLA
+  if (!c.sla_uptime_pct) score += 10;
+  // No breach penalty clause
+  if (!c.breach_penalty_clause) score += 10;
+  // Auto-renewal without notice period risk
+  if (c.auto_renewal && !c.notice_period_days) score += 10;
+  return Math.min(score, 100);
+}
+
+export async function getVendorContracts(vendorId: string): Promise<VendorContract[]> {
+  const { data, error } = await (supabase as any)
+    .from('vendor_contracts')
+    .select('*')
+    .eq('vendor_id', vendorId)
+    .order('created_at', { ascending: false });
+  if (error) { logger.error('getVendorContracts:', error); return []; }
+  return (data ?? []).map((c: any) => ({
+    ...c,
+    status: c.status === 'terminated' ? 'terminated' : deriveContractStatus(c.expiry_date, c.status),
+  }));
+}
+
+export async function addVendorContract(
+  companyId: string,
+  vendorId: string,
+  userId: string,
+  contract: Omit<VendorContract, 'id' | 'vendor_id' | 'company_id' | 'risk_score' | 'status' | 'created_by' | 'created_at' | 'updated_at'>
+): Promise<VendorContract | null> {
+  const risk_score = computeContractRiskScore({ ...contract, expiry_date: contract.expiry_date ?? null });
+  const status = deriveContractStatus(contract.expiry_date ?? null);
+
+  const { data, error } = await (supabase as any)
+    .from('vendor_contracts')
+    .insert({ ...contract, vendor_id: vendorId, company_id: companyId, risk_score, status, created_by: userId })
+    .select()
+    .single();
+
+  if (error) { logger.error('addVendorContract:', error); return null; }
+
+  try {
+    await recordAuditEvent({
+      userId, companyId, action: 'vendor.contract_created',
+      entityType: 'vendor', entityId: vendorId,
+      metadata: { contract_id: data.id, title: contract.title }, captureEvidence: false
+    });
+  } catch { /* non-blocking */ }
+
+  return data;
+}
+
+export async function updateVendorContract(
+  companyId: string,
+  userId: string,
+  contractId: string,
+  updates: Partial<Omit<VendorContract, 'id' | 'vendor_id' | 'company_id' | 'created_by' | 'created_at'>>
+): Promise<boolean> {
+  const risk_score = computeContractRiskScore(updates);
+  const status = updates.status === 'terminated'
+    ? 'terminated'
+    : deriveContractStatus(updates.expiry_date ?? null, updates.status);
+
+  const { error } = await (supabase as any)
+    .from('vendor_contracts')
+    .update({ ...updates, risk_score, status })
+    .eq('id', contractId);
+
+  if (error) { logger.error('updateVendorContract:', error); return false; }
+
+  try {
+    await recordAuditEvent({
+      userId, companyId, action: 'vendor.contract_updated',
+      entityType: 'vendor', entityId: contractId,
+      metadata: { updates }, captureEvidence: false
+    });
+  } catch { /* non-blocking */ }
+
+  return true;
+}
+
+export async function deleteVendorContract(
+  companyId: string,
+  userId: string,
+  contractId: string
+): Promise<boolean> {
+  const { error } = await (supabase as any)
+    .from('vendor_contracts')
+    .delete()
+    .eq('id', contractId);
+  if (error) { logger.error('deleteVendorContract:', error); return false; }
+  try { await recordAuditEvent({ userId, companyId, action: 'vendor.contract_deleted', entityType: 'vendor', entityId: contractId, metadata: {}, captureEvidence: false }); } catch { /* non-blocking */ }
+  return true;
+}

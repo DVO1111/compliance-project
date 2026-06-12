@@ -776,3 +776,107 @@ export const LOGISTICS_WATCHLIST: WatchListEntry[] = [
     relevance: 'Relevant if your corridor includes USA-bound consolidations; reduces inspection rates.',
   },
 ];
+
+/* ── Regulatory Alert Subscriptions ────────────────────────── */
+
+export interface RegulatoryAlertSubscription {
+  id: string;
+  company_id: string;
+  regulation_id: string;
+  is_active: boolean;
+  notify_email: boolean;
+  notify_in_app: boolean;
+  created_at: string;
+  regulation?: {
+    id: string;
+    title: string;
+    source: string;
+    category: string;
+    source_url: string | null;
+  };
+}
+
+export interface AvailableRegulation {
+  id: string;
+  title: string;
+  source: string;
+  category: string;
+  source_url: string | null;
+}
+
+export async function getAvailableRegulations(): Promise<AvailableRegulation[]> {
+  const { data, error } = await (supabase as any)
+    .from('regulations')
+    .select('id, title, source, category, source_url')
+    .eq('is_active', true)
+    .order('source');
+  if (error) { logger.error('getAvailableRegulations:', error); return []; }
+  return data ?? [];
+}
+
+export async function getRegulatoryAlertSubscriptions(companyId: string): Promise<RegulatoryAlertSubscription[]> {
+  const { data, error } = await (supabase as any)
+    .from('regulatory_alert_subscriptions')
+    .select('*, regulation:regulations(id, title, source, category, source_url)')
+    .eq('company_id', companyId)
+    .order('created_at');
+  if (error) { logger.error('getRegulatoryAlertSubscriptions:', error); return []; }
+  return (data ?? []).map((r: any) => ({
+    ...r,
+    regulation: Array.isArray(r.regulation) ? r.regulation[0] ?? null : r.regulation,
+  }));
+}
+
+export async function upsertRegulatoryAlertSubscription(
+  companyId: string,
+  regulationId: string,
+  settings: { is_active?: boolean; notify_email?: boolean; notify_in_app?: boolean }
+): Promise<boolean> {
+  const { error } = await (supabase as any)
+    .from('regulatory_alert_subscriptions')
+    .upsert(
+      { company_id: companyId, regulation_id: regulationId, ...settings, updated_at: new Date().toISOString() },
+      { onConflict: 'company_id,regulation_id' }
+    );
+  if (error) { logger.error('upsertRegulatoryAlertSubscription:', error); return false; }
+  return true;
+}
+
+export async function deleteRegulatoryAlertSubscription(
+  companyId: string,
+  regulationId: string
+): Promise<boolean> {
+  const { error } = await (supabase as any)
+    .from('regulatory_alert_subscriptions')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('regulation_id', regulationId);
+  if (error) { logger.error('deleteRegulatoryAlertSubscription:', error); return false; }
+  return true;
+}
+
+/** Returns alerts only for regulations the company has subscribed to. */
+export async function fetchSubscribedAlerts(companyId: string): Promise<RegulatoryAlert[]> {
+  const subs = await getRegulatoryAlertSubscriptions(companyId);
+  const activeIds = subs.filter(s => s.is_active).map(s => s.regulation_id);
+  if (activeIds.length === 0) return [];
+
+  const { data } = await (supabase as any)
+    .from('regulation_updates')
+    .select('id, change_summary, detected_at, regulation_id, regulations(title, source)')
+    .in('regulation_id', activeIds)
+    .order('detected_at', { ascending: false })
+    .limit(50);
+
+  if (!data) return [];
+  return data.map((u: any) => ({
+    id: u.id,
+    title: `${u.regulations?.source || 'Regulatory'} Update: ${u.regulations?.title || 'Unknown'}`,
+    body: u.change_summary,
+    source: u.regulations?.source || 'Unknown',
+    alertType: 'guidance_update' as const,
+    severity: 'warning' as const,
+    publishedAt: u.detected_at,
+    affectedContentCount: 0,
+  }));
+}

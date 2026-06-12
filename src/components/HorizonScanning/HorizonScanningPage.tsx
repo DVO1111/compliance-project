@@ -10,6 +10,10 @@ import {
     getControlFlags,
     resolveControlFlag,
     createObligationFromAlert,
+    getRegulatoryAlertSubscriptions,
+    upsertRegulatoryAlertSubscription,
+    deleteRegulatoryAlertSubscription,
+    getAvailableRegulations,
     LOGISTICS_WATCHLIST,
     type RegulatoryAlert,
     type AffectedContent,
@@ -17,16 +21,19 @@ import {
     type RegulatoryImpactAssessment,
     type ControlFlag,
     type WatchLevel,
+    type RegulatoryAlertSubscription,
+    type AvailableRegulation,
 } from '../../lib/horizonScanningService';
 import {
     Radar, AlertTriangle, FileSearch, CalendarClock,
     Shield, Bell, ChevronRight, ChevronDown, RefreshCw,
     Sparkles, ArrowRight, CheckCircle2, X,
     ShieldAlert, Check, Radio, ClipboardList,
+    Settings, Plus, Trash2, ExternalLink, Mail, Smartphone,
 } from 'lucide-react';
 import { logger } from '../../lib/logger';
 
-type Tab = 'feed' | 'affected' | 'consultations';
+type Tab = 'feed' | 'affected' | 'consultations' | 'subscriptions';
 
 const SEVERITY_BADGE: Record<string, string> = {
     critical: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
@@ -92,6 +99,12 @@ export default function HorizonScanningPage() {
     const [trackedAlertIds, setTrackedAlertIds] = useState<Set<string>>(new Set());
     const [tracking, setTracking] = useState<string | null>(null);
 
+    // Subscription management state
+    const [subscriptions, setSubscriptions] = useState<RegulatoryAlertSubscription[]>([]);
+    const [availableRegulations, setAvailableRegulations] = useState<AvailableRegulation[]>([]);
+    const [subLoading, setSubLoading] = useState(false);
+    const [subSaving, setSubSaving] = useState<string | null>(null);
+
     const load = useCallback(async () => {
         setLoading(true);
         if (tab === 'feed') {
@@ -118,6 +131,15 @@ export default function HorizonScanningPage() {
             setRecommendations(recs);
         } else if (tab === 'consultations') {
             setConsultations(getConsultationPeriods(industryType));
+        } else if (tab === 'subscriptions' && companyId) {
+            setSubLoading(true);
+            const [subs, regs] = await Promise.all([
+                getRegulatoryAlertSubscriptions(companyId),
+                getAvailableRegulations(),
+            ]);
+            setSubscriptions(subs);
+            setAvailableRegulations(regs);
+            setSubLoading(false);
         }
         setLoading(false);
     }, [tab, companyId]);
@@ -198,6 +220,37 @@ export default function HorizonScanningPage() {
         }
     };
 
+    const handleToggleSubscription = async (regulationId: string, currentSub?: RegulatoryAlertSubscription) => {
+        if (!companyId) return;
+        setSubSaving(regulationId);
+        if (currentSub) {
+            await upsertRegulatoryAlertSubscription(companyId, regulationId, { is_active: !currentSub.is_active });
+        } else {
+            await upsertRegulatoryAlertSubscription(companyId, regulationId, { is_active: true, notify_email: true, notify_in_app: true });
+        }
+        const updated = await getRegulatoryAlertSubscriptions(companyId);
+        setSubscriptions(updated);
+        setSubSaving(null);
+    };
+
+    const handleToggleNotify = async (regulationId: string, field: 'notify_email' | 'notify_in_app', current: boolean) => {
+        if (!companyId) return;
+        setSubSaving(regulationId);
+        await upsertRegulatoryAlertSubscription(companyId, regulationId, { [field]: !current });
+        const updated = await getRegulatoryAlertSubscriptions(companyId);
+        setSubscriptions(updated);
+        setSubSaving(null);
+    };
+
+    const handleRemoveSubscription = async (regulationId: string) => {
+        if (!companyId) return;
+        setSubSaving(regulationId);
+        await deleteRegulatoryAlertSubscription(companyId, regulationId);
+        const updated = await getRegulatoryAlertSubscriptions(companyId);
+        setSubscriptions(updated);
+        setSubSaving(null);
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -268,12 +321,13 @@ export default function HorizonScanningPage() {
             )}
 
             {/* Tabs */}
-            <div className="flex gap-1 p-1 rounded-xl bg-[var(--color-surface-alt)] w-fit">
+            <div className="flex gap-1 p-1 rounded-xl bg-[var(--color-surface-alt)] w-fit flex-wrap">
                 {([
                     { id: 'feed' as Tab, label: 'Live Feed', icon: Bell, count: alerts.length },
                     { id: 'affected' as Tab, label: 'Affected Content', icon: FileSearch, count: affected.length },
                     { id: 'consultations' as Tab, label: 'Consultation Tracker', icon: CalendarClock, count: consultations.filter(c => c.status !== 'closed').length },
-                ] as const).map(t => (
+                    { id: 'subscriptions' as Tab, label: 'My Subscriptions', icon: Settings, count: subscriptions.filter(s => s.is_active).length },
+                ] as { id: Tab; label: string; icon: typeof Bell; count: number }[]).map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
               ${tab === t.id ? 'bg-[var(--color-surface)] shadow-sm dash-text' : 'dash-text-secondary hover:dash-text'}`}>
@@ -490,6 +544,111 @@ export default function HorizonScanningPage() {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* ═══ Subscriptions ═══ */}
+            {tab === 'subscriptions' && !loading && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-sm font-bold dash-text uppercase tracking-wider mb-1">Regulatory Body Subscriptions</h3>
+                        <p className="text-xs dash-text-tertiary">
+                            Choose which regulatory bodies to monitor. Subscribed bodies will appear in your Live Feed — alerts are filtered to your active subscriptions.
+                        </p>
+                    </div>
+
+                    {subLoading ? (
+                        <div className="space-y-3">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <div key={i} className="h-16 rounded-xl bg-[var(--color-surface-alt)] animate-pulse" />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {availableRegulations.map(reg => {
+                                const sub = subscriptions.find(s => s.regulation_id === reg.id);
+                                const isActive = sub?.is_active ?? false;
+                                const isSaving = subSaving === reg.id;
+
+                                return (
+                                    <div key={reg.id}
+                                        className={`dash-card border rounded-2xl p-5 shadow-sm transition-all ${isActive ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent-soft)]/10' : 'dash-border'}`}>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs font-bold dash-accent uppercase">{reg.source}</span>
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)] dash-text-tertiary uppercase font-semibold">
+                                                        {reg.category.replace(/_/g, ' ')}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm font-semibold dash-text truncate">{reg.title}</p>
+                                                {reg.source_url && (
+                                                    <a href={reg.source_url} target="_blank" rel="noopener noreferrer"
+                                                        className="flex items-center gap-1 text-[10px] dash-text-tertiary hover:dash-accent transition-colors mt-0.5 w-fit">
+                                                        <ExternalLink size={10} />
+                                                        {reg.source_url.replace(/^https?:\/\//, '').split('/')[0]}
+                                                    </a>
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center gap-3 flex-shrink-0">
+                                                {/* Notify toggles — only shown when subscribed */}
+                                                {isActive && sub && (
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => handleToggleNotify(reg.id, 'notify_email', sub.notify_email)}
+                                                            disabled={isSaving}
+                                                            title="Email alerts"
+                                                            className={`p-1.5 rounded-lg border transition-colors ${sub.notify_email ? 'border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-soft)]' : 'dash-border dash-text-tertiary'}`}>
+                                                            <Mail size={13} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleToggleNotify(reg.id, 'notify_in_app', sub.notify_in_app)}
+                                                            disabled={isSaving}
+                                                            title="In-app alerts"
+                                                            className={`p-1.5 rounded-lg border transition-colors ${sub.notify_in_app ? 'border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-soft)]' : 'dash-border dash-text-tertiary'}`}>
+                                                            <Smartphone size={13} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleRemoveSubscription(reg.id)}
+                                                            disabled={isSaving}
+                                                            className="p-1.5 rounded-lg border dash-border dash-text-tertiary hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)] hover:border-[var(--color-danger)] transition-colors">
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {/* Subscribe / Unsubscribe toggle */}
+                                                <button
+                                                    onClick={() => handleToggleSubscription(reg.id, sub)}
+                                                    disabled={isSaving}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all disabled:opacity-50 ${
+                                                        isActive
+                                                            ? 'border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+                                                            : 'dash-border dash-text-secondary hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
+                                                    }`}>
+                                                    {isSaving
+                                                        ? <RefreshCw size={12} className="animate-spin" />
+                                                        : isActive
+                                                        ? <Check size={12} />
+                                                        : <Plus size={12} />}
+                                                    {isActive ? 'Subscribed' : 'Subscribe'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {subscriptions.length > 0 && (
+                        <div className="p-4 rounded-xl border dash-border bg-[var(--color-surface-alt)]/50">
+                            <p className="text-xs dash-text-tertiary">
+                                <strong className="dash-text">{subscriptions.filter(s => s.is_active).length}</strong> active subscription{subscriptions.filter(s => s.is_active).length !== 1 ? 's' : ''} — your Live Feed will show alerts from these regulatory bodies. Toggle <Mail size={11} className="inline" /> email and <Smartphone size={11} className="inline" /> in-app notifications per source.
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
 

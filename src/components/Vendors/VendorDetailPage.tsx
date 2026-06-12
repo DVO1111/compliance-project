@@ -12,11 +12,16 @@ import {
     updateQuestionnaireStatus,
     getCarrierProfile,
     upsertCarrierProfile,
+    getVendorContracts,
+    addVendorContract,
+    updateVendorContract,
+    deleteVendorContract,
     type Vendor,
     type VendorRiskProfile,
     type VendorCarrierProfile,
     type VendorDocument,
     type VendorQuestionnaire,
+    type VendorContract,
     type VendorRiskLevel,
     type DataAccessLevel,
     type SecurityReviewStatus,
@@ -51,9 +56,11 @@ import {
     Activity,
     Save,
     Truck,
+    FileSignature,
+    AlertTriangle,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'risk' | 'documents' | 'questionnaires' | 'carrier';
+type Tab = 'overview' | 'risk' | 'documents' | 'questionnaires' | 'carrier' | 'contracts';
 
 interface Props {
     vendorId: string | null;
@@ -72,8 +79,24 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
     const [carrierProfile, setCarrierProfile] = useState<VendorCarrierProfile | null>(null);
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
     const [questionnaires, setQuestionnaires] = useState<VendorQuestionnaire[]>([]);
+    const [contracts, setContracts] = useState<VendorContract[]>([]);
     const [activeTab, setActiveTab] = useState<Tab>('overview');
     const [loading, setLoading] = useState(true);
+
+    // Contract form
+    const [showContractForm, setShowContractForm] = useState(false);
+    const [editingContract, setEditingContract] = useState<VendorContract | null>(null);
+    const [contractSaving, setContractSaving] = useState(false);
+    const [cTitle, setCTitle] = useState('');
+    const [cValue, setCValue] = useState('');
+    const [cCurrency, setCCurrency] = useState('USD');
+    const [cStart, setCStart] = useState('');
+    const [cExpiry, setCExpiry] = useState('');
+    const [cAutoRenewal, setCAutoRenewal] = useState(false);
+    const [cNotice, setCNotice] = useState('');
+    const [cSla, setCsla] = useState('');
+    const [cBreachPenalty, setCBreachPenalty] = useState(false);
+    const [cNotes, setCNotes] = useState('');
 
     // Risk profile form
     const [rpScore, setRpScore] = useState(0);
@@ -119,16 +142,18 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
         setVendor(v);
 
         if (v) {
-            const [rp, docs, qs, cp] = await Promise.all([
+            const [rp, docs, qs, cp, cnts] = await Promise.all([
                 getVendorRiskProfile(v.id),
                 getVendorDocuments(v.id),
                 getVendorQuestionnaires(v.id),
                 isLogisticsProfile ? getCarrierProfile(v.id) : Promise.resolve(null),
+                getVendorContracts(v.id),
             ]);
             setRiskProfile(rp);
             setDocuments(docs);
             setQuestionnaires(qs);
             setCarrierProfile(cp);
+            setContracts(cnts);
 
             // Populate risk form
             if (rp) {
@@ -264,12 +289,72 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
         );
     };
 
+    const openContractForm = (contract?: VendorContract) => {
+        if (contract) {
+            setEditingContract(contract);
+            setCTitle(contract.title);
+            setCValue(contract.contract_value != null ? String(contract.contract_value) : '');
+            setCCurrency(contract.currency);
+            setCStart(contract.start_date ? contract.start_date.split('T')[0] : '');
+            setCExpiry(contract.expiry_date ? contract.expiry_date.split('T')[0] : '');
+            setCAutoRenewal(contract.auto_renewal);
+            setCNotice(contract.notice_period_days != null ? String(contract.notice_period_days) : '');
+            setCsla(contract.sla_uptime_pct != null ? String(contract.sla_uptime_pct) : '');
+            setCBreachPenalty(contract.breach_penalty_clause);
+            setCNotes(contract.notes ?? '');
+        } else {
+            setEditingContract(null);
+            setCTitle(''); setCValue(''); setCCurrency('USD'); setCStart(''); setCExpiry('');
+            setCAutoRenewal(false); setCNotice(''); setCsla(''); setCBreachPenalty(false); setCNotes('');
+        }
+        setShowContractForm(true);
+    };
+
+    const handleSaveContract = async () => {
+        if (!vendorId || !companyId || !cTitle.trim()) return;
+        setContractSaving(true);
+        const payload = {
+            title: cTitle.trim(),
+            contract_value: cValue !== '' ? parseFloat(cValue) : null,
+            currency: cCurrency,
+            start_date: cStart || null,
+            expiry_date: cExpiry || null,
+            auto_renewal: cAutoRenewal,
+            notice_period_days: cNotice !== '' ? parseInt(cNotice, 10) : null,
+            sla_uptime_pct: cSla !== '' ? parseFloat(cSla) : null,
+            breach_penalty_clause: cBreachPenalty,
+            notes: cNotes || null,
+        };
+        if (editingContract) {
+            await updateVendorContract(companyId, userId, editingContract.id, payload);
+        } else {
+            await addVendorContract(companyId, vendorId, userId, payload);
+        }
+        setShowContractForm(false);
+        await load();
+        setContractSaving(false);
+    };
+
+    const handleDeleteContract = async (contractId: string) => {
+        if (!window.confirm('Delete this contract record?')) return;
+        await deleteVendorContract(companyId, userId, contractId);
+        await load();
+    };
+
+    const contractStatusColor = (status: string) => {
+        const map: Record<string, string> = {
+            active: '#22c55e', expiring_soon: '#f59e0b', expired: '#ef4444', terminated: '#6b7280'
+        };
+        return map[status] ?? '#888';
+    };
+
     const tabs: { id: Tab; label: string; icon: typeof Building2 }[] = [
         { id: 'overview', label: 'Overview', icon: Building2 },
         { id: 'risk', label: 'Risk Profile', icon: Shield },
         ...(isLogisticsProfile ? [{ id: 'carrier' as Tab, label: 'Carrier Details', icon: Truck }] : []),
         { id: 'documents', label: 'Security Documents', icon: FileText },
         { id: 'questionnaires', label: 'Questionnaires', icon: ClipboardList },
+        { id: 'contracts', label: 'Contracts', icon: FileSignature },
     ];
 
     if (loading) {
@@ -668,6 +753,187 @@ export default function VendorDetailPage({ vendorId, onBack }: Props) {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ─── Tab: Contracts ───────────────────────────────────────────── */}
+            {activeTab === 'contracts' && (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold dash-text uppercase tracking-wider">Vendor Contracts</h3>
+                        <button onClick={() => openContractForm()}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-md transition-all"
+                            style={{ background: 'var(--color-accent)' }}>
+                            <Plus size={14} />
+                            Add Contract
+                        </button>
+                    </div>
+
+                    {contracts.length === 0 ? (
+                        <div className="dash-card border dash-border rounded-2xl p-12 flex flex-col items-center justify-center gap-3 shadow-sm">
+                            <FileSignature size={36} className="dash-text-tertiary" />
+                            <p className="dash-text-tertiary text-sm">No contracts added yet</p>
+                            <p className="text-xs dash-text-tertiary">Track agreement terms, SLAs, and expiry risk</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {contracts.map(c => {
+                                const riskColor = c.risk_score >= 70 ? '#ef4444' : c.risk_score >= 40 ? '#f59e0b' : '#22c55e';
+                                return (
+                                    <div key={c.id} className="dash-card border dash-border rounded-2xl p-5 shadow-sm">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex items-start gap-4 min-w-0">
+                                                <div className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center"
+                                                    style={{ background: `${contractStatusColor(c.status)}20` }}>
+                                                    <FileSignature size={18} style={{ color: contractStatusColor(c.status) }} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold dash-text">{c.title}</p>
+                                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase capitalize"
+                                                            style={{ background: `${contractStatusColor(c.status)}20`, color: contractStatusColor(c.status) }}>
+                                                            {c.status.replace(/_/g, ' ')}
+                                                        </span>
+                                                        {c.contract_value != null && (
+                                                            <span className="text-xs dash-text-secondary">
+                                                                {c.currency} {c.contract_value.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                        {c.expiry_date && (
+                                                            <span className="text-xs dash-text-secondary flex items-center gap-1">
+                                                                <Calendar size={11} />
+                                                                Expires {new Date(c.expiry_date).toLocaleDateString()}
+                                                            </span>
+                                                        )}
+                                                        {c.status === 'expiring_soon' && (
+                                                            <span className="flex items-center gap-1 text-amber-500 text-[10px] font-bold">
+                                                                <AlertTriangle size={11} /> Expiring soon
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-2">
+                                                        {c.sla_uptime_pct != null && (
+                                                            <span className="text-[10px] dash-text-tertiary">SLA: {c.sla_uptime_pct}% uptime</span>
+                                                        )}
+                                                        {c.auto_renewal && (
+                                                            <span className="text-[10px] dash-text-tertiary">Auto-renewal</span>
+                                                        )}
+                                                        {c.breach_penalty_clause && (
+                                                            <span className="text-[10px] text-emerald-600">Breach penalty clause</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3 flex-shrink-0">
+                                                <div className="text-right">
+                                                    <div className="text-[10px] dash-text-tertiary uppercase font-bold">Risk Score</div>
+                                                    <div className="text-lg font-bold" style={{ color: riskColor }}>{c.risk_score}</div>
+                                                </div>
+                                                <button onClick={() => openContractForm(c)}
+                                                    className="p-1.5 rounded-lg hover:bg-[var(--color-surface-alt)] dash-text-tertiary transition-colors">
+                                                    <Save size={14} />
+                                                </button>
+                                                <button onClick={() => handleDeleteContract(c.id)}
+                                                    className="p-1.5 rounded-lg hover:bg-[var(--color-danger-soft)] text-[var(--color-danger)] transition-colors">
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {c.notes && (
+                                            <p className="mt-3 pt-3 border-t dash-border text-xs dash-text-tertiary">{c.notes}</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ─── Contract Form Modal ───────────────────────────────────────── */}
+            {showContractForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-[var(--color-surface)] border dash-border rounded-2xl shadow-2xl w-full max-w-xl p-6 space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold dash-text flex items-center gap-2">
+                                <FileSignature size={18} className="dash-accent" />
+                                {editingContract ? 'Edit Contract' : 'Add Contract'}
+                            </h2>
+                            <button onClick={() => setShowContractForm(false)} className="p-1.5 rounded-lg hover:bg-[var(--color-surface-alt)] transition-colors">
+                                <X size={18} className="dash-text-tertiary" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Contract Title *</label>
+                                <input type="text" value={cTitle} onChange={e => setCTitle(e.target.value)}
+                                    placeholder="e.g. Annual SaaS Agreement 2026"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none focus:ring-1"
+                                    style={{ '--tw-ring-color': 'var(--color-accent)' } as any} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Contract Value</label>
+                                <input type="number" min={0} value={cValue} onChange={e => setCValue(e.target.value)}
+                                    placeholder="e.g. 50000"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Currency</label>
+                                <select value={cCurrency} onChange={e => setCCurrency(e.target.value)}
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none">
+                                    {['USD', 'GBP', 'EUR', 'NGN'].map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Start Date</label>
+                                <input type="date" value={cStart} onChange={e => setCStart(e.target.value)}
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Expiry Date</label>
+                                <input type="date" value={cExpiry} onChange={e => setCExpiry(e.target.value)}
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">SLA Uptime (%)</label>
+                                <input type="number" min={0} max={100} step={0.1} value={cSla} onChange={e => setCsla(e.target.value)}
+                                    placeholder="e.g. 99.9"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Notice Period (days)</label>
+                                <input type="number" min={0} value={cNotice} onChange={e => setCNotice(e.target.value)}
+                                    placeholder="e.g. 30"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none" />
+                            </div>
+                            <div className="flex items-center gap-3 col-span-1">
+                                <input type="checkbox" id="autoRenewal" checked={cAutoRenewal} onChange={e => setCAutoRenewal(e.target.checked)} className="rounded w-4 h-4" />
+                                <label htmlFor="autoRenewal" className="text-sm dash-text cursor-pointer">Auto-renewal</label>
+                            </div>
+                            <div className="flex items-center gap-3 col-span-1">
+                                <input type="checkbox" id="breachPenalty" checked={cBreachPenalty} onChange={e => setCBreachPenalty(e.target.checked)} className="rounded w-4 h-4" />
+                                <label htmlFor="breachPenalty" className="text-sm dash-text cursor-pointer">Breach penalty clause</label>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold dash-text-secondary mb-1.5">Notes</label>
+                                <textarea value={cNotes} onChange={e => setCNotes(e.target.value)} rows={2}
+                                    placeholder="Key contract terms, risks or obligations…"
+                                    className="w-full bg-[var(--color-surface-alt)] border dash-border rounded-xl px-3 py-2.5 text-sm dash-text focus:outline-none resize-none" />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-2 border-t dash-border">
+                            <button onClick={() => setShowContractForm(false)} className="px-4 py-2 rounded-xl text-sm font-medium dash-text-secondary hover:bg-[var(--color-surface-alt)] transition-colors">
+                                Cancel
+                            </button>
+                            <button onClick={handleSaveContract} disabled={!cTitle.trim() || contractSaving}
+                                className="px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-md disabled:opacity-50 transition-all"
+                                style={{ background: 'var(--color-accent)' }}>
+                                {contractSaving ? 'Saving…' : editingContract ? 'Update Contract' : 'Add Contract'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
