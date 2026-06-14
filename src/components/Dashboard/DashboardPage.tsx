@@ -541,42 +541,23 @@ export default function DashboardPage({
         },
       );
       if (isExecutive) {
-        cards.push(
-          {
-            title: "Approval Rate",
-            value: approvalPct,
-            icon: CheckCircle2,
-            subtext: exec ? `${exec.approved} approved` : undefined,
-            variant: "green",
-          },
-          {
-            title: "Avg Turnaround",
-            value: exec ? formatHours(exec.avg_turnaround_hours) : loading ? "…" : "—",
-            icon: Timer,
-            subtext: "submitted → decided",
-            trendData: exec?.avg_turnaround_trend,
-            trendValue: exec?.avg_turnaround_change,
-            variant: "purple",
-          },
-        );
+        cards.push({
+          title: "Approval Rate",
+          value: approvalPct,
+          icon: CheckCircle2,
+          subtext: exec ? `${exec.approved} approved` : undefined,
+          variant: "green",
+        });
       }
       if (isLegal) {
-        cards.push(
-          {
-            title: "Approved",
-            value: exec ? String(exec.approved) : loading ? "…" : "0",
-            icon: CheckCircle2,
-            trendData: exec?.approved_trend,
-            trendValue: exec?.approved_change,
-            variant: "green",
-          },
-          {
-            title: "Turnaround",
-            value: exec ? formatHours(exec.avg_turnaround_hours) : loading ? "…" : "—",
-            icon: Timer,
-            variant: "blue",
-          },
-        );
+        cards.push({
+          title: "Approved",
+          value: exec ? String(exec.approved) : loading ? "…" : "0",
+          icon: CheckCircle2,
+          trendData: exec?.approved_trend,
+          trendValue: exec?.approved_change,
+          variant: "green",
+        });
       }
       if (isMarketing) {
         cards.push(
@@ -621,19 +602,7 @@ export default function DashboardPage({
       });
     }
 
-    // Archive quick link
-    if (perms.canViewArchive && moduleActivity.content) {
-      cards.push({
-        title: "Go to Archive",
-        value: "→ View",
-        icon: Upload,
-        subtext: "Edit / submit / publish",
-        onClick: onNavigateToArchive,
-        variant: "blue",
-      });
-    }
-
-    return cards;
+    return cards.slice(0, 4);
   }, [moduleActivity, exec, loading, moduleMetrics, logisticsMetrics, isLogisticsProfile, isExecutive, isLegal, isMarketing, approvalPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive, perms.canViewLicenseVault]);
 
   /* ─────────────────────────── Render ─────────────────────────── */
@@ -712,10 +681,10 @@ export default function DashboardPage({
         variants={stagger}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 max-w-[1600px] mx-auto items-stretch auto-rows-fr"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1600px] mx-auto items-stretch auto-rows-fr"
       >
         {activityLoading
-          ? Array.from({ length: 6 }).map((_, i) => (
+          ? Array.from({ length: 4 }).map((_, i) => (
             <motion.div key={`sk-${i}`} variants={fadeUp} className="h-full">
               <SkeletonMetric className="h-full" />
             </motion.div>
