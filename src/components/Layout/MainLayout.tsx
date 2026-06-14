@@ -162,7 +162,9 @@ export type PageId =
   // Logistics modules
   | 'contraband-rejection'
   | 'shipment-event-log'
-  | 'cn-declarations';
+  | 'cn-declarations'
+  // Compliance Alerting Engine
+  | 'compliance-alerting';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -259,6 +261,7 @@ export default function MainLayout({
       { id: 'grc-automation', label: 'GRC Automation', icon: Zap, category: 'Governance & Policy', hidden: !perms.canViewGrcAutomation },
       { id: 'obligations', label: 'Obligations', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
       { id: 'risk-register', label: 'Risk Register', icon: ShieldAlert, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
+      { id: 'compliance-alerting', label: 'Compliance Alerts', icon: Bell, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
 
       // ── 4. Content & Marketing Compliance ────────────────────────────
       { id: 'upload', label: 'Upload Content', icon: Upload, category: 'Content & Marketing Compliance', hidden: !perms.canUpload },

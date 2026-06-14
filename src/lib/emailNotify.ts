@@ -35,7 +35,11 @@ export type NotificationType =
   | 'supplier_expiring'
   | 'supplier_suspended'
   // Policy
-  | 'policy_reminder';
+  | 'policy_reminder'
+  // Compliance Alerting
+  | 'licence_expiring'
+  | 'obligation_overdue'
+  | 'control_non_compliant';
 
 export interface NotifyParams {
   /** Single recipient by user ID */

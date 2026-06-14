@@ -109,6 +109,7 @@ import CTDDossierPage from './components/CTDDossier/CTDDossierPage';
 import ContrabandRejectionPage from './components/ContrabandRejection/ContrabandRejectionPage';
 import ShipmentEventLogPage from './components/Logistics/ShipmentEventLogPage';
 import CN2223DeclarationPage from './components/Logistics/CN2223DeclarationPage';
+import ComplianceAlertingPage from './components/Alerts/ComplianceAlertingPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -197,7 +198,8 @@ function isValidPageId(value: any): value is PageId {
     value === 'ctd-dossier' ||
     value === 'contraband-rejection' ||
     value === 'shipment-event-log' ||
-    value === 'cn-declarations'
+    value === 'cn-declarations' ||
+    value === 'compliance-alerting'
   );
 }
 
@@ -790,6 +792,9 @@ function AppContent() {
 
       case 'cn-declarations':
         return isLogisticsProfile ? <CN2223DeclarationPage /> : <AccessDenied />;
+
+      case 'compliance-alerting':
+        return perms.canViewGrcFrameworks ? <ComplianceAlertingPage /> : <AccessDenied />;
 
       default:
         return <DashboardPage />;
