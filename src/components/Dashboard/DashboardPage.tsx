@@ -429,181 +429,109 @@ export default function DashboardPage({
     return `${Math.round((exec.rejection_rate || 0) * 100)}%`;
   }, [exec]);
 
-  /* ── KPI cards — activity-driven: only shown when module has actual data ── */
+  /* ── KPI cards — always 4, always compliance-infrastructure first ── */
+  // Content workflow metrics (submissions, legal queue, approval rate) are
+  // intentionally excluded — they belong in the content pipeline section,
+  // not the top-level compliance health strip.
   const kpiCards: KpiCard[] = useMemo(() => {
     if (!moduleActivity) return [];
 
-    const cards: KpiCard[] = [];
+    // Build a ranked pool of compliance infrastructure candidates.
+    // The first 4 non-null entries win — content data never enters this pool.
+    const pool: (KpiCard | null)[] = [
+      // Slot 1 — Risk posture
+      canGrc ? {
+        title: "Open Risks",
+        value: moduleMetrics ? String(moduleMetrics.open_risks) : "…",
+        icon: ShieldAlert,
+        subtext: moduleMetrics?.critical_risks
+          ? `${moduleMetrics.critical_risks} critical / high`
+          : "No critical risks",
+        variant: moduleMetrics && moduleMetrics.critical_risks > 0 ? "red" : "purple",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'risk-register' } })),
+      } : null,
 
-    // GRC module cards — only when the relevant table has records
-    if (canGrc) {
-      if (moduleActivity.risks) {
-        cards.push({
-          title: "Open Risks",
-          value: moduleMetrics ? String(moduleMetrics.open_risks) : "…",
-          icon: ShieldAlert,
-          subtext: moduleMetrics?.critical_risks
-            ? `${moduleMetrics.critical_risks} critical/high`
-            : "No critical risks",
-          variant: moduleMetrics && moduleMetrics.critical_risks > 0 ? "red" : "purple",
-          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'risk-register' } })),
-        });
-      }
-      if (moduleActivity.obligations) {
-        cards.push({
-          title: "Overdue Obligations",
-          value: moduleMetrics ? String(moduleMetrics.overdue_obligations) : "…",
-          icon: ClipboardList,
-          subtext: moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
-          variant: moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
-          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'obligations' } })),
-        });
-      }
-      if (moduleActivity.grc) {
-        cards.push({
-          title: "GRC Failing Controls",
-          value: moduleMetrics ? String(moduleMetrics.grc_failing_controls) : "…",
-          icon: Activity,
-          subtext: moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
-          variant: moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
-          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'control-monitoring' } })),
-        });
-      }
-      if (moduleActivity.capas) {
-        cards.push({
-          title: "Open CAPAs",
-          value: moduleMetrics ? String(moduleMetrics.capa_open) : "…",
-          icon: ClipboardCheck,
-          subtext: moduleMetrics
-            ? moduleMetrics.capa_overdue > 0
-              ? `${moduleMetrics.capa_overdue} overdue`
-              : "None overdue"
-            : undefined,
-          variant: moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
-          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'capa-management' } })),
-        });
-      }
-      if (moduleActivity.licences) {
-        cards.push({
-          title: "Licence Alerts",
-          value: moduleMetrics ? String(moduleMetrics.licences_expired + moduleMetrics.licences_expiring) : "…",
-          icon: Key,
-          subtext: moduleMetrics
-            ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
-            : undefined,
-          variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
-          onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: isLogisticsProfile ? 'license-vault' : 'regulatory-affairs' } })),
-        });
-      }
-    }
+      // Slot 2 — Regulatory obligations
+      canGrc ? {
+        title: "Overdue Obligations",
+        value: moduleMetrics ? String(moduleMetrics.overdue_obligations) : "…",
+        icon: ClipboardList,
+        subtext: moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
+        variant: moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'obligations' } })),
+      } : null,
 
-    // Contraband / flagging — appears for any company that has used these modules
-    if (moduleActivity.contraband) {
-      cards.push({
+      // Slot 3 — Control health (GRC failing controls, or CAPA, or logistics security)
+      canGrc && moduleActivity.grc ? {
+        title: "Failing Controls",
+        value: moduleMetrics ? String(moduleMetrics.grc_failing_controls) : "…",
+        icon: Activity,
+        subtext: moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
+        variant: moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'control-monitoring' } })),
+      } : moduleActivity.contraband ? {
         title: "Contraband Rejections",
         value: logisticsMetrics ? String(logisticsMetrics.rejections_this_month) : "…",
         icon: ShieldAlert,
         subtext: "this month",
         variant: logisticsMetrics && logisticsMetrics.rejections_this_month > 0 ? "red" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
-      });
-    }
-    if (moduleActivity.customerFlags) {
-      cards.push({
-        title: "Flagged Senders",
-        value: logisticsMetrics ? String(logisticsMetrics.active_flags) : "…",
-        icon: Activity,
-        subtext: logisticsMetrics?.active_flags === 0 ? "No active flags" : "Active blacklist entries",
-        variant: logisticsMetrics && logisticsMetrics.active_flags > 0 ? "yellow" : "green",
-        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
-      });
-    }
-
-    // Content submission cards — any company that has submissions in the system
-    if (canContent && moduleActivity.content) {
-      cards.push(
-        {
-          title: "Total Submissions",
-          value: exec ? String(exec.total_submitted) : loading ? "…" : "0",
-          icon: FileText,
-          trendData: exec?.total_submitted_trend,
-          trendValue: exec?.total_submitted_change,
-          variant: "blue",
-        },
-        {
-          title: "Legal Queue",
-          value: exec ? String(exec.in_legal_queue) : loading ? "…" : "0",
-          icon: Scale,
-          subtext: "awaiting review",
-          trendData: exec?.in_legal_queue_trend,
-          trendValue: exec?.in_legal_queue_change,
-          variant: "yellow",
-        },
-      );
-      if (isExecutive) {
-        cards.push({
-          title: "Approval Rate",
-          value: approvalPct,
-          icon: CheckCircle2,
-          subtext: exec ? `${exec.approved} approved` : undefined,
-          variant: "green",
-        });
-      }
-      if (isLegal) {
-        cards.push({
-          title: "Approved",
-          value: exec ? String(exec.approved) : loading ? "…" : "0",
-          icon: CheckCircle2,
-          trendData: exec?.approved_trend,
-          trendValue: exec?.approved_change,
-          variant: "green",
-        });
-      }
-      if (isMarketing) {
-        cards.push(
-          {
-            title: "Ready to Publish",
-            value: exec ? String(exec.approved) : loading ? "…" : "0",
-            icon: CheckCircle2,
-            subtext: "Signed off / approved",
-            variant: "green",
-          },
-          {
-            title: "Needs Rework",
-            value: exec ? String(exec.rejected) : loading ? "…" : "0",
-            icon: XCircle,
-            subtext: "Rejected / changes",
-            variant: "red",
-          },
-        );
-      }
-    }
-
-    // Policy card
-    if (canPolicies && moduleActivity.policies) {
-      cards.push({
+      } : canPolicies ? {
         title: "Draft Policies",
         value: moduleMetrics ? String(moduleMetrics.draft_policies) : "…",
         icon: FileText,
         subtext: "awaiting publication",
         variant: (moduleMetrics && moduleMetrics.draft_policies > 0 ? "yellow" : "green") as "yellow" | "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'policies' } })),
-      });
-    }
+      } : null,
 
-    // Vendor card
-    if (canVendors && moduleActivity.vendors) {
-      cards.push({
+      // Slot 4 — CAPAs, licences, flagged senders, vendors, or policies (first match wins)
+      canGrc && moduleActivity.capas ? {
+        title: "Open CAPAs",
+        value: moduleMetrics ? String(moduleMetrics.capa_open) : "…",
+        icon: ClipboardCheck,
+        subtext: moduleMetrics
+          ? moduleMetrics.capa_overdue > 0
+            ? `${moduleMetrics.capa_overdue} overdue`
+            : "None overdue"
+          : undefined,
+        variant: moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'capa-management' } })),
+      } : canGrc && moduleActivity.licences ? {
+        title: "Licence Alerts",
+        value: moduleMetrics ? String(moduleMetrics.licences_expired + moduleMetrics.licences_expiring) : "…",
+        icon: Key,
+        subtext: moduleMetrics
+          ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
+          : undefined,
+        variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: isLogisticsProfile ? 'license-vault' : 'regulatory-affairs' } })),
+      } : moduleActivity.customerFlags ? {
+        title: "Flagged Senders",
+        value: logisticsMetrics ? String(logisticsMetrics.active_flags) : "…",
+        icon: Activity,
+        subtext: logisticsMetrics?.active_flags === 0 ? "No active flags" : "Active blacklist entries",
+        variant: logisticsMetrics && logisticsMetrics.active_flags > 0 ? "yellow" : "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
+      } : canVendors && moduleActivity.vendors ? {
         title: "Active Vendors",
         value: moduleMetrics ? String(moduleMetrics.active_vendors) : "…",
         icon: Building2,
+        subtext: "under monitoring",
         variant: "purple",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'vendors' } })),
-      });
-    }
+      } : canPolicies && moduleActivity.policies ? {
+        title: "Draft Policies",
+        value: moduleMetrics ? String(moduleMetrics.draft_policies) : "…",
+        icon: FileText,
+        subtext: "awaiting publication",
+        variant: (moduleMetrics && moduleMetrics.draft_policies > 0 ? "yellow" : "green") as "yellow" | "green",
+        onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'policies' } })),
+      } : null,
+    ];
 
-    return cards.slice(0, 4);
-  }, [moduleActivity, exec, loading, moduleMetrics, logisticsMetrics, isLogisticsProfile, isExecutive, isLegal, isMarketing, approvalPct, onNavigateToArchive, canContent, canGrc, canPolicies, canVendors, perms.canViewArchive, perms.canViewLicenseVault]);
+    return pool.filter((c): c is KpiCard => c !== null).slice(0, 4);
+  }, [moduleActivity, moduleMetrics, logisticsMetrics, isLogisticsProfile, canGrc, canPolicies, canVendors]);
 
   /* ─────────────────────────── Render ─────────────────────────── */
   return (
