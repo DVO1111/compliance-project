@@ -164,7 +164,9 @@ export type PageId =
   | 'shipment-event-log'
   | 'cn-declarations'
   // Compliance Alerting Engine
-  | 'compliance-alerting';
+  | 'compliance-alerting'
+  // AI Audit Preparation
+  | 'audit-prep';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -262,6 +264,7 @@ export default function MainLayout({
       { id: 'obligations', label: 'Obligations', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
       { id: 'risk-register', label: 'Risk Register', icon: ShieldAlert, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
       { id: 'compliance-alerting', label: 'Compliance Alerts', icon: Bell, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
+      { id: 'audit-prep', label: 'AI Audit Prep', icon: Sparkles, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
 
       // ── 4. Content & Marketing Compliance ────────────────────────────
       { id: 'upload', label: 'Upload Content', icon: Upload, category: 'Content & Marketing Compliance', hidden: !perms.canUpload },

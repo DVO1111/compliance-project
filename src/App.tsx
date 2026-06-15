@@ -110,6 +110,7 @@ import ContrabandRejectionPage from './components/ContrabandRejection/Contraband
 import ShipmentEventLogPage from './components/Logistics/ShipmentEventLogPage';
 import CN2223DeclarationPage from './components/Logistics/CN2223DeclarationPage';
 import ComplianceAlertingPage from './components/Alerts/ComplianceAlertingPage';
+import AuditPrepPage from './components/AuditPrep/AuditPrepPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -199,7 +200,8 @@ function isValidPageId(value: any): value is PageId {
     value === 'contraband-rejection' ||
     value === 'shipment-event-log' ||
     value === 'cn-declarations' ||
-    value === 'compliance-alerting'
+    value === 'compliance-alerting' ||
+    value === 'audit-prep'
   );
 }
 
@@ -795,6 +797,9 @@ function AppContent() {
 
       case 'compliance-alerting':
         return perms.canViewGrcFrameworks ? <ComplianceAlertingPage /> : <AccessDenied />;
+
+      case 'audit-prep':
+        return perms.canViewGrcFrameworks ? <AuditPrepPage /> : <AccessDenied />;
 
       default:
         return <DashboardPage />;
