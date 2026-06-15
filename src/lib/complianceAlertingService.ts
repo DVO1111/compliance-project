@@ -77,7 +77,7 @@ export const TRIGGER_DESCRIPTIONS: Record<AlertTriggerType, string> = {
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 export async function getAlertRules(companyId: string): Promise<AlertRule[]> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('compliance_alert_rules')
     .select('*')
     .eq('company_id', companyId)
@@ -87,7 +87,7 @@ export async function getAlertRules(companyId: string): Promise<AlertRule[]> {
     console.error('[complianceAlertingService] getAlertRules:', error.message);
     return [];
   }
-  return (data ?? []) as AlertRule[];
+  return (data ?? []) as unknown as AlertRule[];
 }
 
 export async function upsertAlertRule(
@@ -95,7 +95,7 @@ export async function upsertAlertRule(
   userId: string,
   rule: Omit<AlertRule, 'id' | 'company_id' | 'created_by' | 'created_at' | 'updated_at'>
 ): Promise<AlertRule | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('compliance_alert_rules')
     .upsert(
       { ...rule, company_id: companyId, created_by: userId },
@@ -112,7 +112,7 @@ export async function upsertAlertRule(
 }
 
 export async function deleteAlertRule(companyId: string, ruleId: string): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from('compliance_alert_rules')
     .delete()
     .eq('id', ruleId)
@@ -128,7 +128,7 @@ export async function deleteAlertRule(companyId: string, ruleId: string): Promis
 // ── Alert log ─────────────────────────────────────────────────────────────────
 
 export async function getAlertHistory(companyId: string, limit = 100): Promise<AlertLogEntry[]> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('compliance_alert_log')
     .select('*')
     .eq('company_id', companyId)
@@ -143,7 +143,7 @@ export async function getAlertHistory(companyId: string, limit = 100): Promise<A
 }
 
 export async function resolveAlert(companyId: string, alertId: string): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from('compliance_alert_log')
     .update({ resolved_at: new Date().toISOString() })
     .eq('id', alertId)
@@ -164,7 +164,7 @@ export async function getAlertDigest(companyId: string): Promise<AlertDigestSumm
   const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
   const today = now.toISOString().slice(0, 10);
 
-  const { data } = await supabase
+  const { data } = await (supabase as any)
     .from('compliance_alert_log')
     .select('alert_type, fired_at, fired_date')
     .eq('company_id', companyId)
