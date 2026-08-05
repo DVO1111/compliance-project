@@ -1,4 +1,5 @@
 import { getPermissions } from '../../lib/permissions';
+import { getIndustryCategory } from '../../lib/regulatoryProfile';
 import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
@@ -193,6 +194,13 @@ export default function MainLayout({
 
   const industryType = (profile as any)?.industry_type as string | null | undefined;
   const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
+  // Manufacturing & Quality (GMP, batch release, SOPs, CAPA, supplier qual) only
+  // applies to sectors that actually manufacture / move goods — life sciences,
+  // food, cosmetics, medical devices (life_sciences) and logistics. Sectors like
+  // finance or advertising don't use it, so the whole section is hidden for them.
+  const industryCategory = getIndustryCategory(industryType);
+  const usesManufacturingQuality =
+    industryCategory === 'life_sciences' || industryCategory === 'logistics';
   const perms = getPermissions({
     profileRole: profile?.role,
     customPermissions: (profile as any)?.customPermissions,
@@ -244,12 +252,12 @@ export default function MainLayout({
       { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, category: 'Overview' },
 
       // ── 2. Manufacturing & Quality ───────────────────────────────────
-      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
-      { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Manufacturing & Quality', hidden: !perms.canViewCapaManagement },
-      { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Manufacturing & Quality' },
-      { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality' },
-      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
-      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality', hidden: isLogisticsProfile },
+      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Manufacturing & Quality', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Manufacturing & Quality', hidden: !perms.canViewCapaManagement || !usesManufacturingQuality },
+      { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Manufacturing & Quality', hidden: !usesManufacturingQuality },
+      { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality', hidden: !usesManufacturingQuality },
+      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'contraband-rejection', label: 'Contraband Rejection', icon: PackageX,    category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
       { id: 'shipment-event-log',  label: 'Shipment Event Log',  icon: Truck,       category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
       { id: 'cn-declarations',     label: 'CN22/CN23 Declarations', icon: ScrollText, category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
@@ -501,11 +509,17 @@ export default function MainLayout({
                   <span className="text-[9px] dash-text-tertiary uppercase tracking-widest font-bold">{profile?.role}</span>
                 </div>
                 <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-sm shadow-md overflow-hidden" style={{ background: 'var(--color-accent)' }}>
-                  <img
-                    src={(profile as any)?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80'}
-                    alt={profile?.full_name || 'Profile avatar'}
-                    className="w-full h-full object-cover"
-                  />
+                  {(profile as any)?.avatar_url ? (
+                    <img
+                      src={(profile as any).avatar_url}
+                      alt={profile?.full_name || 'Profile avatar'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>
+                      {(profile?.full_name ?? 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                    </span>
+                  )}
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 dash-text-tertiary group-hover:text-[var(--color-text-primary)] transition-colors" />
               </button>

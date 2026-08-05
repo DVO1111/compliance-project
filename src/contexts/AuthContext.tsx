@@ -28,7 +28,9 @@ interface AuthContextType {
     fullName: string,
     organization: string,
     inviteToken?: string
-  ) => Promise<{ error: Error | null }>;
+  ) => Promise<{ needsVerification: boolean }>;
+  verifySignupCode: (email: string, token: string) => Promise<void>;
+  resendSignupCode: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -169,23 +171,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string, organization: string, inviteToken?: string) => {
+    // Create the auth user. With "Confirm email" enabled in Supabase, this sends
+    // a verification code and returns NO session — the user is not signed in yet.
+    // The signup details are stashed in user_metadata so we can create the profile
+    // and company AFTER the code is verified (and so they survive a page refresh).
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          organization,
+          invite_token: inviteToken ?? null,
+        },
+      },
+    });
+
+    if (authError) {
+      logger.error('Signup failed:', authError);
+      throw authError;
+    }
+
+    // If "Confirm email" is DISABLED in Supabase, signUp returns a live session
+    // and no code is emailed — so provision the profile now, exactly like before.
+    // If it's ENABLED, session is null and we must wait for the emailed code.
+    if (data.session && data.user) {
+      await completeSignupProfile(
+        data.user.id,
+        data.user.email!,
+        fullName,
+        organization,
+        inviteToken
+      );
+      return { needsVerification: false };
+    }
+
+    // Verification required — profile/company are created in verifySignupCode
+    // once the emailed code is confirmed.
+    return { needsVerification: true };
+  };
+
+  const resendSignupCode = async (email: string) => {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    if (error) throw error;
+  };
+
+  const verifySignupCode = async (email: string, token: string) => {
+    // Confirm the emailed 6-digit code. On success Supabase establishes a session,
+    // so the client-side inserts below run authenticated (RLS-safe).
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: token.trim(),
+      type: 'signup',
+    });
+
+    if (error) throw error;
+
+    const verifiedUser = data.user;
+    if (!verifiedUser?.id || !verifiedUser.email) {
+      throw new Error('Verification succeeded but user data is missing.');
+    }
+
+    const meta = verifiedUser.user_metadata ?? {};
+    const fullName = (meta.full_name as string) ?? '';
+    const organization = (meta.organization as string) ?? '';
+    const inviteToken =
+      (meta.invite_token as string | null) ??
+      localStorage.getItem('pending_invite_token') ??
+      undefined;
+
+    await completeSignupProfile(verifiedUser.id, verifiedUser.email, fullName, organization, inviteToken || undefined);
+  };
+
+  // Creates the profile / company / membership rows for a freshly verified user.
+  const completeSignupProfile = async (
+    userId: string,
+    userEmail: string,
+    fullName: string,
+    organization: string,
+    inviteToken?: string
+  ) => {
     try {
-      // 1) Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (authError) throw authError;
-
-      // 2) Get the user id + email
-      const userId = authData.user?.id;
-      const userEmail = authData.user?.email;
-
-      if (!userId || !userEmail) {
-        throw new Error('Signup succeeded but user session/user data is missing.');
-      }
-
       if (inviteToken) {
         // ── Invite path: skip company creation ──
         // The invite acceptance flow (accept_company_invite RPC) will
@@ -238,10 +304,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // IMPORTANT: load the profile immediately so onboarding shows consistently
       await loadProfile(userId);
-
-      return authData as any;
     } catch (err) {
-      logger.error('Signup failed:', err);
+      logger.error('Profile setup after verification failed:', err);
       throw err;
     }
   };
@@ -276,7 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, activeBrandId, signUp, signIn, signOut, refreshProfile, switchBrand }}
+      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, refreshProfile, switchBrand }}
     >
       {children}
     </AuthContext.Provider>

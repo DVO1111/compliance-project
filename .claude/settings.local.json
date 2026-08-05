@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(sed 's/.*error //')",
+      "Bash(sed 's/\\(.*//')",
+      "Bash(iconv -f UTF-16LE -t UTF-8 src/lib/database.types.ts)",
+      "Bash(grep -n \"^            [a-z_]*: {$\")",
+      "Bash(grep -v \"^--$\")",
+      "Bash(sed 's/[[:space:]]*//g')",
+      "Bash(tee /tmp/typecheck_output.txt)",
+      "Bash(echo \"EXIT_CODE: $?\")",
+      "Bash(tee /tmp/typecheck2.txt)"
+    ]
+  }
+}

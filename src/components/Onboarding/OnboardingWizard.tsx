@@ -20,10 +20,12 @@ import { seedObligationsFromIndustry } from '../../lib/governance/obligationTemp
 import { seedLicencesFromIndustry } from '../../lib/governance/licenceSeedTemplates';
 import { seedPoliciesFromIndustry } from '../../lib/governance/policyTemplates';
 import { seedRisksFromIndustry } from '../../lib/governance/riskSeedTemplates';
+import { seedGrcFromIndustry } from '../../lib/governance/grcSeedTemplates';
 import { logger } from '../../lib/logger';
 
 export interface OnboardingData {
   companyName: string;
+  logoUrl: string;
   industryType: string;
   primaryMarkets: string[];
   productCategories: string[];
@@ -76,6 +78,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   const [error, setError] = useState('');
   const [data, setData] = useState<OnboardingData>({
     companyName: '',
+    logoUrl: '',
     industryType: '',
     primaryMarkets: [],
     productCategories: [],
@@ -157,6 +160,20 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
 
       if (updateError) throw updateError;
 
+      // 1b. Persist the company logo (if uploaded) to company_settings so it
+      //     shows up everywhere the app reads company branding.
+      if (profile?.company_id && data.logoUrl) {
+        const { error: settingsError } = await supabase
+          .from('company_settings' as any)
+          .upsert({
+            company_id: profile.company_id,
+            name: data.companyName,
+            logo_url: data.logoUrl,
+            updated_at: new Date().toISOString(),
+          });
+        if (settingsError) throw settingsError;
+      }
+
       // 2. If Legal Partner, Create Partner Profile
       if (data.role === 'legal_partner') {
         await createPartnerProfile({
@@ -170,13 +187,14 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         });
       }
 
-      // 3. Seed industry-specific data (obligations, licences, policies)
+      // 3. Seed industry-specific data (obligations, licences, policies, risks, GRC frameworks)
       if (profile?.company_id && data.industryType) {
         await Promise.all([
           seedObligationsFromIndustry(profile.company_id, data.industryType),
           seedLicencesFromIndustry(profile.company_id, data.industryType),
           seedPoliciesFromIndustry(profile.company_id, data.industryType),
           seedRisksFromIndustry(profile.company_id, data.industryType),
+          seedGrcFromIndustry(profile.company_id, data.industryType, user.id),
         ]);
       }
 
@@ -257,7 +275,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             </div>
           )}
 
-          {currentStep === 1 && <StepCompanyProfile data={data} onUpdate={updateData} />}
+          {currentStep === 1 && <StepCompanyProfile data={data} onUpdate={updateData} companyId={profile?.company_id ?? null} />}
           {currentStep === 2 && <StepRegulatoryFocus data={data} onUpdate={updateData} />}
           {currentStep === 3 && <StepRoleAssignment data={data} onUpdate={updateData} />}
           {currentStep === 4 && <StepLegalPartnerDetails data={data} onUpdate={updateData} />}

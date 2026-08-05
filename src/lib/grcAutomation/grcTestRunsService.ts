@@ -58,15 +58,55 @@ export async function createRun(
     action: 'record_test_run',
     entityType: 'grc_test_run',
     entityId: record.id,
-    metadata: { 
-      test_id: record.test_id, 
-      status: record.status, 
-      result: record.result 
+    metadata: {
+      test_id: record.test_id,
+      status: record.status,
+      result: record.result
     },
     captureEvidence: false
   });
 
+  // Direct cascade: a FAILED control test deterministically raises a CAPA
+  // (deduped so one open CAPA exists per failing control). Best-effort —
+  // must never block run recording.
+  if (record.result === 'fail') {
+    await maybeCreateCapaForFailedRun(record, userId).catch(err =>
+      logger.warn('auto-CAPA for failed test run failed:', err)
+    );
+  }
+
   return record;
+}
+
+/**
+ * Raise a corrective CAPA for a failed control test run. Idempotent per control:
+ * if an open CAPA already exists for the control, no duplicate is created.
+ */
+async function maybeCreateCapaForFailedRun(run: GrcTestRun, userId: string | null): Promise<void> {
+  const SYSTEM_USER = '00000000-0000-0000-0000-000000000000';
+
+  const { data: test } = await (supabase as any)
+    .from('grc_control_tests')
+    .select('control_id, test_name')
+    .eq('id', run.test_id)
+    .maybeSingle();
+
+  const controlId: string | null = test?.control_id ?? null;
+  const testName: string = test?.test_name ?? 'Automated control test';
+
+  const { createCapa, hasPendingCapaForControl } = await import('../capaService');
+
+  // Dedup by control — avoids a new CAPA on every recurring failing run.
+  if (controlId && (await hasPendingCapaForControl(run.company_id, controlId))) return;
+
+  await createCapa(run.company_id, userId || SYSTEM_USER, {
+    title: `Control Test Failure: ${testName}`,
+    description: `Automated control test "${testName}" returned a FAIL result on ${new Date(run.executed_at).toLocaleString()}.${run.error_message ? ` Error: ${run.error_message}.` : ''} A corrective action is required to remediate the failing control.`,
+    source: 'compliance_failure',
+    capa_type: 'corrective',
+    priority: 'high',
+    controlId: controlId || undefined,
+  });
 }
 
 export async function listRunsByTest(

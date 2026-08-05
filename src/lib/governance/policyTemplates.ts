@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { logger } from '../logger';
+import { getIndustryCategory, type IndustryCategory } from '../regulatoryProfile';
 
 interface PolicyTemplate {
   title: string;
@@ -46,13 +47,82 @@ const LOGISTICS_POLICY_TEMPLATES: PolicyTemplate[] = [
   },
 ];
 
+const FINANCE_POLICY_TEMPLATES: PolicyTemplate[] = [
+  {
+    title: 'Anti-Money Laundering (AML) & Counter-Terrorist Financing Policy',
+    category: 'conduct',
+    description:
+      'Establishes the risk-based AML/CFT programme required under the CBN AML/CFT Regulations and Money Laundering (Prevention & Prohibition) Act. Covers customer risk rating, transaction monitoring, sanctions screening, and Suspicious Transaction Report (STR) filing to the NFIU. Aligned to FATF Recommendations.',
+  },
+  {
+    title: 'Know Your Customer (KYC) & Customer Due Diligence Policy',
+    category: 'conduct',
+    description:
+      'Defines identity verification, beneficial ownership identification, and enhanced due diligence for high-risk and politically exposed persons (PEPs). Sets ongoing monitoring and periodic KYC refresh cycles in line with CBN and SEC customer due diligence requirements.',
+  },
+  {
+    title: 'Data Protection & Privacy Policy (NDPA / GDPR)',
+    category: 'privacy',
+    description:
+      'Governs the lawful processing of customer and employee personal data under the Nigeria Data Protection Act (NDPA) and, where applicable, GDPR. Covers lawful bases, data subject rights, retention, breach notification, and cross-border transfer controls.',
+  },
+  {
+    title: 'Information Security Policy (ISO/IEC 27001)',
+    category: 'security',
+    description:
+      'Sets the information security management system (ISMS) baseline: access control, encryption of data at rest and in transit, secure development, logging and monitoring, and incident response — aligned to ISO/IEC 27001 Annex A controls.',
+  },
+  {
+    title: 'Internal Controls over Financial Reporting (SOX) Policy',
+    category: 'finance',
+    description:
+      'Documents the framework of internal controls over financial reporting (ICFR), including segregation of duties, journal-entry review, reconciliations, and management assessment of control effectiveness in line with SOX Section 404 and the COSO framework.',
+  },
+  {
+    title: 'Conflicts of Interest & Insider Trading Policy',
+    category: 'conduct',
+    description:
+      'Prohibits trading on material non-public information and requires disclosure and management of conflicts of interest, personal account dealing, gifts, and outside business activities, consistent with SEC market-conduct rules.',
+  },
+  {
+    title: 'Consumer Protection & Fair Treatment Policy',
+    category: 'conduct',
+    description:
+      'Implements the CBN Consumer Protection Framework: fair treatment of customers, transparent pricing and disclosures, responsible marketing, and a documented complaints-handling and redress process.',
+  },
+  {
+    title: 'Third-Party & Vendor Risk Management Policy',
+    category: 'operational',
+    description:
+      'Governs due diligence, contractual controls, and ongoing monitoring of outsourced service providers and fintech partners, including concentration risk and exit planning, consistent with CBN outsourcing and operational-resilience expectations.',
+  },
+  {
+    title: 'Business Continuity & Operational Resilience Policy',
+    category: 'operational',
+    description:
+      'Defines recovery time and recovery point objectives for critical banking services, scenario testing, and impact tolerances to maintain continuity during cyber, technology, or third-party disruption.',
+  },
+  {
+    title: 'Whistleblowing Policy',
+    category: 'conduct',
+    description:
+      'Provides a confidential channel for staff and third parties to report fraud, financial-crime, or regulatory breaches without retaliation, with escalation to the Board Audit Committee and, where required, to regulators.',
+  },
+];
+
+const POLICY_TEMPLATES_BY_CATEGORY: Partial<Record<IndustryCategory, PolicyTemplate[]>> = {
+  logistics: LOGISTICS_POLICY_TEMPLATES,
+  financial: FINANCE_POLICY_TEMPLATES,
+};
+
 export async function seedPoliciesFromIndustry(
   companyId: string,
   industryType: string,
 ): Promise<void> {
-  if (industryType.trim().toLowerCase() !== 'logistics & courier') return;
+  const templates = POLICY_TEMPLATES_BY_CATEGORY[getIndustryCategory(industryType)];
+  if (!templates || templates.length === 0) return;
 
-  const rows = LOGISTICS_POLICY_TEMPLATES.map(t => ({
+  const rows = templates.map(t => ({
     company_id: companyId,
     title: t.title,
     category: t.category,

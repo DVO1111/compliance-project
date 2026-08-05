@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { logger } from '../logger';
+import { getIndustryCategory, type IndustryCategory } from '../regulatoryProfile';
 
 interface ObligationTemplate {
   title: string;
@@ -68,6 +69,70 @@ const LOGISTICS_UK_NIGERIA_TEMPLATES: ObligationTemplate[] = [
   },
 ];
 
+const FINANCE_OBLIGATION_TEMPLATES: ObligationTemplate[] = [
+  {
+    title: 'Suspicious Transaction Report (STR) to NFIU',
+    description: 'File Suspicious Transaction Reports with the Nigerian Financial Intelligence Unit (NFIU) promptly upon detection, and Currency Transaction Reports (CTRs) above the regulatory threshold, per the Money Laundering (Prevention & Prohibition) Act and CBN AML/CFT Regulations.',
+    jurisdiction: 'Nigeria',
+    category: 'AML/CFT',
+    status: 'monitored',
+  },
+  {
+    title: 'Basel III Capital Adequacy Return (CBN)',
+    description: 'Submit periodic capital adequacy returns to the Central Bank of Nigeria demonstrating the Capital Adequacy Ratio (CAR) and buffers meet Basel III / CBN minimum thresholds.',
+    jurisdiction: 'Nigeria',
+    category: 'Prudential',
+    status: 'identified',
+  },
+  {
+    title: 'Liquidity Ratio Returns — LCR / NSFR (CBN)',
+    description: 'Report the Liquidity Coverage Ratio and Net Stable Funding Ratio to the CBN on the prescribed cycle to evidence adequate short- and medium-term liquidity under Basel III.',
+    jurisdiction: 'Nigeria',
+    category: 'Prudential',
+    status: 'identified',
+  },
+  {
+    title: 'Quarterly & Annual Financial Statements to SEC',
+    description: 'File quarterly and audited annual financial statements prepared under IFRS with the Securities & Exchange Commission and the relevant exchange, within statutory deadlines.',
+    jurisdiction: 'Nigeria',
+    category: 'Financial Reporting',
+    status: 'identified',
+  },
+  {
+    title: 'NDPA Annual Data Protection Audit (NDPC)',
+    description: 'Submit the annual data protection audit / compliance return to the Nigeria Data Protection Commission (NDPC) covering data mapping, lawful basis, breaches, and processor controls under the Nigeria Data Protection Act.',
+    jurisdiction: 'Nigeria',
+    category: 'Data Protection',
+    status: 'identified',
+  },
+  {
+    title: 'Consumer Protection Framework Returns (CBN)',
+    description: 'Report complaints data and evidence fair-treatment, disclosure, and redress practices to the CBN under the Consumer Protection Framework and Regulations.',
+    jurisdiction: 'Nigeria',
+    category: 'Consumer Protection',
+    status: 'identified',
+  },
+  {
+    title: 'PCI-DSS Annual Compliance Attestation',
+    description: 'Complete the annual PCI-DSS assessment (SAQ or Report on Compliance) and Attestation of Compliance for systems that store, process, or transmit cardholder data.',
+    jurisdiction: 'Global',
+    category: 'Information Security',
+    status: 'identified',
+  },
+  {
+    title: 'SOX Section 404 Management Assessment of ICFR',
+    description: 'Perform and document annual management assessment of the effectiveness of internal controls over financial reporting, with external auditor attestation, per Sarbanes-Oxley Section 404.',
+    jurisdiction: 'USA',
+    category: 'Financial Controls',
+    status: 'identified',
+  },
+];
+
+const OBLIGATION_TEMPLATES_BY_CATEGORY: Partial<Record<IndustryCategory, ObligationTemplate[]>> = {
+  logistics: LOGISTICS_UK_NIGERIA_TEMPLATES,
+  financial: FINANCE_OBLIGATION_TEMPLATES,
+};
+
 /**
  * Seeds pre-built obligation templates for a company based on its industry type.
  * Called once at the end of onboarding — does NOT validate permissions (system operation).
@@ -76,11 +141,11 @@ export async function seedObligationsFromIndustry(
   companyId: string,
   industryType: string,
 ): Promise<void> {
-  const industry = industryType.trim().toLowerCase();
-  if (industry !== 'logistics & courier') return;
+  const templates = OBLIGATION_TEMPLATES_BY_CATEGORY[getIndustryCategory(industryType)];
+  if (!templates || templates.length === 0) return;
 
   try {
-    const rows = LOGISTICS_UK_NIGERIA_TEMPLATES.map(t => ({
+    const rows = templates.map(t => ({
       ...t,
       company_id: companyId,
     }));

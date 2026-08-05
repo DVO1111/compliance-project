@@ -1,0 +1,256 @@
+﻿src/components/AgencyPortal/AgencyPortalPage.tsx(12,52): error TS6133: 'Filter' is declared but its value is never read.
+src/components/Archive/ArchivePage.tsx(189,18): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Archive/ArchivePage.tsx(250,19): error TS2345: Argument of type '{ signoff_status: string; published_at: string; published_by: string; }' is not assignable to parameter of type 'never'.
+src/components/Archive/ArchivePage.tsx(267,20): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Archive/ArchivePage.tsx(287,36): error TS2339: Property 'published_at' does not exist on type 'never'.
+src/components/Archive/ArchivePage.tsx(288,36): error TS2339: Property 'published_by' does not exist on type 'never'.
+src/components/Archive/ArchivePage.tsx(299,34): error TS2339: Property 'published_at' does not exist on type 'never'.
+src/components/Archive/ArchivePage.tsx(300,34): error TS2339: Property 'published_by' does not exist on type 'never'.
+src/components/Archive/DocumentDetailModal.tsx(1,31): error TS1261: Already included file name 'C:/Users/DELL/Desktop/FOLA/compliance new/TEAM CHAT IN PLACE/project/src/components/comments/CommentsPanel.tsx' differs from file name 'C:/Users/DELL/Desktop/FOLA/compliance new/TEAM CHAT IN PLACE/project/src/components/Comments/CommentsPanel.tsx' only in casing.
+  The file is in the program because:
+    Imported via "../comments/CommentsPanel" from file 'C:/Users/DELL/Desktop/FOLA/compliance new/TEAM CHAT IN PLACE/project/src/components/Archive/DocumentDetailModal.tsx'
+    Imported via '../comments/CommentsPanel' from file 'C:/Users/DELL/Desktop/FOLA/compliance new/TEAM CHAT IN PLACE/project/src/components/LegalReview/LegalReviewDetailPanel.tsx'
+    Matched by include pattern 'src' in 'tsconfig.app.json'
+    Imported via '../comments/CommentsPanel' from file 'C:/Users/DELL/Desktop/FOLA/compliance new/TEAM CHAT IN PLACE/project/src/components/LegalReview/ReviewPanel.tsx'
+src/components/Archive/DocumentDetailModal.tsx(142,38): error TS2322: Type 'Promise<unknown>' is not assignable to type 'Promise<void>'.
+  Type 'unknown' is not assignable to type 'void'.
+src/components/Archive/DocumentDetailModal.tsx(143,15): error TS2322: Type '(tagId: string) => Promise<unknown>' is not assignable to type '(tagId: string) => Promise<void>'.
+  Type 'Promise<unknown>' is not assignable to type 'Promise<void>'.
+    Type 'unknown' is not assignable to type 'void'.
+src/components/Archive/DocumentDetailModal.tsx(178,20): error TS2304: Cannot find name 'Pencil'.
+src/components/AuditTrail/MockAuditorPage.tsx(4,23): error TS6133: 'AlertCircle' is declared but its value is never read.
+src/components/AuditTrail/MockAuditorPage.tsx(4,43): error TS6133: 'ChevronRight' is declared but its value is never read.
+src/components/AuditTrail/MockAuditorPage.tsx(4,72): error TS6133: 'FileText' is declared but its value is never read.
+src/components/AuditTrail/MockAuditorPage.tsx(20,11): error TS6133: 'user' is declared but its value is never read.
+src/components/comments/CommentsPanel.tsx(83,13): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/comments/CommentsPanel.tsx(105,66): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "comments", never, "POST">', gave the following error.
+    Argument of type '{ company_id: string; submission_id: string; author_id: string; body: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "comments", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'company_id' does not exist in type 'never[]'.
+src/components/company/AcceptInvitePage.tsx(44,17): error TS6133: 'data' is declared but its value is never read.
+src/components/company/AcceptInvitePage.tsx(44,77): error TS2345: Argument of type '{ p_token: string; }' is not assignable to parameter of type 'undefined'.
+src/components/company/DepartmentsPage.tsx(127,58): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "departments", never, "POST">', gave the following error.
+    Argument of type '{ company_id: string; name: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "departments", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'company_id' does not exist in type 'never[]'.
+src/components/company/DepartmentsPage.tsx(150,65): error TS2345: Argument of type '{ name: string; }' is not assignable to parameter of type 'never'.
+src/components/company/DepartmentsPage.tsx(171,15): error TS2345: Argument of type '{ department_id: null; }' is not assignable to parameter of type 'never'.
+src/components/company/DepartmentsPage.tsx(199,15): error TS2345: Argument of type '{ department_id: string | null; }' is not assignable to parameter of type 'never'.
+src/components/company/InvitesPage.tsx(112,81): error TS2345: Argument of type '{ p_company_id: string; p_email: string; p_role: string; p_department_id: null; p_expires_in_hours: number; }' is not assignable to parameter of type 'undefined'.
+src/components/company/InvitesPage.tsx(162,75): error TS2345: Argument of type '{ p_invite_id: string; }' is not assignable to parameter of type 'undefined'.
+src/components/company/InvitesPage.tsx(181,17): error TS2345: Argument of type '{ revoked_at: string; }' is not assignable to parameter of type 'never'.
+src/components/Correction/CorrectionWorkspace.tsx(7,3): error TS6133: 'Send' is declared but its value is never read.
+src/components/Correction/CorrectionWorkspace.tsx(108,29): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Correction/CorrectionWorkspace.tsx(116,47): error TS2339: Property 'content_text' does not exist on type 'never'.
+src/components/Correction/CorrectionWorkspace.tsx(161,15): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/Correction/CorrectionWorkspace.tsx(207,15): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/Correction/CorrectionWorkspace.tsx(227,19): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Correction/CorrectionWorkspace.tsx(234,81): error TS2345: Argument of type '{ p_content_id: string; }' is not assignable to parameter of type 'undefined'.
+src/components/CorrectionEditor/CorrectionEditorPage.tsx(59,29): error TS2339: Property 'corrected_text' does not exist on type 'never'.
+src/components/CorrectionEditor/CorrectionEditorPage.tsx(59,52): error TS2339: Property 'content_text' does not exist on type 'never'.
+src/components/CorrectionEditor/CorrectionEditorPage.tsx(88,15): error TS2345: Argument of type '{ corrected_text: string; corrected_at: string; corrected_by: string; }' is not assignable to parameter of type 'never'.
+src/components/CorrectionEditor/CorrectionEditorPage.tsx(119,15): error TS2345: Argument of type '{ signoff_status: string; is_locked: boolean; locked_at: string; locked_by: string; submitted_for_legal_at: string; submitted_for_legal_by: string; }' is not assignable to parameter of type 'never'.
+src/components/Dashboard/DashboardPage.tsx(706,9): error TS2322: Type '{ widgets: WidgetConfig[]; onMove: (activeId: string, overId: string) => void; columns: number; }' is not assignable to type 'IntrinsicAttributes & SortableWidgetGridProps'.
+  Property 'columns' does not exist on type 'IntrinsicAttributes & SortableWidgetGridProps'.
+src/components/Dashboard/ui/ExportModal.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/Dashboard/ui/ExportModal.tsx(34,5): error TS6133: 'role' is declared but its value is never read.
+src/components/Dashboard/ui/ExportModal.tsx(35,5): error TS6133: 'selectedJurisdiction' is declared but its value is never read.
+src/components/Dashboard/widgets/ExecBreakdownWidget.tsx(73,9): error TS2345: Argument of type '{ p_company_id: string; p_jurisdiction: string | null; }' is not assignable to parameter of type 'undefined'.
+src/components/DriftMonitor/DriftMonitorPage.tsx(6,28): error TS6133: 'Eye' is declared but its value is never read.
+src/components/Executive/ExecutiveDashboardPage.tsx(63,80): error TS2345: Argument of type '{ p_company_id: string; }' is not assignable to parameter of type 'undefined'.
+src/components/Integrations/IntegrationsPage.tsx(33,3): error TS6133: 'Clock' is declared but its value is never read.
+src/components/Integrations/IntegrationsPage.tsx(68,42): error TS6133: 'name' is declared but its value is never read.
+src/components/Integrations/IntegrationsPage.tsx(80,10): error TS6133: 'logs' is declared but its value is never read.
+src/components/Integrations/IntegrationsPage.tsx(83,10): error TS6133: 'expandedLogs' is declared but its value is never read.
+src/components/Integrations/IntegrationsPage.tsx(83,24): error TS6133: 'setExpandedLogs' is declared but its value is never read.
+src/components/Integrations/IntegrationsPage.tsx(405,47): error TS6133: 'e' is declared but its value is never read.
+src/components/Integrations/IntegrationsPage.tsx(1668,23): error TS6133: 'isSlack' is declared but its value is never read.
+src/components/LegalReview/AnnotationLayer.tsx(180,21): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/LegalReview/LegalReviewDetailPanel.tsx(173,17): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(23,6): error TS6196: 'ContentSubmission' is declared but never used.
+src/components/LegalReview/LegalReviewPage.tsx(24,6): error TS6196: 'ComplianceReport' is declared but never used.
+src/components/LegalReview/LegalReviewPage.tsx(26,6): error TS6196: 'Profile' is declared but never used.
+src/components/LegalReview/LegalReviewPage.tsx(108,42): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(109,51): error TS2339: Property 'user_id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(122,63): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(123,64): error TS2339: Property 'content_id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(127,34): error TS2339: Property 'content_id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(127,69): error TS2339: Property 'content_id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(132,40): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(133,52): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(134,44): error TS2339: Property 'user_id' does not exist on type 'never'.
+src/components/LegalReview/LegalReviewPage.tsx(587,55): error TS2322: Type '{ companyId: string; days: number; }' is not assignable to type 'IntrinsicAttributes & { companyId: string; }'.
+  Property 'days' does not exist on type 'IntrinsicAttributes & { companyId: string; }'.
+src/components/Marketplace/PartnerVerificationPage.tsx(52,25): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/Onboarding/OnboardingWizard.tsx(122,17): error TS2345: Argument of type '{ organization: string; industry_type: string; primary_markets: string[]; product_categories: string[]; role: any; department: string; onboarding_completed: boolean; }' is not assignable to parameter of type 'never'.
+src/components/PharmaIntegrations/PharmaIntegrationsPage.tsx(115,64): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/PharmaIntegrations/PharmaIntegrationsPage.tsx(127,67): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(3,53): error TS6133: 'PolicyTemplate' is declared but its value is never read.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(3,74): error TS6133: 'PolicyDraft' is declared but its value is never read.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(4,68): error TS6133: 'AlertCircle' is declared but its value is never read.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(4,81): error TS6133: 'CheckCircle2' is declared but its value is never read.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(4,95): error TS6133: 'ChevronRight' is declared but its value is never read.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(4,109): error TS6133: 'Search' is declared but its value is never read.
+src/components/PolicyAssistant/PolicyAssistantPage.tsx(154,44): error TS2322: Type '{ children: string; className: string; }' is not assignable to type 'IntrinsicAttributes & Readonly<Options>'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & Readonly<Options>'.
+src/components/Profile/MyProfileTab.tsx(11,24): error TS2339: Property 'supportedValuesOf' does not exist on type 'typeof Intl'.
+src/components/Profile/MyProfileTab.tsx(61,70): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/Profile/MyProfileTab.tsx(88,52): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/Profile/MyProfileTab.tsx(188,40): error TS7006: Parameter 'tz' implicitly has an 'any' type.
+src/components/SocialListening/SocialListeningPage.tsx(3,230): error TS6133: 'SentimentType' is declared but its value is never read.
+src/components/SocialListening/SocialListeningPage.tsx(4,32): error TS6133: 'CheckCircle2' is declared but its value is never read.
+src/components/SocialListening/SocialListeningPage.tsx(4,61): error TS6133: 'ChevronRight' is declared but its value is never read.
+src/components/Upload/UploadPage.tsx(269,12): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "content_submissions", never, "POST">', gave the following error.
+    Argument of type '{ company_id: string; user_id: string; title: string; content_text: string; file_name: string; file_type: ".docx" | ".pdf" | ".txt"; platform: any; content_topic: string; target_audience: any; ... 4 more ...; department_id: string | null; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "content_submissions", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'company_id' does not exist in type 'never[]'.
+src/components/Upload/UploadPage.tsx(294,81): error TS2345: Argument of type '{ p_content_id: any; p_company_id: string; p_content_text: string; p_note: string; }' is not assignable to parameter of type 'undefined'.
+src/components/Upload/UploadPage.tsx(295,36): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(320,34): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(329,12): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "compliance_reports", never, "POST">', gave the following error.
+    Argument of type '{ content_id: any; regulation_version: string; overall_risk: "critical" | "low" | "medium" | "high"; issues: ComplianceIssue[]; flagged_phrases: FlaggedPhrase[]; violated_regulations: ViolatedRegulation[]; suggested_rewrites: SuggestedRewrite[]; strictness_level: string; jurisdiction: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "compliance_reports", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'content_id' does not exist in type 'never[]'.
+src/components/Upload/UploadPage.tsx(330,36): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(348,46): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(361,19): error TS2345: Argument of type '{ status: string; signoff_status: string; }' is not assignable to parameter of type 'never'.
+src/components/Upload/UploadPage.tsx(365,32): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(375,32): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(395,33): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(403,38): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(476,17): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/components/Upload/UploadPage.tsx(483,15): error TS2345: Argument of type '{ signoff_status: string; submitted_for_legal_at: string; submitted_for_legal_by: string; is_locked: boolean; locked_at: string; locked_by: string; }' is not assignable to parameter of type 'never'.
+src/components/Upload/UploadPage.tsx(504,16): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/Upload/UploadPage.tsx(526,83): error TS2345: Argument of type '{ p_content_id: string; }' is not assignable to parameter of type 'undefined'.
+src/components/VendorScorecard/VendorScorecardPage.tsx(4,49): error TS6133: 'CheckCircle2' is declared but its value is never read.
+src/components/VendorScorecard/VendorScorecardPage.tsx(4,85): error TS6133: 'ChevronRight' is declared but its value is never read.
+src/components/WebsiteMonitoring/WebsiteMonitoringPage.tsx(3,125): error TS6133: 'PageAlert' is declared but its value is never read.
+src/components/Whistleblower/WhistleblowerPage.tsx(4,70): error TS6133: 'addCaseUpdate' is declared but its value is never read.
+src/components/Whistleblower/WhistleblowerPage.tsx(188,89): error TS6133: 'i' is declared but its value is never read.
+src/contexts/AuthContext.tsx(163,100): error TS2345: Argument of type '{ p_name: string; }' is not assignable to parameter of type 'undefined'.
+src/contexts/AuthContext.tsx(174,71): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "profiles", never, "POST">', gave the following error.
+    Argument of type '{ id: string; email: string; full_name: string; organization: string; company_id: never; onboarding_completed: boolean; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "profiles", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'id' does not exist in type 'never[]'.
+src/hooks/useArchiveData.ts(56,44): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(67,46): error TS2339: Property 'content_id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(69,29): error TS2339: Property 'content_id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(73,7): error TS2698: Spread types may only be created from object types.
+src/hooks/useArchiveData.ts(74,31): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(75,33): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(80,57): error TS2339: Property 'tag_name' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(84,7): error TS2698: Spread types may only be created from object types.
+src/hooks/useArchiveData.ts(85,50): error TS2339: Property 'folder_id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(85,71): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(107,62): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "content_folders", never, "POST">', gave the following error.
+    Argument of type '{ user_id: string; name: string; parent_folder_id: string | null; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "content_folders", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'user_id' does not exist in type 'never[]'.
+src/hooks/useArchiveData.ts(119,15): error TS2345: Argument of type '{ name: string; }' is not assignable to parameter of type 'never'.
+src/hooks/useArchiveData.ts(128,15): error TS2345: Argument of type '{ folder_id: null; }' is not assignable to parameter of type 'never'.
+src/hooks/useArchiveData.ts(133,15): error TS2345: Argument of type '{ parent_folder_id: null; }' is not assignable to parameter of type 'never'.
+src/hooks/useArchiveData.ts(147,15): error TS2345: Argument of type '{ folder_id: string | null; }' is not assignable to parameter of type 'never'.
+src/hooks/useArchiveData.ts(155,60): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "document_tags", never, "POST">', gave the following error.
+    Argument of type '{ content_id: string; user_id: string; tag_name: string; tag_type: "campaign" | "client"; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "document_tags", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'content_id' does not exist in type 'never[]'.
+src/hooks/useArchiveData.ts(210,15): error TS2345: Argument of type '{ signoff_status: string; submitted_for_legal_at: string; submitted_for_legal_by: string; is_locked: boolean; locked_at: string; locked_by: string; }' is not assignable to parameter of type 'never'.
+src/hooks/useArchiveData.ts(226,19): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useArchiveData.ts(231,83): error TS2345: Argument of type '{ p_content_id: string; }' is not assignable to parameter of type 'undefined'.
+src/hooks/useMarketingPipeline.ts(48,74): error TS2345: Argument of type '{ p_company_id: string; p_user_id: string; p_jurisdiction: string | null; }' is not assignable to parameter of type 'undefined'.
+src/integrations/connectionStore.ts(79,17): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/integrations/connectionStore.ts(93,17): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/integrations/connectionStore.ts(114,17): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/chatService.ts(93,56): error TS2345: Argument of type '{ p_company_id: string; }' is not assignable to parameter of type 'undefined'.
+src/lib/chatService.ts(136,47): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/chatService.ts(163,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/chatService.ts(168,39): error TS6133: 'companyId' is declared but its value is never read.
+src/lib/chatService.ts(272,11): error TS6133: 'data' is declared but its value is never read.
+src/lib/chatService.ts(293,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/chatService.ts(301,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/chatService.ts(307,47): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/chatService.ts(498,15): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/complianceHealthService.ts(45,5): error TS2345: Argument of type '{ p_company_id: string; }' is not assignable to parameter of type 'undefined'.
+src/lib/complianceHealthService.ts(102,3): error TS2322: Type '{ topic: string; submissions: number; approved: number; rejected: number; avgCycles: number; riskLevel: string; }[]' is not assignable to type 'TherapeuticBreakdown[]'.
+  Type '{ topic: string; submissions: number; approved: number; rejected: number; avgCycles: number; riskLevel: string; }' is not assignable to type 'TherapeuticBreakdown'.
+    Types of property 'riskLevel' are incompatible.
+      Type 'string' is not assignable to type '"low" | "medium" | "high"'.
+src/lib/complianceHealthService.ts(114,45): error TS6133: 'companyId' is declared but its value is never read.
+src/lib/expiryService.ts(38,6): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { onConflict?: string | undefined; ignoreDuplicates?: boolean | undefined; count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ ...; }, ... 5 more ..., "POST">', gave the following error.
+    Argument of type '{ company_id: string; expiry_days: number; auto_expire: boolean; updated_by: string; updated_at: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { onConflict?: string | undefined; ignoreDuplicates?: boolean | undefined; count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<...>', gave the following error.
+    Object literal may only specify known properties, and 'company_id' does not exist in type 'never[]'.
+src/lib/expiryService.ts(71,13): error TS2345: Argument of type '{ approval_expires_at: string; }' is not assignable to parameter of type 'never'.
+src/lib/expiryService.ts(108,13): error TS2345: Argument of type '{ signoff_status: string; is_locked: boolean; }' is not assignable to parameter of type 'never'.
+src/lib/hierarchyService.ts(139,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/hierarchyService.ts(210,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/hierarchyService.ts(267,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/legalActions.ts(12,13): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'never'.
+src/lib/legalActions.ts(19,14): error TS2339: Property 'id' does not exist on type 'never'.
+src/lib/legalActions.ts(25,66): error TS2345: Argument of type '{ p_content_id: string; p_type: string; p_message: string; }' is not assignable to parameter of type 'undefined'.
+src/lib/legalActions.ts(37,66): error TS2345: Argument of type '{ p_content_id: string; }' is not assignable to parameter of type 'undefined'.
+src/lib/legalActions.ts(88,42): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "legal_reviews", never, "POST">', gave the following error.
+    Argument of type '{ content_id: string; reviewer_id: string; status: string; comments: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "legal_reviews", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'content_id' does not exist in type 'never[]'.
+src/lib/legalActions.ts(133,71): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "legal_reviews", never, "POST">', gave the following error.
+    Argument of type '{ content_id: string; reviewer_id: string; status: string; comments: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "legal_reviews", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'content_id' does not exist in type 'never[]'.
+src/lib/legalMarketplaceService.ts(69,46): error TS6133: 'requestId' is declared but its value is never read.
+src/lib/legalMarketplaceService.ts(69,65): error TS6133: 'message' is declared but its value is never read.
+src/lib/legalMarketplaceService.ts(106,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/legalMarketplaceService.ts(169,13): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/licenseService.ts(335,64): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/licenseService.ts(345,51): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/lib/marketingActions.ts(14,13): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'never'.
+src/lib/marketingActions.ts(25,14): error TS2339: Property 'id' does not exist on type 'never'.
+src/lib/policyAssistantService.ts(80,17): error TS6133: 'error' is declared but its value is never read.
+src/lib/policyAssistantService.ts(85,17): error TS6133: 'error' is declared but its value is never read.
+src/lib/regulatoryLibraryService.ts(6,1): error TS6133: 'supabase' is declared but its value is never read.
+src/lib/reviewWorkflowService.ts(48,6): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "review_assignments", never, "POST">', gave the following error.
+    Argument of type '{ company_id: string; submission_id: string; reviewer_ids: string[]; quorum: number; sla_hours: number; deadline_at: string; status: string; created_by: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "review_assignments", never, "POST">', gave the following error.
+    Object literal may only specify known properties, and 'company_id' does not exist in type 'never[]'.
+src/lib/reviewWorkflowService.ts(66,13): error TS2345: Argument of type '{ sla_deadline_at: string; }' is not assignable to parameter of type 'never'.
+src/lib/reviewWorkflowService.ts(98,6): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { onConflict?: string | undefined; ignoreDuplicates?: boolean | undefined; count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ ...; }, ... 5 more ..., "POST">', gave the following error.
+    Argument of type '{ assignment_id: string; reviewer_id: string; vote: "approve" | "reject" | "abstain" | "request_changes"; comments: string; updated_at: string; }' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { onConflict?: string | undefined; ignoreDuplicates?: boolean | undefined; count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<...>', gave the following error.
+    Object literal may only specify known properties, and 'assignment_id' does not exist in type 'never[]'.
+src/lib/reviewWorkflowService.ts(145,18): error TS2339: Property 'status' does not exist on type 'never'.
+src/lib/reviewWorkflowService.ts(145,82): error TS2339: Property 'resolved_outcome' does not exist on type 'never'.
+src/lib/reviewWorkflowService.ts(158,29): error TS2339: Property 'quorum' does not exist on type 'never'.
+src/lib/reviewWorkflowService.ts(174,15): error TS2345: Argument of type '{ status: string; resolved_at: string; resolved_outcome: string; updated_at: string; }' is not assignable to parameter of type 'never'.
+src/lib/roleService.ts(3,1): error TS6133: 'SYSTEM_ROLE_DEFAULTS' is declared but its value is never read.
+src/lib/secureDeletionService.ts(20,94): error TS2345: Argument of type '{ password: string; }' is not assignable to parameter of type 'undefined'.
+src/lib/secureDeletionService.ts(46,35): error TS2339: Property 'full_name' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(52,15): error TS2345: Argument of type '{ is_deleted: boolean; deleted_at: string; deleted_by: string; }' is not assignable to parameter of type 'never'.
+src/lib/secureDeletionService.ts(88,69): error TS2339: Property 'id' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(88,75): error TS2339: Property 'name' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(91,15): error TS2339: Property 'role' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(91,37): error TS2339: Property 'role' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(92,15): error TS2339: Property 'custom_role_id' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(93,45): error TS2339: Property 'custom_role_id' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(99,21): error TS2339: Property 'id' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(108,62): error TS2339: Property 'title' does not exist on type 'never'.
+src/lib/secureDeletionService.ts(112,53): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(values: never, options?: { count?: "exact" | "planned" | "estimated" | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "notifications", never, "POST">', gave the following error.
+    Argument of type '{ recipient_id: any; type: string; content_id: string; message: string; }[]' is not assignable to parameter of type 'never'.
+  Overload 2 of 2, '(values: never[], options?: { count?: "exact" | "planned" | "estimated" | undefined; defaultToNull?: boolean | undefined; } | undefined): PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, never, never, null, "notifications", never, "POST">', gave the following error.
+    Argument of type '{ recipient_id: any; type: string; content_id: string; message: string; }[]' is not assignable to parameter of type 'never[]'.
+      Type '{ recipient_id: any; type: string; content_id: string; message: string; }' is not assignable to type 'never'.
+src/verify_p5.ts(12,33): error TS2339: Property 'company_id' does not exist on type 'never'.
+src/verify_p5.ts(13,30): error TS2339: Property 'id' does not exist on type 'never'.
+src/verify_p8.ts(1,30): error TS6133: 'getAuditSimulations' is declared but its value is never read.

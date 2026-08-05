@@ -5,7 +5,9 @@ import {
   AuditPrepSessionWithItems,
   AuditPrepItem,
   AuditType,
+  InspectionType,
   ItemType,
+  PriorityDoc,
   AUDIT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   getAuditPrepSessions,
@@ -15,6 +17,7 @@ import {
   triggerAuditAssembly,
   pollUntilReady,
   buildExportText,
+  getUnannouncedPriorityDocs,
 } from '../../lib/auditPrepService';
 import {
   Plus,
@@ -39,7 +42,9 @@ import {
   BarChart3,
   Loader2,
   ChevronRight,
+  Zap,
 } from 'lucide-react';
+import NafdacReadinessChecklist from './NafdacReadinessChecklist';
 
 type View = 'list' | 'detail';
 
@@ -208,6 +213,8 @@ function SessionDetail({
   const [assembling, setAssembling] = useState(false);
   const [assembleError, setAssembleError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ItemType>('batch_record');
+  const [priorityDocs, setPriorityDocs] = useState<PriorityDoc[] | null>(null);
+  const [priorityLoading, setPriorityLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -217,6 +224,20 @@ function SessionDetail({
   }, [sessionId, companyId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Unannounced mode: surface priority documents immediately, bypassing assembly.
+  const loadPriorityDocs = useCallback(async () => {
+    setPriorityLoading(true);
+    const docs = await getUnannouncedPriorityDocs(companyId);
+    setPriorityDocs(docs);
+    setPriorityLoading(false);
+  }, [companyId]);
+
+  useEffect(() => {
+    if (data?.inspection_type === 'unannounced' && priorityDocs === null && !priorityLoading) {
+      loadPriorityDocs();
+    }
+  }, [data?.inspection_type, priorityDocs, priorityLoading, loadPriorityDocs]);
 
   const handleAssemble = async () => {
     if (!data) return;
@@ -314,6 +335,51 @@ function SessionDetail({
           )}
         </div>
       </div>
+
+      {/* NAFDAC official document checklist (both inspection guidelines) */}
+      <NafdacReadinessChecklist companyId={companyId} />
+
+      {/* Unannounced Mode — instant priority documents */}
+      {data.inspection_type === 'unannounced' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" />
+              <h2 className="font-semibold text-[var(--color-text-primary,#111)]">Unannounced Inspection — Priority Documents</h2>
+            </div>
+            <button
+              onClick={loadPriorityDocs}
+              disabled={priorityLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+            >
+              {priorityLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Refresh
+            </button>
+          </div>
+          <p className="text-xs text-amber-800/80 mb-4">
+            The critical files an inspector asks for first — surfaced instantly, without waiting for full AI assembly.
+          </p>
+          {priorityLoading && priorityDocs === null ? (
+            <div className="flex items-center gap-2 text-sm text-amber-800"><Loader2 className="w-4 h-4 animate-spin" /> Locating documents…</div>
+          ) : (priorityDocs && priorityDocs.length > 0) ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {priorityDocs.map((doc, i) => (
+                <div key={i} className="bg-white border border-amber-200 rounded-lg p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">{doc.category}</p>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary,#111)] mt-0.5">{doc.title}</p>
+                  {doc.subtitle && <p className="text-xs text-[var(--color-text-secondary,#6b7280)]">{doc.subtitle}</p>}
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[var(--color-text-secondary,#6b7280)]">
+                    {doc.status && <span className="px-1.5 py-0.5 rounded-full bg-gray-100">{doc.status}</span>}
+                    {doc.date && <span>{new Date(doc.date).toLocaleDateString('en-GB')}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-amber-800/80">No priority documents found yet — add a released batch, CoA, or licence.</p>
+          )}
+        </div>
+      )}
 
       {assembleError && (
         <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -486,12 +552,13 @@ function NewSessionModal({
 }: {
   onClose: () => void;
   onCreate: (data: {
-    name: string; audit_type: AuditType; scheduled_date?: string;
+    name: string; audit_type: AuditType; inspection_type?: InspectionType; scheduled_date?: string;
     inspector_name?: string; inspector_org?: string; scope_notes?: string;
   }) => void;
 }) {
   const [name, setName] = useState('');
   const [auditType, setAuditType] = useState<AuditType>('nafdac');
+  const [inspectionType, setInspectionType] = useState<InspectionType>('scheduled');
   const [scheduledDate, setScheduledDate] = useState('');
   const [inspectorName, setInspectorName] = useState('');
   const [inspectorOrg, setInspectorOrg] = useState('');
@@ -503,6 +570,7 @@ function NewSessionModal({
     onCreate({
       name: name.trim(),
       audit_type: auditType,
+      inspection_type: inspectionType,
       scheduled_date: scheduledDate || undefined,
       inspector_name: inspectorName || undefined,
       inspector_org: inspectorOrg || undefined,
@@ -551,6 +619,30 @@ function NewSessionModal({
               />
             </div>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Inspection type</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([['scheduled', 'Scheduled', 'Full AI evidence assembly'], ['unannounced', 'Unannounced', 'Instant priority documents']] as const).map(([id, label, hint]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setInspectionType(id)}
+                  className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
+                    inspectionType === id
+                      ? 'border-[#2943D6] bg-[#2943D6]/5'
+                      : 'border-[var(--color-border,#e5e7eb)] hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-text-primary,#111)]">
+                    {id === 'unannounced' ? <Zap className="w-3.5 h-3.5 text-amber-500" /> : <Calendar className="w-3.5 h-3.5 text-[#2943D6]" />}
+                    {label}
+                  </span>
+                  <span className="block text-[11px] text-[var(--color-text-secondary,#6b7280)] mt-0.5">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Inspector name</label>

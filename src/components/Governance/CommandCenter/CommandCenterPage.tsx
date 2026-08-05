@@ -15,7 +15,10 @@ import {
     ShieldCheck,
     Clock,
     BrainCircuit,
+    ClipboardCheck,
+    ArrowRight,
 } from 'lucide-react';
+import { supabase } from '../../../lib/supabase';
 import {
     ResponsiveContainer,
     Radar,
@@ -183,6 +186,9 @@ export default function CommandCenterPage() {
                     color={metrics?.overdueAuditsCount && metrics.overdueAuditsCount > 0 ? '#ef4444' : undefined}
                 />
             </div>
+
+            {/* Hardened Signal Flow — failed tests auto-raise CAPAs and shift risk posture */}
+            <SignalFlowCard companyId={companyId} postureScore={metrics?.posture?.posture_score ?? null} />
 
             {/* Main Insights Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -545,6 +551,63 @@ export default function CommandCenterPage() {
             </div>
 
         </div>
+    );
+}
+
+function SignalFlowCard({ companyId, postureScore }: { companyId: string; postureScore: number | null }) {
+    const [failedTests, setFailedTests] = useState<number | null>(null);
+    const [autoCapas, setAutoCapas] = useState<number | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            const [testsRes, capaRes] = await Promise.all([
+                (supabase as any)
+                    .from('grc_test_runs')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('company_id', companyId)
+                    .eq('result', 'fail')
+                    .gte('executed_at', since),
+                (supabase as any)
+                    .from('capa_records')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('company_id', companyId)
+                    .eq('source', 'compliance_failure')
+                    .neq('status', 'closed'),
+            ]);
+            if (cancelled) return;
+            setFailedTests(testsRes?.count ?? 0);
+            setAutoCapas(capaRes?.count ?? 0);
+        })();
+        return () => { cancelled = true; };
+    }, [companyId]);
+
+    const node = (icon: React.ReactNode, value: string | number, label: string, tone: string) => (
+        <div className="flex-1 min-w-[120px] p-4 rounded-xl border dash-border bg-[var(--color-surface-alt)] text-center">
+            <div className={`inline-flex p-2 rounded-lg mb-2 ${tone}`}>{icon}</div>
+            <p className="text-2xl font-black dash-text">{value}</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest dash-text-tertiary mt-1">{label}</p>
+        </div>
+    );
+
+    return (
+        <DashboardCard>
+            <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600"><Zap size={16} /></div>
+                <div>
+                    <h3 className="text-xs font-bold uppercase tracking-widest dash-text-tertiary">Automated Signal Flow</h3>
+                    <p className="text-[10px] dash-text-tertiary">Failed control tests auto-raise CAPAs, which feed the risk posture score.</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+                {node(<AlertTriangle size={18} className="text-red-500" />, failedTests ?? '…', 'Failed Tests (30d)', 'bg-red-50')}
+                <ArrowRight size={18} className="dash-text-tertiary shrink-0" />
+                {node(<ClipboardCheck size={18} className="text-amber-500" />, autoCapas ?? '…', 'Auto-Raised CAPAs', 'bg-amber-50')}
+                <ArrowRight size={18} className="dash-text-tertiary shrink-0" />
+                {node(<Target size={18} className="text-blue-500" />, postureScore ?? '…', 'Risk Posture Score', 'bg-blue-50')}
+            </div>
+        </DashboardCard>
     );
 }
 

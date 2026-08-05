@@ -206,7 +206,7 @@ function isValidPageId(value: any): value is PageId {
 }
 
 function AppContent() {
-  const { user, profile, loading, refreshProfile } = useAuth();
+  const { user, profile, loading, refreshProfile, signOut } = useAuth();
 
   const inviteTokenFromUrl = (() => {
     try {
@@ -393,9 +393,22 @@ function AppContent() {
   }
 
   if (user && !profile) {
+    // Signed in but no profile row yet. This is normally a brief provisioning
+    // window, but if a session gets stuck without a profile (e.g. signup that
+    // never completed verification), give the user a way out instead of an
+    // endless spinner.
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex flex-col items-center justify-center gap-6 px-4 text-center">
         <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
+        <p className="text-white/90 text-sm max-w-sm">
+          Setting up your account… If this doesn’t finish, your sign-up may not have been verified.
+        </p>
+        <button
+          onClick={() => signOut()}
+          className="text-white/80 hover:text-white underline text-sm"
+        >
+          Sign out and try again
+        </button>
       </div>
     );
   }

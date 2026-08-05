@@ -146,6 +146,143 @@ export async function listQcResults(batchId: string): Promise<BatchQcResult[]> {
   return data ?? [];
 }
 
+/* ── In-Process QC ─────────────────────────────────────────────────────────
+   Intermediate quality-control stages logged while a batch is in production,
+   distinct from the final release QC in batch_qc_results. */
+
+export interface BatchInProcessQc {
+  id: string;
+  company_id: string;
+  batch_id: string;
+  stage_name: string;
+  parameter: string;
+  specification: string | null;
+  result: string;
+  pass: boolean;
+  tested_by: string | null;
+  tested_at: string;
+}
+
+export async function listInProcessQc(batchId: string): Promise<BatchInProcessQc[]> {
+  const { data, error } = await (supabase as any)
+    .from('batch_inprocess_qc')
+    .select('*')
+    .eq('batch_id', batchId)
+    .order('tested_at', { ascending: false });
+  if (error) { logger.error('listInProcessQc:', error); return []; }
+  return data ?? [];
+}
+
+export async function addInProcessQc(
+  companyId: string,
+  batchId: string,
+  userId: string,
+  entry: Omit<BatchInProcessQc, 'id' | 'company_id' | 'batch_id' | 'tested_by' | 'tested_at'>
+): Promise<BatchInProcessQc> {
+  const { data, error } = await (supabase as any)
+    .from('batch_inprocess_qc')
+    .insert({ ...entry, company_id: companyId, batch_id: batchId, tested_by: userId })
+    .select()
+    .single();
+  if (error) throw error;
+
+  await recordAuditEvent({
+    userId,
+    companyId,
+    action: 'add_inprocess_qc',
+    entityType: 'batch_record',
+    entityId: batchId,
+    metadata: { stage_name: entry.stage_name, parameter: entry.parameter, pass: entry.pass },
+    captureEvidence: false,
+  }).catch(e => logger.error('Audit failed for add_inprocess_qc:', e));
+
+  return data;
+}
+
+/* ── Raw Material Receipts ─────────────────────────────────────────────────
+   Incoming raw material lots and their receiving / QC outcome. */
+
+export type RawMaterialStatus = 'pending' | 'passed' | 'failed' | 'quarantined';
+
+export interface RawMaterialReceipt {
+  id: string;
+  company_id: string;
+  material_name: string;
+  material_code: string | null;
+  lot_number: string;
+  supplier_name: string | null;
+  quantity: number | null;
+  unit: string;
+  received_date: string;
+  test_status: RawMaterialStatus;
+  test_result: string | null;
+  received_by: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listRawMaterialReceipts(companyId: string): Promise<RawMaterialReceipt[]> {
+  const { data, error } = await (supabase as any)
+    .from('raw_material_receipts')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('received_date', { ascending: false });
+  if (error) { logger.error('listRawMaterialReceipts:', error); return []; }
+  return data ?? [];
+}
+
+export async function addRawMaterialReceipt(
+  companyId: string,
+  userId: string,
+  receipt: Pick<RawMaterialReceipt, 'material_name' | 'lot_number'> &
+    Partial<Pick<RawMaterialReceipt, 'material_code' | 'supplier_name' | 'quantity' | 'unit' | 'received_date' | 'test_status' | 'test_result'>>
+): Promise<RawMaterialReceipt> {
+  const { data, error } = await (supabase as any)
+    .from('raw_material_receipts')
+    .insert({ ...receipt, company_id: companyId, created_by: userId, received_by: userId })
+    .select()
+    .single();
+  if (error) throw error;
+
+  await recordAuditEvent({
+    userId,
+    companyId,
+    action: 'add_raw_material_receipt',
+    entityType: 'raw_material_receipt',
+    entityId: data.id,
+    metadata: { material_name: receipt.material_name, lot_number: receipt.lot_number, test_status: receipt.test_status ?? 'pending' },
+    captureEvidence: false,
+  }).catch(e => logger.error('Audit failed for add_raw_material_receipt:', e));
+
+  return data;
+}
+
+export async function updateRawMaterialStatus(
+  id: string,
+  companyId: string,
+  userId: string,
+  testStatus: RawMaterialStatus,
+  testResult?: string
+): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('raw_material_receipts')
+    .update({ test_status: testStatus, test_result: testResult ?? null })
+    .eq('id', id)
+    .eq('company_id', companyId);
+  if (error) throw error;
+
+  await recordAuditEvent({
+    userId,
+    companyId,
+    action: 'update_raw_material_status',
+    entityType: 'raw_material_receipt',
+    entityId: id,
+    metadata: { test_status: testStatus },
+    captureEvidence: false,
+  }).catch(e => logger.error('Audit failed for update_raw_material_status:', e));
+}
+
 export const STATUS_LABELS: Record<BatchStatus, string> = {
   qc_pending: 'QC Pending',
   qc_in_progress: 'QC In Progress',

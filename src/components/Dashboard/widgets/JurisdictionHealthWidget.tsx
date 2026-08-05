@@ -5,6 +5,8 @@ import DashboardCard from "../ui/DashboardCard";
 import { SkeletonChart } from "../ui/Skeleton";
 import { EmptyState } from "../ui/EmptyState";
 import { logger } from "../../../lib/logger";
+import { useAuth } from "../../../contexts/AuthContext";
+import { getRegulatorInfo, type JurisdictionId } from "../../../lib/regulatoryProfile";
 
 type JurisdictionRow = {
   jurisdiction: string;
@@ -19,14 +21,13 @@ type JurisdictionRow = {
 
 type HealthStatus = "healthy" | "warning" | "critical";
 
-const JURISDICTION_META: Record<
-  string,
-  { label: string; flag: string; regulator: string }
-> = {
-  nigeria:    { label: "Nigeria",     flag: "🇳🇬", regulator: "NAFDAC" },
-  usa:        { label: "USA",         flag: "🇺🇸", regulator: "FDA"    },
-  europe:     { label: "Europe",      flag: "🇪🇺", regulator: "EMA"    },
-  pan_african:{ label: "Pan-African", flag: "🌍", regulator: "AFRO"   },
+// Country label + flag are industry-independent. The regulator name is resolved
+// per-industry at render time via getRegulatorInfo (e.g. Financial Services → CBN/SEC).
+const JURISDICTION_META: Record<string, { label: string; flag: string }> = {
+  nigeria:    { label: "Nigeria",     flag: "🇳🇬" },
+  usa:        { label: "USA",         flag: "🇺🇸" },
+  europe:     { label: "Europe",      flag: "🇪🇺" },
+  pan_african:{ label: "Pan-African", flag: "🌍" },
 };
 
 const HEALTH_CONFIG: Record<
@@ -68,6 +69,8 @@ export default function JurisdictionHealthWidget({
 }: {
   companyId: string;
 }) {
+  const { profile } = useAuth();
+  const industryType = (profile as any)?.industry_type as string | null | undefined;
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<JurisdictionRow[]>([]);
 
@@ -183,8 +186,11 @@ export default function JurisdictionHealthWidget({
             const meta = JURISDICTION_META[row.jurisdiction] ?? {
               label: row.jurisdiction,
               flag: "🌐",
-              regulator: row.jurisdiction.toUpperCase(),
             };
+            // Regulator name depends on the company's industry, not just the country.
+            const regulator = JURISDICTION_META[row.jurisdiction]
+              ? getRegulatorInfo(industryType, row.jurisdiction as JurisdictionId).short
+              : row.jurisdiction.toUpperCase();
             const health = computeHealth(row);
             const cfg = HEALTH_CONFIG[health];
             const StatusIcon = cfg.Icon;
@@ -208,7 +214,7 @@ export default function JurisdictionHealthWidget({
                       </span>
                     </div>
                     <p className="text-[10px] dash-text-tertiary font-medium mt-0.5">
-                      {meta.regulator}
+                      {regulator}
                     </p>
                   </div>
                   <div

@@ -9,6 +9,8 @@ export type AuditType =
 
 export type PrepStatus = 'draft' | 'assembling' | 'ready' | 'exported';
 
+export type InspectionType = 'scheduled' | 'unannounced';
+
 export type ItemType =
   | 'batch_record' | 'capa' | 'control' | 'certificate'
   | 'sop' | 'policy' | 'obligation' | 'risk' | 'change_control';
@@ -30,6 +32,7 @@ export interface AuditPrepSession {
   company_id: string;
   name: string;
   audit_type: AuditType;
+  inspection_type: InspectionType;
   scheduled_date: string | null;
   inspector_name: string | null;
   inspector_org: string | null;
@@ -109,6 +112,7 @@ export async function createAuditPrepSession(
   input: {
     name: string;
     audit_type: AuditType;
+    inspection_type?: InspectionType;
     scheduled_date?: string;
     inspector_name?: string;
     inspector_org?: string;
@@ -238,6 +242,116 @@ export async function pollUntilReady(
     };
     setTimeout(tick, intervalMs);
   });
+}
+
+// ── Unannounced Mode — fast priority-document surfacing ───────────────────────
+// Bypasses the full AI assembler. Directly queries the handful of documents an
+// inspector asks for first, so they can be produced in seconds.
+
+export interface PriorityDoc {
+  category: string;
+  title: string;
+  subtitle?: string;
+  status?: string | null;
+  date?: string | null;
+}
+
+export async function getUnannouncedPriorityDocs(companyId: string): Promise<PriorityDoc[]> {
+  const docs: PriorityDoc[] = [];
+
+  const [batchRes, coaRes, licenceRes] = await Promise.all([
+    // Most recently released batch (fall back to latest batch).
+    (supabase as any)
+      .from('batch_records')
+      .select('batch_number, product_name, status, released_at, created_at')
+      .eq('company_id', companyId)
+      .order('released_at', { ascending: false, nullsFirst: false })
+      .limit(1),
+    // Latest CoA (prefer QA-approved ordering by created_at desc).
+    (supabase as any)
+      .from('certificate_of_analysis')
+      .select('coa_number, product_name, batch_number, status, created_at')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    // Active licences (e.g. NAFDAC) — soonest to expire first.
+    (supabase as any)
+      .from('regulatory_licences')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('expiry_date', { ascending: true })
+      .limit(3),
+  ]);
+
+  const batch = batchRes?.data?.[0];
+  if (batch) {
+    docs.push({
+      category: 'Current Batch Record',
+      title: `${batch.batch_number} — ${batch.product_name}`,
+      status: batch.status,
+      date: batch.released_at ?? batch.created_at ?? null,
+    });
+  }
+
+  const coa = coaRes?.data?.[0];
+  if (coa) {
+    docs.push({
+      category: 'Latest Certificate of Analysis',
+      title: `${coa.coa_number} — ${coa.product_name}`,
+      subtitle: coa.batch_number ? `Batch ${coa.batch_number}` : undefined,
+      status: coa.status,
+      date: coa.created_at ?? null,
+    });
+  }
+
+  const licences = (licenceRes?.data ?? []) as any[];
+  for (const lic of licences) {
+    const title = lic.licence_name ?? lic.name ?? lic.title ?? lic.licence_number ?? 'Regulatory Licence';
+    const issuer = lic.issuing_body ?? lic.regulator ?? lic.authority ?? null;
+    docs.push({
+      category: issuer ? `${issuer} Licence` : 'Regulatory Licence',
+      title: String(title),
+      subtitle: lic.licence_number ? `No. ${lic.licence_number}` : undefined,
+      status: lic.status ?? null,
+      date: lic.expiry_date ?? lic.expires_at ?? null,
+    });
+  }
+
+  return docs;
+}
+
+// ── NAFDAC inspection readiness — count app-held evidence per checklist type ──
+import type { ReadinessEvidence } from './pharma/nafdacInspectionChecklist';
+
+export type ReadinessCounts = Partial<Record<Exclude<ReadinessEvidence, 'external'>, number>>;
+
+export async function checkNafdacReadiness(companyId: string): Promise<ReadinessCounts> {
+  const headCount = (table: string, companyCol = 'company_id') =>
+    (supabase as any)
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq(companyCol, companyId);
+
+  const [batches, coa, rm, sops, licences, changes] = await Promise.allSettled([
+    headCount('batch_records'),
+    headCount('certificate_of_analysis'),
+    headCount('raw_material_receipts'),
+    headCount('sop_documents'),
+    headCount('regulatory_licences'),
+    headCount('change_controls'),
+  ]);
+
+  const val = (r: PromiseSettledResult<any>): number =>
+    r.status === 'fulfilled' ? ((r.value as any).count ?? 0) : 0;
+
+  return {
+    batch_records: val(batches),
+    coa: val(coa),
+    raw_materials: val(rm),
+    sops: val(sops),
+    licences: val(licences),
+    change_control: val(changes),
+  };
 }
 
 // ── Export helper — build a printable text summary ────────────────────────────

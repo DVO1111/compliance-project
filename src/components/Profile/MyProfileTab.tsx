@@ -84,8 +84,14 @@ export default function MyProfileTab() {
             const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
             if (upErr) throw upErr;
             const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
-            setAvatarUrl(urlData.publicUrl);
-            await supabase.from('profiles').update({ avatar_url: urlData.publicUrl } as any).eq('id', user.id);
+            // Cache-bust so re-uploading to the same path shows the new image immediately.
+            const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+            const { error: updErr } = await supabase.from('profiles').update({ avatar_url: publicUrl } as any).eq('id', user.id);
+            if (updErr) throw updErr;
+            setAvatarUrl(publicUrl);
+            // Refresh the shared auth profile so the new avatar appears everywhere
+            // (top bar, menus) — not just in this tab.
+            await refreshProfile();
             showToast({ type: 'success', message: 'Avatar updated!' });
         } catch {
             showToast({ type: 'error', message: 'Avatar upload failed. Storage may not be configured.' });

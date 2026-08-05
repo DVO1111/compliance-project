@@ -10,10 +10,12 @@ import {
     Clock,
     Globe,
     Scale,
-    Activity
+    Activity,
+    Repeat,
+    CheckCheck
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { listObligations, createObligation, RegulatoryObligation } from '../../../lib/governance/obligationService';
+import { listObligations, createObligation, completeObligationCycle, RegulatoryObligation } from '../../../lib/governance/obligationService';
 import { supabase } from '../../../lib/supabase';
 import { logger } from '../../../lib/logger';
 
@@ -47,6 +49,23 @@ export default function ObligationListPage() {
     }, [companyId, statusFilter]);
 
     useEffect(() => { loadData(); }, [loadData]);
+
+    const [completing, setCompleting] = useState<string | null>(null);
+    const handleCompleteCycle = async (id: string) => {
+        if (!companyId || !profile) return;
+        setCompleting(id);
+        try {
+            const next = await completeObligationCycle(companyId, (profile as any).id, id);
+            window.dispatchEvent(new CustomEvent('global-toast', {
+                detail: { message: next ? 'Cycle completed — next cycle scheduled.' : 'Obligation completed.', type: 'success' },
+            }));
+            await loadData();
+        } catch (err: any) {
+            window.dispatchEvent(new CustomEvent('global-toast', { detail: { message: err.message || 'Failed to complete cycle', type: 'warning' } }));
+        } finally {
+            setCompleting(null);
+        }
+    };
 
     const filtered = obligations.filter(o =>
         o.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -138,7 +157,14 @@ export default function ObligationListPage() {
                             >
                                 <td className="px-6 py-4 text-xs font-bold dash-text-tertiary text-center w-12">{idx + 1}</td>
                                 <td className="px-6 py-4">
-                                    <p className="text-sm font-bold dash-text group-hover:text-blue-500 transition-colors">{o.title}</p>
+                                    <p className="text-sm font-bold dash-text group-hover:text-blue-500 transition-colors flex items-center gap-2">
+                                        {o.title}
+                                        {o.is_recurring && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-violet-100 text-violet-700 border border-violet-200">
+                                                <Repeat size={10} /> {o.frequency}
+                                            </span>
+                                        )}
+                                    </p>
                                     <p className="text-xs dash-text-tertiary truncate max-w-xs mt-0.5">{o.description}</p>
                                 </td>
                                 <td className="px-6 py-4">
@@ -167,7 +193,19 @@ export default function ObligationListPage() {
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
-                                    <ChevronRight size={16} className="dash-text-tertiary group-hover:translate-x-1 transition-transform" />
+                                    <div className="flex items-center justify-end gap-2">
+                                        {o.is_recurring && o.status !== 'monitored' && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleCompleteCycle(o.id); }}
+                                                disabled={completing === o.id}
+                                                title="Complete this cycle & schedule the next"
+                                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                            >
+                                                <CheckCheck size={12} /> {completing === o.id ? '…' : 'Complete'}
+                                            </button>
+                                        )}
+                                        <ChevronRight size={16} className="dash-text-tertiary group-hover:translate-x-1 transition-transform" />
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -219,7 +257,10 @@ function CreateModal({ onClose, regulations, onCreated, companyId }: any) {
         regulation_id: '',
         jurisdiction: 'nigeria',
         category: 'compliance',
-        status: 'identified'
+        status: 'identified',
+        due_date: '',
+        is_recurring: false,
+        frequency: 'quarterly',
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -227,10 +268,16 @@ function CreateModal({ onClose, regulations, onCreated, companyId }: any) {
         setLoading(true);
         try {
             await createObligation(companyId, profile!.id, {
-                ...formData,
+                title: formData.title,
+                description: formData.description,
+                jurisdiction: formData.jurisdiction,
+                category: formData.category,
                 regulation_id: formData.regulation_id || null,
                 owner_id: profile!.id,
-                status: formData.status as any
+                status: formData.status as any,
+                due_date: formData.due_date || null,
+                is_recurring: formData.is_recurring,
+                frequency: formData.is_recurring ? (formData.frequency as any) : null,
             });
             onCreated();
             onClose();
@@ -300,6 +347,42 @@ function CreateModal({ onClose, regulations, onCreated, companyId }: any) {
                             placeholder="Describe the specific obligation text and impact..."
                         />
                     </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold uppercase dash-text-tertiary ml-1">Due Date</label>
+                            <input
+                                type="date"
+                                className="w-full bg-[var(--color-surface)] border dash-border rounded-xl px-4 py-2.5 text-sm dash-text focus:ring-2 focus:ring-blue-500 transition-all"
+                                value={formData.due_date}
+                                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold uppercase dash-text-tertiary ml-1">Recurrence</label>
+                            <select
+                                disabled={!formData.is_recurring}
+                                className="w-full bg-[var(--color-surface)] border dash-border rounded-xl px-4 py-2.5 text-sm dash-text focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50"
+                                value={formData.frequency}
+                                onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                            >
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="quarterly">Quarterly</option>
+                                <option value="biannual">Biannual</option>
+                                <option value="annual">Annual</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-sm dash-text cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={formData.is_recurring}
+                            onChange={(e) => setFormData({ ...formData, is_recurring: e.target.checked })}
+                        />
+                        This is a recurring obligation (auto-generates the next cycle on completion)
+                    </label>
 
                     <div className="flex items-center gap-3 pt-4">
                         <button

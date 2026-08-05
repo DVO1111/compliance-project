@@ -13,12 +13,30 @@ export interface RegulatoryObligation {
   category: string;
   status: 'identified' | 'implemented' | 'monitored';
   due_date: string | null;
+  is_recurring: boolean;
+  frequency: RecurrenceFrequency | null;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
   regulation?: { title: string };
   owner?: { full_name: string };
   links?: ObligationLink[];
+}
+
+export type RecurrenceFrequency = 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'annual';
+
+/** Advance a date by one recurrence interval. Falls back to today when no base date. */
+export function computeNextDueDate(current: string | null, frequency: RecurrenceFrequency): string {
+  const base = current ? new Date(current) : new Date();
+  const d = new Date(base);
+  switch (frequency) {
+    case 'weekly': d.setDate(d.getDate() + 7); break;
+    case 'monthly': d.setMonth(d.getMonth() + 1); break;
+    case 'quarterly': d.setMonth(d.getMonth() + 3); break;
+    case 'biannual': d.setMonth(d.getMonth() + 6); break;
+    case 'annual': d.setFullYear(d.getFullYear() + 1); break;
+  }
+  return d.toISOString().split('T')[0];
 }
 
 export interface ObligationLink {
@@ -120,6 +138,68 @@ export async function updateObligation(companyId: string, userId: string, id: st
   return updated;
 }
 
+/**
+ * Mark a recurring obligation's current cycle as complete. If the obligation is
+ * recurring, a fresh 'identified' record for the next cycle is auto-generated
+ * (carrying title/description/category/jurisdiction/frequency forward).
+ * Returns the newly created next-cycle obligation, or null for one-off obligations.
+ */
+export async function completeObligationCycle(
+  companyId: string,
+  userId: string,
+  id: string,
+): Promise<RegulatoryObligation | null> {
+  const validation = await validateMutation(userId, companyId, 'canManagePolicies');
+  if (!validation.valid) throw new Error(validation.message);
+
+  // Load the obligation being completed.
+  const { data: current, error: fetchErr } = await (supabase
+    .from('regulatory_obligations') as any)
+    .select('*')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .single();
+  if (fetchErr) throw fetchErr;
+
+  const ob = current as RegulatoryObligation;
+
+  // Mark the current cycle complete (monitored = ongoing/verified state).
+  await updateObligation(companyId, userId, id, { status: 'monitored' });
+
+  if (!ob.is_recurring || !ob.frequency) return null;
+
+  const nextDue = computeNextDueDate(ob.due_date, ob.frequency);
+  const { data: next, error: insErr } = await (supabase
+    .from('regulatory_obligations') as any)
+    .insert([{
+      company_id: companyId,
+      regulation_id: ob.regulation_id,
+      title: ob.title,
+      description: ob.description,
+      jurisdiction: ob.jurisdiction,
+      category: ob.category,
+      owner_id: ob.owner_id,
+      is_recurring: true,
+      frequency: ob.frequency,
+      due_date: nextDue,
+      status: 'identified',
+    }])
+    .select()
+    .single();
+  if (insErr) throw insErr;
+
+  await recordAuditEvent({
+    userId,
+    companyId,
+    action: 'obligation.cycle_completed',
+    entityType: 'regulatory_obligation',
+    entityId: id,
+    metadata: { next_obligation_id: next.id, next_due_date: nextDue, frequency: ob.frequency },
+  });
+
+  return next;
+}
+
 export async function linkObligationEntity(
   companyId: string, 
   userId: string, 
@@ -179,7 +259,7 @@ export async function escalateOverdueObligations(companyId: string, userId: stri
 
         // Dedup — check for existing open CAPA with same title
         const { data: existing } = await (supabase as any)
-          .from('capas')
+          .from('capa_records')
           .select('id')
           .eq('company_id', companyId)
           .eq('title', capaTitle)

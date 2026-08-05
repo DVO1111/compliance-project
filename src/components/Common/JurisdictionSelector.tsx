@@ -1,45 +1,43 @@
 import { Globe, ChevronDown } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useJurisdictionStore } from '../../stores/jurisdictionStore';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Jurisdiction } from '../../lib/rules/types';
+import { JURISDICTION_IDS, getRegulatorInfo, type JurisdictionId } from '../../lib/regulatoryProfile';
 
-const JURISDICTION_OPTIONS: { id: Jurisdiction; label: string; shortLabel: string; flag: string; description: string }[] = [
-  {
-    id: 'nigeria',
-    label: 'Nigeria (NAFDAC / Councils)',
-    shortLabel: 'NAFDAC',
-    flag: 'NG',
-    description: 'NAFDAC + MDCN, PCN, NMCN ethics',
-  },
-  {
-    id: 'usa',
-    label: 'North America (FDA)',
-    shortLabel: 'FDA',
-    flag: 'US',
-    description: 'FDA DTC balance requirements',
-  },
-  {
-    id: 'europe',
-    label: 'Europe (EMA)',
-    shortLabel: 'EMA',
-    flag: 'EU',
-    description: 'Strict DTC ban for Rx drugs',
-  },
-  {
-    id: 'pan_african',
-    label: 'Pan-African (AMA / AfCFTA)',
-    shortLabel: 'AMA',
-    flag: 'AF',
-    description: 'Regional harmonization + WHO',
-  },
-  {
+type JurisdictionOption = { id: Jurisdiction; label: string; shortLabel: string; flag: string; description: string };
+
+const FLAG_BY_JURISDICTION: Record<JurisdictionId, string> = {
+  nigeria: 'NG',
+  usa: 'US',
+  europe: 'EU',
+  pan_african: 'AF',
+};
+
+/**
+ * Build the jurisdiction options with regulator labels tailored to the
+ * company's industry (chosen at signup) — e.g. Financial Services → CBN/SEC.
+ */
+function buildJurisdictionOptions(industryType: string | null | undefined): JurisdictionOption[] {
+  const options: JurisdictionOption[] = JURISDICTION_IDS.map((id) => {
+    const info = getRegulatorInfo(industryType, id);
+    return {
+      id,
+      label: info.label,
+      shortLabel: info.short,
+      flag: FLAG_BY_JURISDICTION[id],
+      description: info.description,
+    };
+  });
+  options.push({
     id: 'all',
     label: 'All Jurisdictions',
     shortLabel: 'ALL',
     flag: 'GL',
     description: 'Comparison matrix across all markets',
-  },
-];
+  });
+  return options;
+}
 
 const FLAG_COLORS: Record<string, string> = {
   NG: 'bg-[#008751]',
@@ -55,10 +53,13 @@ interface JurisdictionSelectorProps {
 
 export default function JurisdictionSelector({ compact = false }: JurisdictionSelectorProps) {
   const { selectedJurisdiction, setJurisdiction } = useJurisdictionStore();
+  const { profile } = useAuth();
+  const industryType = (profile as any)?.industry_type as string | null | undefined;
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const current = JURISDICTION_OPTIONS.find((j) => j.id === selectedJurisdiction) || JURISDICTION_OPTIONS[0];
+  const jurisdictionOptions = useMemo(() => buildJurisdictionOptions(industryType), [industryType]);
+  const current = jurisdictionOptions.find((j) => j.id === selectedJurisdiction) || jurisdictionOptions[0];
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -90,7 +91,7 @@ export default function JurisdictionSelector({ compact = false }: JurisdictionSe
               <p className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider px-2 py-1">Select Jurisdiction</p>
             </div>
             <div className="p-1.5">
-              {JURISDICTION_OPTIONS.map((option) => (
+              {jurisdictionOptions.map((option) => (
                 <button
                   key={option.id}
                   onClick={() => {
@@ -130,7 +131,7 @@ export default function JurisdictionSelector({ compact = false }: JurisdictionSe
         <span className="text-sm font-semibold text-[var(--color-text-primary)] tracking-wide">Regulatory Jurisdiction</span>
       </div>
       <div className="p-4 flex flex-wrap gap-2.5">
-        {JURISDICTION_OPTIONS.map((option) => (
+        {jurisdictionOptions.map((option) => (
           <button
             key={option.id}
             onClick={() => setJurisdiction(option.id)}
