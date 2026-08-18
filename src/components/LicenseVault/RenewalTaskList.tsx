@@ -34,7 +34,7 @@ export default function RenewalTaskList({ tasks, onToggle, compact }: Props) {
             <div>
                 <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">Renewal Progress</span>
-                    <span className="text-xs font-bold text-[#004A99]">{completed}/{tasks.length} completed</span>
+                    <span className="text-xs font-bold text-[var(--color-accent)]">{completed}/{tasks.length} completed</span>
                 </div>
                 <div className="w-full bg-[var(--color-surface-alt)] rounded-full h-2">
                     <motion.div

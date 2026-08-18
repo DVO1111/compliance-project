@@ -91,7 +91,7 @@ export default function LicenseVaultPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-                        <FileKey className="w-7 h-7 text-[#004A99]" />
+                        <FileKey className="w-7 h-7 text-[var(--color-accent)]" />
                         License & Permit Vault
                     </h1>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-1">
@@ -109,7 +109,7 @@ export default function LicenseVaultPage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatCard icon={ShieldCheck} label="Total Licenses" value={stats.total} color="text-[#004A99]" bg="bg-[var(--color-info-soft)]" />
+                <StatCard icon={ShieldCheck} label="Total Licenses" value={stats.total} color="text-[var(--color-accent)]" bg="bg-[var(--color-info-soft)]" />
                 <StatCard icon={CheckCircle2} label="Active" value={stats.active} color="text-[var(--color-success)]" bg="bg-[var(--color-success-soft)]" />
                 <StatCard icon={AlertTriangle} label="Expiring Soon" value={stats.expiring} color="text-[var(--color-warning)]" bg="bg-[var(--color-warning-soft)]" pulse={stats.expiring > 0} />
                 <StatCard icon={Clock} label="Expired" value={stats.expired} color="text-[var(--color-danger)]" bg="bg-[var(--color-danger-soft)]" />
@@ -123,7 +123,7 @@ export default function LicenseVaultPage() {
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search by product name, reg number, or category…"
-                        className="w-full pl-9 pr-3 py-2.5 border border-[var(--color-border)] rounded-xl text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none"
+                        className="w-full pl-9 pr-3 py-2.5 border border-[var(--color-border)] rounded-xl text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none"
                     />
                 </div>
                 <div className="flex gap-1.5">
@@ -131,7 +131,7 @@ export default function LicenseVaultPage() {
                         <button
                             key={f}
                             onClick={() => setFilter(f)}
-                            className={`px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${filter === f ? 'bg-[var(--color-accent)] text-white border-[#004A99]' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-surface-alt)]'
+                            className={`px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${filter === f ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-surface-alt)]'
                                 }`}
                         >
                             {f.charAt(0).toUpperCase() + f.slice(1)}{f !== 'all' && ` (${stats[f]})`}
@@ -143,7 +143,7 @@ export default function LicenseVaultPage() {
             {/* Content */}
             {loading ? (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-8 h-8 text-[#004A99] animate-spin" />
+                    <Loader2 className="w-8 h-8 text-[var(--color-accent)] animate-spin" />
                 </div>
             ) : error ? (
                 <div className="bg-[var(--color-warning-soft)] border border-[var(--color-warning)]/20 rounded-xl p-6 text-center">
@@ -163,7 +163,7 @@ export default function LicenseVaultPage() {
                     {licenses.length === 0 && (
                         <button
                             onClick={() => setShowUpload(true)}
-                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004A99] bg-[var(--color-info-soft)] border border-[var(--color-info)]/20 rounded-lg hover:bg-[var(--color-info-soft)] transition-colors"
+                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[var(--color-accent)] bg-[var(--color-info-soft)] border border-[var(--color-info)]/20 rounded-lg hover:bg-[var(--color-info-soft)] transition-colors"
                         >
                             <Plus className="w-4 h-4" />
                             Add First License
@@ -185,7 +185,7 @@ export default function LicenseVaultPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.04 }}
                                 onClick={() => setSelectedLicense(license)}
-                                className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 hover:shadow-md hover:border-[#004A99]/30 transition-all cursor-pointer group relative"
+                                className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 hover:shadow-md hover:border-[var(--color-accent)]/30 transition-all cursor-pointer group relative"
                             >
                                 {/* Status Badge */}
                                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${colors.bg} ${colors.text} ${colors.border} border mb-3`}>
@@ -194,7 +194,7 @@ export default function LicenseVaultPage() {
                                     {license.status === 'renewed' ? 'Renewed' : status === 'active' ? 'Active' : status === 'expiring' ? 'Expiring Soon' : 'Expired'}
                                 </div>
 
-                                <h3 className="text-sm font-bold text-[var(--color-text-primary)] group-hover:text-[#004A99] transition-colors line-clamp-2">
+                                <h3 className="text-sm font-bold text-[var(--color-text-primary)] group-hover:text-[var(--color-accent)] transition-colors line-clamp-2">
                                     {license.product_name}
                                 </h3>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-1 font-mono">{license.nafdac_reg_number || '—'}</p>

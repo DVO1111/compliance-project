@@ -37,7 +37,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 const LINE_COLORS = [
-    "#2943D6", // Blue
+    "var(--color-accent)", // Blue
     "#13CD3C", // Green
     "#CD45A2", // Pink
     "#EAB308", // Yellow
@@ -227,7 +227,7 @@ export default function TopRiskCausesWidget({
                                     {chartData.map((entry, idx) => (
                                         <Cell
                                             key={idx}
-                                            fill={SEVERITY_COLORS[entry.severity] ?? "#2943D6"}
+                                            fill={SEVERITY_COLORS[entry.severity] ?? "var(--color-accent)"}
                                         />
                                     ))}
                                 </Bar>

@@ -232,7 +232,7 @@ export default function GrcDashboardPage() {
                                     <RechartsTooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px' }} />
                                     <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={40}>
                                         {posture?.evidenceDistribution.map((entry, index) => (
-                                            <Cell key={index} fill={index === 0 ? '#2943D6' : '#9CA3AF'} />
+                                            <Cell key={index} fill={index === 0 ? 'var(--color-accent)' : '#9CA3AF'} />
                                         ))}
                                     </Bar>
                                 </BarChart>

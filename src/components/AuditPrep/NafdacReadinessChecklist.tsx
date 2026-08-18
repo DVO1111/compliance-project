@@ -38,7 +38,7 @@ export default function NafdacReadinessChecklist({ companyId }: { companyId: str
         className="w-full flex items-center justify-between gap-3 p-4 text-left"
       >
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-[#2943D6]/10 text-[#2943D6]"><ClipboardCheck className="w-4 h-4" /></div>
+          <div className="p-1.5 rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]"><ClipboardCheck className="w-4 h-4" /></div>
           <div>
             <h3 className="font-semibold text-sm text-[var(--color-text-primary,#111)]">NAFDAC Inspection Readiness</h3>
             <p className="text-xs text-[var(--color-text-secondary,#6b7280)]">

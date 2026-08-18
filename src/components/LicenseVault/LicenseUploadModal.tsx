@@ -123,7 +123,7 @@ export default function LicenseUploadModal({ onClose, onCreated }: Props) {
                 className="bg-[var(--color-surface)] rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-[#004A99] to-[#0066cc] px-6 py-4 flex items-center justify-between">
+                <div className="bg-gradient-to-r from-[var(--color-accent)] to-[#0066cc] px-6 py-4 flex items-center justify-between">
                     <h3 className="text-white font-semibold text-lg">Add License / Certificate</h3>
                     <button onClick={onClose} className="p-1 text-white/70 hover:text-white"><X className="w-5 h-5" /></button>
                 </div>
@@ -142,10 +142,10 @@ export default function LicenseUploadModal({ onClose, onCreated }: Props) {
                 <div className="overflow-y-auto flex-1 p-6">
                     {step === 'upload' && (
                         <div className="space-y-4">
-                            <div className="border-2 border-dashed border-[var(--color-border)] rounded-xl p-8 text-center hover:border-[#004A99] transition-colors">
+                            <div className="border-2 border-dashed border-[var(--color-border)] rounded-xl p-8 text-center hover:border-[var(--color-accent)] transition-colors">
                                 {extracting ? (
                                     <div className="flex flex-col items-center gap-3">
-                                        <Loader2 className="w-8 h-8 text-[#004A99] animate-spin" />
+                                        <Loader2 className="w-8 h-8 text-[var(--color-accent)] animate-spin" />
                                         <p className="text-sm text-[var(--color-text-secondary)]">Extracting certificate data…</p>
                                     </div>
                                 ) : (
@@ -168,7 +168,7 @@ export default function LicenseUploadModal({ onClose, onCreated }: Props) {
 
                             <button
                                 onClick={handleManualEntry}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-[#004A99] bg-[var(--color-info-soft)] border border-[var(--color-info)]/20 rounded-xl hover:bg-[var(--color-info-soft)] transition-colors"
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-[var(--color-accent)] bg-[var(--color-info-soft)] border border-[var(--color-info)]/20 rounded-xl hover:bg-[var(--color-info-soft)] transition-colors"
                             >
                                 <FileText className="w-4 h-4" />
                                 Enter Details Manually
@@ -194,32 +194,32 @@ export default function LicenseUploadModal({ onClose, onCreated }: Props) {
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Product Name <span className="text-[var(--color-danger)]">*</span></label>
                                     <input value={form.product_name} onChange={e => setForm(f => ({ ...f, product_name: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none"
+                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none"
                                         placeholder="e.g. Amoxicillin 500mg Capsules" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">NAFDAC Registration No.</label>
                                     <input value={form.nafdac_reg_number} onChange={e => setForm(f => ({ ...f, nafdac_reg_number: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none"
+                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none"
                                         placeholder="e.g. A4-0123" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Issue Date</label>
                                         <input type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none" />
+                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none" />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Expiry Date <span className="text-[var(--color-danger)]">*</span></label>
                                         <input type="date" value={form.expiry_date} onChange={e => setForm(f => ({ ...f, expiry_date: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none" />
+                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none" />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Category</label>
                                         <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none bg-[var(--color-surface)]">
+                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none bg-[var(--color-surface)]">
                                             {['Drug', 'Biological', 'Cosmetic', 'Medical Device', 'Processed Food', 'Chemical', 'Herbal Medicine'].map(c => (
                                                 <option key={c} value={c}>{c}</option>
                                             ))}
@@ -228,13 +228,13 @@ export default function LicenseUploadModal({ onClose, onCreated }: Props) {
                                     <div>
                                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Issuing Authority</label>
                                         <input value={form.issuing_authority} onChange={e => setForm(f => ({ ...f, issuing_authority: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none" />
+                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none" />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Notes</label>
                                     <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2}
-                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[#004A99] focus:border-transparent outline-none resize-none"
+                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none resize-none"
                                         placeholder="Any additional notes…" />
                                 </div>
                             </div>
@@ -243,7 +243,7 @@ export default function LicenseUploadModal({ onClose, onCreated }: Props) {
 
                     {step === 'saving' && (
                         <div className="flex flex-col items-center gap-3 py-8">
-                            <Loader2 className="w-8 h-8 text-[#004A99] animate-spin" />
+                            <Loader2 className="w-8 h-8 text-[var(--color-accent)] animate-spin" />
                             <p className="text-sm text-[var(--color-text-secondary)]">Saving license and generating renewal tasks…</p>
                         </div>
                     )}

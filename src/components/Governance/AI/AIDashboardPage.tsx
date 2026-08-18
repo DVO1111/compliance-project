@@ -44,7 +44,7 @@ import { logger } from '../../../lib/logger';
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
-const COLORS = ['#2943D6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
+const COLORS = ['var(--color-accent)', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
 
 /* ─── component ────────────────────────────────────────────── */
 
@@ -192,7 +192,7 @@ export default function AIDashboardPage() {
                                 <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', fontSize: '11px' }}
                                 />
-                                <Line type="monotone" dataKey="total" stroke="#2943D6" strokeWidth={3} dot={false} />
+                                <Line type="monotone" dataKey="total" stroke="var(--color-accent)" strokeWidth={3} dot={false} />
                                 <Line type="monotone" dataKey="flagged" stroke="#f59e0b" strokeWidth={3} dot={false} />
                             </LineChart>
                         </ResponsiveContainer>
@@ -212,7 +212,7 @@ export default function AIDashboardPage() {
                                     cursor={{ fill: 'transparent' }}
                                     contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', fontSize: '11px' }}
                                 />
-                                <Bar dataKey="invocations" name="Invocations" fill="#2943D6" radius={[0, 4, 4, 0]} barSize={12} />
+                                <Bar dataKey="invocations" name="Invocations" fill="var(--color-accent)" radius={[0, 4, 4, 0]} barSize={12} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

@@ -160,7 +160,7 @@ export default function CorrectionEditorPage({ onDone }: { onDone: () => void })
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-[#004A99]" />
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--color-accent)]" />
       </div>
     );
   }

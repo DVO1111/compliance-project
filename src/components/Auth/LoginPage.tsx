@@ -30,10 +30,6 @@ export default function LoginPage({ onToggleSignup, onBackToLanding }: LoginPage
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-4 relative overflow-hidden">
-      {/* Ambient background glows */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-behance-purple/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-behance-blue/10 blur-[120px] rounded-full pointer-events-none" />
-
       {onBackToLanding && (
         <button
           onClick={onBackToLanding}
@@ -69,7 +65,7 @@ export default function LoginPage({ onToggleSignup, onBackToLanding }: LoginPage
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
+              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:border-[var(--color-accent)] dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
               placeholder="you@company.com"
               required
             />
@@ -84,7 +80,7 @@ export default function LoginPage({ onToggleSignup, onBackToLanding }: LoginPage
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
+              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:border-[var(--color-accent)] dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
               placeholder="••••••••"
               required
             />
@@ -104,7 +100,7 @@ export default function LoginPage({ onToggleSignup, onBackToLanding }: LoginPage
             Don't have an account?{' '}
             <button
               onClick={onToggleSignup}
-              className="text-behance-blue hover:text-behance-purple font-semibold transition-colors"
+              className="text-behance-blue hover:text-[var(--color-accent-hover)] font-semibold transition-colors"
             >
               Sign Up
             </button>

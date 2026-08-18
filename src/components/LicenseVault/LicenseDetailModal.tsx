@@ -101,7 +101,7 @@ export default function LicenseDetailModal({ license, onClose, onUpdated }: Prop
                 className="bg-[var(--color-surface)] rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-[#004A99] to-[#0066cc] px-6 py-4 flex items-center justify-between">
+                <div className="bg-gradient-to-r from-[var(--color-accent)] to-[#0066cc] px-6 py-4 flex items-center justify-between">
                     <div>
                         <h3 className="text-white font-semibold text-lg">{license.product_name}</h3>
                         <p className="text-white/70 text-sm">{license.nafdac_reg_number || 'No registration number'}</p>
@@ -127,7 +127,7 @@ export default function LicenseDetailModal({ license, onClose, onUpdated }: Prop
                             key={s}
                             onClick={() => setActiveSection(s)}
                             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeSection === s
-                                    ? 'border-[#004A99] text-[#004A99]'
+                                    ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
                                     : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-secondary)]'
                                 }`}
                         >
@@ -197,7 +197,7 @@ export default function LicenseDetailModal({ license, onClose, onUpdated }: Prop
                                         { label: 'Expiry Date', date: license.expiry_date, done: daysLeft <= 0 },
                                     ].map((m, i) => (
                                         <div key={i} className="relative">
-                                            <div className={`absolute -left-[25px] w-3 h-3 rounded-full border-2 ${m.done ? 'bg-[var(--color-accent)] border-[#004A99]' : 'bg-[var(--color-surface)] border-[var(--color-border)]'}`} />
+                                            <div className={`absolute -left-[25px] w-3 h-3 rounded-full border-2 ${m.done ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'bg-[var(--color-surface)] border-[var(--color-border)]'}`} />
                                             <p className="text-sm font-medium text-[var(--color-text-primary)]">{m.label}</p>
                                             <p className="text-xs text-[var(--color-text-secondary)]">{m.date ? new Date(m.date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</p>
                                         </div>
@@ -211,7 +211,7 @@ export default function LicenseDetailModal({ license, onClose, onUpdated }: Prop
                         <div>
                             {loadingTasks ? (
                                 <div className="flex items-center justify-center py-8">
-                                    <Loader2 className="w-6 h-6 text-[#004A99] animate-spin" />
+                                    <Loader2 className="w-6 h-6 text-[var(--color-accent)] animate-spin" />
                                 </div>
                             ) : tasks.length === 0 ? (
                                 <div className="text-center py-8 space-y-3">

@@ -244,8 +244,8 @@ export default function CommandCenterPage() {
                                     <Radar
                                         name="Risk Score"
                                         dataKey="score"
-                                        stroke="#2943D6"
-                                        fill="#2943D6"
+                                        stroke="var(--color-accent)"
+                                        fill="var(--color-accent)"
                                         fillOpacity={0.4}
                                     />
                                     <Tooltip
@@ -529,7 +529,7 @@ export default function CommandCenterPage() {
                                     contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', fontSize: '11px' }}
                                 />
                                 <Bar dataKey="created" name="Requests" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={12} />
-                                <Bar dataKey="fulfilled" name="Fulfilled" fill="#2943D6" radius={[0, 4, 4, 0]} barSize={12} />
+                                <Bar dataKey="fulfilled" name="Fulfilled" fill="var(--color-accent)" radius={[0, 4, 4, 0]} barSize={12} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

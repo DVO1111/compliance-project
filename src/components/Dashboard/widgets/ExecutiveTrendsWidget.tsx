@@ -205,8 +205,8 @@ export default function ExecutiveTrendsWidget({
 
                 <defs>
                   <linearGradient id="colorSubmitted" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2943D6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#2943D6" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--color-accent)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="var(--color-accent)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorLegal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#8145CD" stopOpacity={0.3} />
@@ -226,11 +226,11 @@ export default function ExecutiveTrendsWidget({
                   type="monotone"
                   dataKey="submitted"
                   name="Submitted"
-                  stroke="#2943D6"
+                  stroke="var(--color-accent)"
                   fill="url(#colorSubmitted)"
                   strokeWidth={3}
                   dot={false}
-                  activeDot={{ r: 6, fill: "#2943D6", stroke: "#0F172A", strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: "var(--color-accent)", stroke: "#0F172A", strokeWidth: 2 }}
                 />
                 <Area
                   type="monotone"

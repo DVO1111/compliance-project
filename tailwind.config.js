@@ -53,8 +53,11 @@ export default {
           800: '#00573a',
           900: '#002e1f',
         },
+        // Legacy palette from the starter template. `blue` now points at the
+        // Figma primary so existing `bg-behance-blue` usages theme correctly —
+        // new code should use `primary-500`, and these should be migrated out.
         behance: {
-          blue: '#2943D6',
+          blue: '#2563eb',
           purple: '#8145CD',
           pink: '#CD45A2',
           green: '#13CD3C',

@@ -49,29 +49,29 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
       >
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#004A99] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[var(--color-accent)] flex items-center justify-center">
               <ShieldCheck className="w-5 h-5 text-white" />
             </div>
             <span className="text-lg font-bold text-[#111827] tracking-tight">Criateur</span>
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-[#6b7280]">
-            <a href="#features" className="hover:text-[#004A99] transition-colors">Features</a>
-            <a href="#stats" className="hover:text-[#004A99] transition-colors">Why Us</a>
-            <a href="#testimonials" className="hover:text-[#004A99] transition-colors">Testimonials</a>
+            <a href="#features" className="hover:text-[var(--color-accent)] transition-colors">Features</a>
+            <a href="#stats" className="hover:text-[var(--color-accent)] transition-colors">Why Us</a>
+            <a href="#testimonials" className="hover:text-[var(--color-accent)] transition-colors">Testimonials</a>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={onNavigateToLogin}
-              className="px-5 py-2 text-sm font-medium text-[#004A99] hover:bg-[#004A99]/5 rounded-xl transition-colors"
+              className="px-5 py-2 text-sm font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 rounded-xl transition-colors"
             >
               Log In
             </button>
             <button
               onClick={onNavigateToSignup}
-              className="px-5 py-2 text-sm font-semibold text-white rounded-xl transition-all hover:shadow-lg hover:shadow-[#004A99]/25 hover:-translate-y-0.5"
-              style={{ background: 'linear-gradient(135deg, #004A99, #2563eb)' }}
+              className="px-5 py-2 text-sm font-semibold text-white rounded-xl transition-all hover:shadow-lg hover:shadow-[var(--color-accent)]/25 hover:-translate-y-0.5"
+              style={{ background: 'linear-gradient(135deg, var(--color-accent), #2563eb)' }}
             >
               Get Started
             </button>
@@ -83,20 +83,20 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
       <section className="relative pt-28 pb-4 px-6 overflow-hidden">
         {/* Subtle background pattern */}
         <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, #004A99 1px, transparent 0)`,
+          backgroundImage: `radial-gradient(circle at 1px 1px, var(--color-accent) 1px, transparent 0)`,
           backgroundSize: '32px 32px',
         }} />
 
         <div className="max-w-6xl mx-auto text-center relative z-10">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#004A99]/5 border border-[#004A99]/10 mb-8">
-            <Sparkles className="w-3.5 h-3.5 text-[#004A99]" />
-            <span className="text-xs font-semibold text-[#004A99] tracking-wide">AI-POWERED COMPLIANCE AUTOMATION</span>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/10 mb-8">
+            <Sparkles className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+            <span className="text-xs font-semibold text-[var(--color-accent)] tracking-wide">AI-POWERED COMPLIANCE AUTOMATION</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-[64px] font-extrabold text-[#111827] leading-[1.1] tracking-tight mb-6">
             Healthcare Compliance,{' '}
-            <span className="bg-gradient-to-r from-[#004A99] via-[#2563eb] to-[#7c3aed] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[var(--color-accent)] via-[#2563eb] to-[#7c3aed] bg-clip-text text-transparent">
               Simplified.
             </span>
           </h1>
@@ -108,8 +108,8 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <button
               onClick={onNavigateToSignup}
-              className="group px-8 py-3.5 text-white font-semibold rounded-2xl text-sm inline-flex items-center gap-2 transition-all hover:shadow-xl hover:shadow-[#004A99]/20 hover:-translate-y-0.5"
-              style={{ background: 'linear-gradient(135deg, #004A99, #2563eb)' }}
+              className="group px-8 py-3.5 text-white font-semibold rounded-2xl text-sm inline-flex items-center gap-2 transition-all hover:shadow-xl hover:shadow-[var(--color-accent)]/20 hover:-translate-y-0.5"
+              style={{ background: 'linear-gradient(135deg, var(--color-accent), #2563eb)' }}
             >
               Start Free Trial
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -118,7 +118,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
               onClick={onNavigateToLogin}
               className="px-8 py-3.5 font-semibold rounded-2xl text-sm text-[#374151] bg-white border border-[#e5e7eb] hover:border-[#d1d5db] hover:shadow-md transition-all inline-flex items-center gap-2"
             >
-              <BarChart3 className="w-4 h-4 text-[#004A99]" />
+              <BarChart3 className="w-4 h-4 text-[var(--color-accent)]" />
               View Live Dashboard
             </button>
           </div>
@@ -126,7 +126,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           {/* ── Dashboard Preview Card ──────────────── */}
           <div className="relative max-w-5xl mx-auto">
             {/* Glow effect */}
-            <div className="absolute -inset-4 rounded-[32px] bg-gradient-to-r from-[#004A99]/10 via-[#2563eb]/10 to-[#7c3aed]/10 blur-2xl" />
+            <div className="absolute -inset-4 rounded-[32px] bg-gradient-to-r from-[var(--color-accent)]/10 via-[#2563eb]/10 to-[#7c3aed]/10 blur-2xl" />
 
             <div className="relative bg-white rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.08)] border border-[#e5e7eb]/60 overflow-hidden">
               {/* Mock browser bar */}
@@ -148,7 +148,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 {/* Mini Sidebar */}
                 <div className="hidden md:flex flex-col w-48 bg-[#f9fafb] border-r border-[#e5e7eb] py-4 px-3 shrink-0">
                   <div className="flex items-center gap-2 px-2 mb-5">
-                    <div className="w-6 h-6 rounded-lg bg-[#004A99] flex items-center justify-center">
+                    <div className="w-6 h-6 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
                       <ShieldCheck className="w-3.5 h-3.5 text-white" />
                     </div>
                     <span className="text-xs font-bold text-[#111827]">Criateur</span>
@@ -166,7 +166,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                       <div
                         key={i}
                         className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] font-medium mb-0.5 ${item.active
-                            ? 'bg-[#004A99]/8 text-[#004A99]'
+                            ? 'bg-[var(--color-accent)]/8 text-[var(--color-accent)]'
                             : 'text-[#9ca3af] hover:text-[#6b7280]'
                           }`}
                       >
@@ -182,7 +182,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                   {/* Metric cards row */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                     {[
-                      { label: 'Total Submitted', value: '1,247', change: '+12%', color: '#004A99' },
+                      { label: 'Total Submitted', value: '1,247', change: '+12%', color: 'var(--color-accent)' },
                       { label: 'Approval Rate', value: '94%', change: '+3%', color: '#16a34a' },
                       { label: 'In Review', value: '38', change: '-5%', color: '#d97706' },
                       { label: 'Avg Turnaround', value: '2.4h', change: '-18%', color: '#7c3aed' },
@@ -203,12 +203,12 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                       <svg viewBox="0 0 400 100" className="w-full h-20" preserveAspectRatio="none">
                         <defs>
                           <linearGradient id="heroGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#004A99" stopOpacity="0.3" />
-                            <stop offset="100%" stopColor="#004A99" stopOpacity="0" />
+                            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
                           </linearGradient>
                         </defs>
                         <path d="M0,80 C50,70 80,20 150,40 C220,60 250,10 300,30 C350,50 380,20 400,25 L400,100 L0,100 Z" fill="url(#heroGrad)" />
-                        <path d="M0,80 C50,70 80,20 150,40 C220,60 250,10 300,30 C350,50 380,20 400,25" fill="none" stroke="#004A99" strokeWidth="2" />
+                        <path d="M0,80 C50,70 80,20 150,40 C220,60 250,10 300,30 C350,50 380,20 400,25" fill="none" stroke="var(--color-accent)" strokeWidth="2" />
                       </svg>
                     </div>
                     <div className="bg-white rounded-xl p-4 border border-[#e5e7eb]/50 flex flex-col items-center justify-center">
@@ -246,7 +246,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 key={i}
                 className="bg-white/70 backdrop-blur-sm rounded-2xl px-6 py-5 text-center hover:bg-white hover:shadow-md transition-all duration-300 border border-[#e5e7eb]/40 group"
               >
-                <Building2 className="w-6 h-6 text-[#d1d5db] group-hover:text-[#004A99]/40 mx-auto mb-2 transition-colors" />
+                <Building2 className="w-6 h-6 text-[#d1d5db] group-hover:text-[var(--color-accent)]/40 mx-auto mb-2 transition-colors" />
                 <p className="text-xs font-semibold text-[#9ca3af] group-hover:text-[#6b7280] transition-colors">{co}</p>
               </div>
             ))}
@@ -270,7 +270,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                   <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
                     style={{ background: 'linear-gradient(135deg, rgba(0,74,153,0.08), rgba(37,99,235,0.08))' }}
                   >
-                    <Icon className="w-5 h-5 text-[#004A99]" />
+                    <Icon className="w-5 h-5 text-[var(--color-accent)]" />
                   </div>
                   <p className="text-3xl font-extrabold text-[#111827] tabular-nums">
                     <AnimatedCounter target={s.value} suffix={s.suffix} />
@@ -287,7 +287,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
       <section id="features" className="py-20 px-6">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#004A99]/5 border border-[#004A99]/10 mb-4 text-xs font-semibold text-[#004A99]">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/10 mb-4 text-xs font-semibold text-[var(--color-accent)]">
               <Zap className="w-3 h-3" /> Core Features
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-[#111827] tracking-tight mb-3">
@@ -304,7 +304,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 icon: Zap,
                 title: 'Real-time Analysis',
                 desc: 'Upload marketing materials and receive instant compliance feedback. Our AI engine scans for violations and forbidden claims in seconds.',
-                gradient: 'from-[#004A99] to-[#2563eb]',
+                gradient: 'from-[var(--color-accent)] to-[#2563eb]',
               },
               {
                 icon: Globe2,
@@ -341,7 +341,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
               return (
                 <div
                   key={i}
-                  className="group bg-white rounded-2xl p-7 border border-[#e5e7eb]/50 hover:shadow-xl hover:shadow-[#004A99]/5 hover:-translate-y-1 transition-all duration-300"
+                  className="group bg-white rounded-2xl p-7 border border-[#e5e7eb]/50 hover:shadow-xl hover:shadow-[var(--color-accent)]/5 hover:-translate-y-1 transition-all duration-300"
                 >
                   <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${f.gradient} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
                     <Icon className="w-5 h-5 text-white" />
@@ -377,7 +377,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 </div>
                 <p className="text-sm text-[#374151] leading-relaxed mb-6 italic">"{t.quote}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#004A99] to-[#2563eb] flex items-center justify-center text-white text-sm font-bold">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-accent)] to-[#2563eb] flex items-center justify-center text-white text-sm font-bold">
                     {t.name.charAt(0)}
                   </div>
                   <div>
@@ -395,7 +395,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
       <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto">
           <div className="relative rounded-[28px] overflow-hidden p-12 text-center"
-            style={{ background: 'linear-gradient(135deg, #004A99, #2563eb, #7c3aed)' }}
+            style={{ background: 'linear-gradient(135deg, var(--color-accent), #2563eb, #7c3aed)' }}
           >
             {/* Pattern overlay */}
             <div className="absolute inset-0 opacity-10" style={{
@@ -414,7 +414,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button
                   onClick={onNavigateToSignup}
-                  className="group px-8 py-3.5 bg-white text-[#004A99] font-semibold rounded-2xl text-sm inline-flex items-center gap-2 hover:shadow-xl transition-all hover:-translate-y-0.5"
+                  className="group px-8 py-3.5 bg-white text-[var(--color-accent)] font-semibold rounded-2xl text-sm inline-flex items-center gap-2 hover:shadow-xl transition-all hover:-translate-y-0.5"
                 >
                   Start Free Trial
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -437,7 +437,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-7 h-7 rounded-lg bg-[#004A99] flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
                   <ShieldCheck className="w-4 h-4 text-white" />
                 </div>
                 <span className="font-bold text-[#111827]">Criateur Compliance</span>
@@ -456,7 +456,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 <ul className="space-y-2">
                   {col.links.map((link, j) => (
                     <li key={j}>
-                      <a href="#" className="text-sm text-[#9ca3af] hover:text-[#004A99] transition-colors">{link}</a>
+                      <a href="#" className="text-sm text-[#9ca3af] hover:text-[var(--color-accent)] transition-colors">{link}</a>
                     </li>
                   ))}
                 </ul>
@@ -466,9 +466,9 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           <div className="pt-8 border-t border-[#e5e7eb] flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-[#9ca3af] text-xs">&copy; 2026 Criateur Compliance. All rights reserved.</p>
             <div className="flex gap-4 text-xs text-[#9ca3af]">
-              <a href="#" className="hover:text-[#004A99] transition-colors">Twitter</a>
-              <a href="#" className="hover:text-[#004A99] transition-colors">LinkedIn</a>
-              <a href="#" className="hover:text-[#004A99] transition-colors">GitHub</a>
+              <a href="#" className="hover:text-[var(--color-accent)] transition-colors">Twitter</a>
+              <a href="#" className="hover:text-[var(--color-accent)] transition-colors">LinkedIn</a>
+              <a href="#" className="hover:text-[var(--color-accent)] transition-colors">GitHub</a>
             </div>
           </div>
         </div>

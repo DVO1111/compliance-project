@@ -78,8 +78,6 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-4 py-12 relative overflow-hidden">
       {/* Ambient background glows */}
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-behance-purple/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-behance-blue/10 blur-[120px] rounded-full pointer-events-none" />
 
       {onBackToLanding && (
         <button
@@ -237,7 +235,7 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
               type="button"
               onClick={handleResend}
               disabled={loading}
-              className="text-behance-blue hover:text-behance-purple font-semibold transition-colors disabled:opacity-50"
+              className="text-behance-blue hover:text-[var(--color-accent-hover)] font-semibold transition-colors disabled:opacity-50"
             >
               Resend code
             </button>
@@ -251,7 +249,7 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
             Already have an account?{' '}
             <button
               onClick={onToggleLogin}
-              className="text-behance-blue hover:text-behance-purple font-semibold transition-colors"
+              className="text-behance-blue hover:text-[var(--color-accent-hover)] font-semibold transition-colors"
             >
               Sign In
             </button>

@@ -12,7 +12,7 @@ type PlatformRow = { platform: string; count: number };
 const PLATFORM_COLORS: Record<string, string> = {
     instagram: "#E1306C",
     x: "#1DA1F2",
-    website: "#2943D6",
+    website: "var(--color-accent)",
     linkedin: "#0A66C2",
     print: "#6b7280",
     radio: "#8b5cf6",

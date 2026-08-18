@@ -243,7 +243,7 @@ export default function MembersPage() {
                               className="inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border"
                               style={{
                                 background: 'var(--color-accent-soft, rgba(0,74,153,0.08))',
-                                color: 'var(--color-accent, #004A99)',
+                                color: 'var(--color-accent, var(--color-accent))',
                                 borderColor: 'var(--color-accent-soft, rgba(0,74,153,0.15))',
                               }}
                             >

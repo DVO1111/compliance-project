@@ -283,7 +283,7 @@ export default function CorrectionWorkspace() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#004A99] border-t-transparent" />
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-[var(--color-accent)] border-t-transparent" />
       </div>
     );
   }
@@ -404,7 +404,7 @@ export default function CorrectionWorkspace() {
             disabled={!canEdit}
             rows={14}
             className="w-full text-sm border border-[var(--color-border)] rounded-lg px-3 py-2
-              focus:ring-2 focus:ring-[#004A99]/20 focus:border-[#004A99] transition-all resize-none disabled:bg-[var(--color-surface-alt)]"
+              focus:ring-2 focus:ring-[var(--color-accent)]/20 focus:border-[var(--color-accent)] transition-all resize-none disabled:bg-[var(--color-surface-alt)]"
           />
 
           <p className="text-[11px] text-[var(--color-text-secondary)] mt-2">

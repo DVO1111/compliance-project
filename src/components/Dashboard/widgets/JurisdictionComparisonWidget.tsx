@@ -162,7 +162,7 @@ export default function JurisdictionComparisonWidget({
                                 )}
 
                                 {currentView === "volume" && (
-                                    <Bar dataKey="Volume" fill="#2943D6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                    <Bar dataKey="Volume" fill="var(--color-accent)" radius={[4, 4, 0, 0]} maxBarSize={40} />
                                 )}
                             </BarChart>
                         </ResponsiveContainer>
