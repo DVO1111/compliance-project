@@ -122,10 +122,15 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           --lp-line: rgba(255, 255, 255, 0.09);
           --lp-line-strong: rgba(255, 255, 255, 0.18);
 
-          /* accents */
-          --lp-accent: #22B8E8;
-          --lp-accent-strong: #0FA3D6;
-          --lp-accent-soft: rgba(34, 184, 232, 0.12);
+          /* accents
+             A muted mid-blue rather than a saturated cyan. High-chroma cyan
+             glows against a dark ground — especially at display sizes — and
+             reads as neon rather than considered. These two tones are picked
+             for contrast on the navy: --lp-accent clears 5:1 for text, and
+             --lp-accent-strong clears 4.8:1 against white for button labels. */
+          --lp-accent: #4E9FD4;
+          --lp-accent-strong: #2A78B0;
+          --lp-accent-soft: rgba(78, 159, 212, 0.10);
           --lp-mint: #3BB75E;
           --lp-coral: #FF8E8E;
           --lp-gold: #F5B944;
@@ -147,7 +152,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }
-        .lp-root ::selection { background: rgba(34, 184, 232, 0.3); }
+        .lp-root ::selection { background: rgba(78, 159, 212, 0.3); }
 
         /* ── Layout ─────────────────────────────── */
         .lp-container { max-width: 1200px; margin: 0 auto; }
@@ -228,10 +233,10 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
         }
         .lp-btn:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 3px; }
         .lp-btn--primary {
-          background: var(--lp-accent);
-          color: #04202F;
+          background: var(--lp-accent-strong);
+          color: #FFFFFF;
         }
-        .lp-btn--primary:hover { background: #46C6F0; transform: translateY(-1px); }
+        .lp-btn--primary:hover { background: #3389C4; transform: translateY(-1px); }
         .lp-btn--ghost {
           background: transparent;
           border-color: var(--lp-line-strong);
@@ -254,23 +259,20 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           transform: translateY(-2px);
         }
         .lp-card--accent {
-          border-color: rgba(34, 184, 232, 0.4);
-          background: linear-gradient(180deg, rgba(34,184,232,.10) 0%, var(--lp-surface) 60%);
+          border-color: rgba(78, 159, 212, 0.4);
+          background: linear-gradient(180deg, rgba(78, 159, 212,.10) 0%, var(--lp-surface) 60%);
         }
-        .lp-icon-tile {
-          display: inline-flex;
-          padding: 12px;
-          border-radius: 12px;
-          background: var(--lp-accent-soft);
-          color: var(--lp-accent);
-        }
+        /* Icons sit inline at a light stroke weight. The tinted rounded tile
+           they used to sit in is the single most template-looking device in
+           this kind of layout, and it added nothing the icon didn't say. */
+        .lp-icon { color: var(--lp-accent); }
         .lp-tag {
           font-size: 0.6875rem;
           font-weight: 600;
           letter-spacing: 0.03em;
           text-transform: uppercase;
           color: var(--lp-accent);
-          border: 1px solid rgba(34, 184, 232, 0.3);
+          border: 1px solid rgba(78, 159, 212, 0.3);
           border-radius: 999px;
           padding: 3px 10px;
           white-space: nowrap;
@@ -385,7 +387,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
         <div className="pointer-events-none absolute inset-0" aria-hidden="true">
           <div
             className="absolute -top-32 -left-32 w-[520px] h-[520px] rounded-full blur-[130px] animate-[orbFloat_8s_ease-in-out_infinite]"
-            style={{ background: 'rgba(34, 184, 232, 0.16)' }}
+            style={{ background: 'rgba(78, 159, 212, 0.13)' }}
           />
           <div
             className="absolute top-20 -right-40 w-[420px] h-[420px] rounded-full blur-[110px] animate-[orbFloat_10s_ease-in-out_2s_infinite_reverse]"
@@ -398,16 +400,14 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           <MotionWrap>
             <div
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[0.8125rem] font-semibold mb-9"
-              style={{ border: '1px solid rgba(34,184,232,.3)', background: 'var(--lp-accent-soft)', color: 'var(--lp-accent)' }}
+              style={{ border: '1px solid rgba(78, 159, 212,.3)', background: 'var(--lp-accent-soft)', color: 'var(--lp-accent)' }}
             >
               <Zap className="w-3.5 h-3.5" />
               Now in early access — join the waitlist
             </div>
 
             <h1 className="lp-display">
-              The Compliance<br />
-              <span style={{ color: 'var(--lp-accent)' }}>Operating System</span>
-              <br />for Regulated Industries
+              The Compliance<br />Operating System<br />for Regulated Industries
             </h1>
 
             <p className="lp-lead mt-7 max-w-xl">
@@ -484,7 +484,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                     />
                     <defs>
                       <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#22B8E8" />
+                        <stop offset="0%" stopColor="#4E9FD4" />
                         <stop offset="100%" stopColor="#3BB75E" />
                       </linearGradient>
                     </defs>
@@ -521,7 +521,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 <div className="space-y-3">
                   {[
                     { action: 'NAFDAC submission approved', user: 'Dr. Okonkwo', time: '2m ago', color: '#3BB75E' },
-                    { action: 'Risk assessment updated', user: 'C. Ifeanyi', time: '18m ago', color: '#22B8E8' },
+                    { action: 'Risk assessment updated', user: 'C. Ifeanyi', time: '18m ago', color: '#4E9FD4' },
                   ].map((entry, i) => (
                     <motion.div
                       key={i}
@@ -583,7 +583,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
               },
             ].map((item, i) => (
               <div key={i} className="lp-card lp-card--hover">
-                <item.icon className="w-9 h-9 mb-6" style={{ color: 'var(--lp-coral)' }} />
+                <item.icon className="w-9 h-9 mb-6" strokeWidth={1.5} style={{ color: 'var(--lp-coral)' }} />
                 <h3 className="lp-h3 mb-3">{item.title}</h3>
                 <p className="lp-body mb-7">{item.desc}</p>
                 <div className="pt-5" style={{ borderTop: '1px solid var(--lp-line)' }}>
@@ -650,9 +650,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
             ].map((item, i) => (
               <div key={i} className="lp-card lp-card--hover">
                 <div className="flex items-start justify-between mb-6">
-                  <div className="lp-icon-tile">
-                    <item.icon className="w-6 h-6" />
-                  </div>
+                  <item.icon className="w-6 h-6 lp-icon" strokeWidth={1.5} />
                   <span className="lp-tag">{item.badge}</span>
                 </div>
                 <h3 className="lp-h3 mb-3">{item.title}</h3>
@@ -832,12 +830,11 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
               { icon: Clock, title: '99.9% Uptime SLA', desc: 'Enterprise-tier with 24/7 monitoring' },
             ].map((item, i) => (
               <div key={i} className="lp-card lp-card--hover !p-6 text-center">
-                <div
-                  className="inline-flex p-3 rounded-xl mb-4"
-                  style={{ background: 'rgba(59,183,94,.12)', color: 'var(--lp-mint)' }}
-                >
-                  <item.icon className="w-6 h-6" />
-                </div>
+                <item.icon
+                  className="w-6 h-6 mx-auto mb-4"
+                  strokeWidth={1.5}
+                  style={{ color: 'var(--lp-mint)' }}
+                />
                 <h3 className="text-[0.9375rem] font-semibold mb-1.5">{item.title}</h3>
                 <p className="lp-micro">{item.desc}</p>
               </div>
@@ -855,11 +852,11 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
             <div
               className="p-10 md:p-14 rounded-3xl"
               style={{
-                border: '1px solid rgba(34,184,232,.3)',
-                background: 'linear-gradient(180deg, rgba(34,184,232,.12) 0%, rgba(14,46,78,.6) 70%)',
+                border: '1px solid rgba(78, 159, 212,.3)',
+                background: 'linear-gradient(180deg, rgba(78, 159, 212,.12) 0%, rgba(14,46,78,.6) 70%)',
               }}
             >
-              <Award className="w-10 h-10 mx-auto mb-6" style={{ color: 'var(--lp-accent)' }} />
+              <Award className="w-10 h-10 mx-auto mb-6" strokeWidth={1.5} style={{ color: 'var(--lp-accent)' }} />
               <h2 className="lp-h2">Ready to automate compliance?</h2>
               <p className="lp-lead mt-5">
                 Join leading pharmaceutical companies that trust Criateur OS. Request a demo or join our early access waitlist.
