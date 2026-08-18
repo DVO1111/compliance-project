@@ -75,6 +75,21 @@ export type Permissions = {
   canManageEvidenceIngestions: boolean;
   canViewEcosystem: boolean;
   canManageEcosystem: boolean;
+
+  /**
+   * Modules that previously rode on an unrelated flag. Each now has its own key
+   * so access can be granted independently:
+   *   - Obligations, Risk Register, Compliance Alerts and Audit Prep were all
+   *     gated on `canViewGrcFrameworks`
+   *   - Integrations was gated on `canViewLicenseVault`
+   *   - Billing was gated on `canViewMembers`
+   */
+  canViewObligations: boolean;
+  canViewRiskRegister: boolean;
+  canViewComplianceAlerts: boolean;
+  canViewAuditPrep: boolean;
+  canViewIntegrations: boolean;
+  canViewBilling: boolean;
 };
 
 /** Every permission key — used by the Role Management UI to render toggles */
@@ -167,6 +182,14 @@ export const ALL_PERMISSION_KEYS: { key: keyof Permissions; label: string; group
   { key: 'canManageApiKeys',            label: 'Manage API Keys',            group: 'Administration' },
   { key: 'canViewWebhooks',             label: 'View Webhooks',              group: 'Platform' },
   { key: 'canManageWebhooks',           label: 'Manage Webhooks',            group: 'Platform' },
+
+  // Split out of shared flags — see the Permissions type for what each replaced
+  { key: 'canViewObligations',          label: 'View Obligations',           group: 'Governance' },
+  { key: 'canViewRiskRegister',         label: 'View Risk Register',         group: 'Governance' },
+  { key: 'canViewComplianceAlerts',     label: 'View Compliance Alerts',     group: 'Governance' },
+  { key: 'canViewAuditPrep',            label: 'View Audit Prep',            group: 'Audit' },
+  { key: 'canViewIntegrations',         label: 'View Integrations',          group: 'Administration' },
+  { key: 'canViewBilling',              label: 'View Billing & Plan',        group: 'Administration' },
 ];
 
 /** Default permission sets for legacy roles — matches pre-RBAC behaviour exactly */
@@ -209,6 +232,9 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
     canViewWebhooks: false, canManageWebhooks: false,
     canViewEvidenceIngestions: false, canManageEvidenceIngestions: false,
     canViewEcosystem: false, canManageEcosystem: false,
+    canViewObligations: false, canViewRiskRegister: false,
+    canViewComplianceAlerts: false, canViewAuditPrep: false,
+    canViewIntegrations: false, canViewBilling: false,
   },
   compliance: {
     canViewMembers: true, canInvite: false, canRevokeInvite: false,
@@ -248,6 +274,11 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
     canViewWebhooks: true, canManageWebhooks: true,
     canViewEvidenceIngestions: true, canManageEvidenceIngestions: true,
     canViewEcosystem: true, canManageEcosystem: true,
+    canViewObligations: true, canViewRiskRegister: true,
+    canViewComplianceAlerts: true, canViewAuditPrep: true,
+    // Integrations previously rode on canViewLicenseVault, which is false for
+    // this role — preserved rather than silently widened.
+    canViewIntegrations: false, canViewBilling: false,
   },
   executive: {
     canViewMembers: true, canInvite: true, canRevokeInvite: true,
@@ -287,6 +318,9 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
     canViewWebhooks: true, canManageWebhooks: true,
     canViewEvidenceIngestions: true, canManageEvidenceIngestions: true,
     canViewEcosystem: true, canManageEcosystem: true,
+    canViewObligations: true, canViewRiskRegister: true,
+    canViewComplianceAlerts: true, canViewAuditPrep: true,
+    canViewIntegrations: true, canViewBilling: true,
   },
   agency: {
     canViewMembers: false, canInvite: false, canRevokeInvite: false,
@@ -326,6 +360,9 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
     canViewWebhooks: false, canManageWebhooks: false,
     canViewEvidenceIngestions: false, canManageEvidenceIngestions: false,
     canViewEcosystem: false, canManageEcosystem: false,
+    canViewObligations: false, canViewRiskRegister: false,
+    canViewComplianceAlerts: false, canViewAuditPrep: false,
+    canViewIntegrations: false, canViewBilling: false,
   },
   auditor: {
     canViewMembers: false, canInvite: false, canRevokeInvite: false,
@@ -368,6 +405,58 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
     canManageEvidenceIngestions: false,
     canViewEcosystem: true,
     canManageEcosystem: false,
+    canViewObligations: false, canViewRiskRegister: false,
+    canViewComplianceAlerts: false, canViewAuditPrep: false,
+    canViewIntegrations: false, canViewBilling: false,
+  },
+  /**
+   * Quality / production manager — the role that lives in Batch Release, CAPA,
+   * SOPs and GMP inspection all day. Previously had no preset, so QA staff were
+   * given the `compliance` role and inherited the whole marketing-compliance
+   * surface. Owns quality operations and audit evidence; no billing, no roles,
+   * no content-marketing modules.
+   */
+  quality: {
+    canViewMembers: true, canInvite: false, canRevokeInvite: false,
+    canViewLegalReview: false, canUpload: false, canViewArchive: false,
+    canViewTraining: true, canViewLicenseVault: true, canViewAuditTrail: true,
+    canManageRoles: false, canViewDriftMonitor: false, canViewConsentManagement: false,
+    canViewContentBlocks: false, canViewAgencyPortal: false,
+    canViewComplianceReporting: true, canViewHorizonScanning: true,
+    canViewChannelRules: false, canViewRegulatoryLibrary: true,
+    canViewTranslationCompliance: false, canViewCrisisResponse: true,
+    canViewProgrammaticAd: false, canViewWhistleblower: false, canViewPredictiveRisk: false,
+    canViewSocialListening: false, canViewWebsiteMonitoring: false,
+    canViewVendorScorecard: true, canViewCapaManagement: true,
+    canViewTrainingSimulation: true, canViewClaimExtraction: false,
+    canViewPharmaIntegrations: true,
+    canViewGrcFrameworks: true, canManageGrcFrameworks: false,
+    canViewGrcControls: true, canManageGrcControls: true,
+    canViewGrcDashboard: true,
+    canViewGrcAutomation: true, canManageGrcAutomation: false,
+    canViewPolicies: true, canManagePolicies: false, canPublishPolicies: false,
+    canViewMyPolicies: true,
+    canViewVendors: true, canManageVendors: true,
+    canViewAuditWorkspace: true, canManageAuditWorkspace: true,
+    canViewIdentity: false, canManageIdentity: false,
+    canViewAuditExports: true, canManageAuditExports: true,
+    canViewPlatformJobs: false, canManagePlatformJobs: false,
+    canViewRetention: false, canManageRetention: false,
+    canViewLegalHold: false, canManageLegalHold: false,
+    canViewGovernanceTimeline: true,
+    canViewAIGovernance: false, canManageAIAssets: false,
+    canViewAIUsage: false, canManageAIUsageReviews: false,
+    canViewAIIncidents: false, canManageAIIncidents: false,
+    canViewAIReviews: false, canManageAIReviews: false,
+    canViewAIPrompts: false, canManageAIPrompts: false,
+    canViewAIDashboard: false,
+    canManageApiKeys: false,
+    canViewWebhooks: false, canManageWebhooks: false,
+    canViewEvidenceIngestions: false, canManageEvidenceIngestions: false,
+    canViewEcosystem: false, canManageEcosystem: false,
+    canViewObligations: true, canViewRiskRegister: true,
+    canViewComplianceAlerts: true, canViewAuditPrep: true,
+    canViewIntegrations: false, canViewBilling: false,
   },
 };
 
@@ -418,6 +507,12 @@ export const EMPTY_PERMISSIONS: Permissions = {
   canManageEvidenceIngestions: false,
   canViewEcosystem: false,
   canManageEcosystem: false,
+  canViewObligations: false,
+  canViewRiskRegister: false,
+  canViewComplianceAlerts: false,
+  canViewAuditPrep: false,
+  canViewIntegrations: false,
+  canViewBilling: false,
 };
 
 function norm(v?: string | null) {
@@ -432,6 +527,7 @@ function canonicalRole(role: string): string {
   if (r === "executive" || r === "exec" || r === "owner" || r === "admin") return "executive";
   if (r === "agency" || r === "external" || r === "vendor") return "agency";
   if (r === "auditor") return "auditor";
+  if (r === "quality" || r === "qa" || r === "quality_manager" || r === "production") return "quality";
   return r;
 }
 
