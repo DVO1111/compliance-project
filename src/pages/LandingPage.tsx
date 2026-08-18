@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import '@fontsource-variable/plus-jakarta-sans';
+import LiveDashboardPreview from './landing/LiveDashboardPreview';
 import {
   ShieldCheck, Zap, Globe2, FileCheck2, BarChart3, Lock, CheckCircle2,
   ArrowRight, ChevronRight, Users, Eye, Brain, Scale, Server,
@@ -278,6 +279,24 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           white-space: nowrap;
         }
 
+        /* ── Live product preview (hero) ────────── */
+        .lp-preview {
+          border: 1px solid var(--lp-line-strong);
+          background: rgba(14, 46, 78, 0.85);
+        }
+        .lp-risk-row {
+          cursor: pointer;
+          background: transparent;
+          border: 1px solid transparent;
+          transition: background .16s ease, border-color .16s ease;
+        }
+        .lp-risk-row:hover { background: rgba(255, 255, 255, 0.05); }
+        .lp-risk-row[data-active] {
+          background: rgba(255, 255, 255, 0.07);
+          border-color: var(--lp-line-strong);
+        }
+        .lp-risk-row:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
+
         /* ── Inputs ─────────────────────────────── */
         .lp-input {
           width: 100%;
@@ -457,90 +476,9 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
             </div>
           </MotionWrap>
 
-          {/* Right — animated dashboard mockup */}
+          {/* Right — live product preview (own component; drives itself) */}
           <MotionWrap delay={0.2}>
-            <div
-              className="rounded-2xl p-7 shadow-2xl shadow-black/40 backdrop-blur-sm"
-              style={{ border: '1px solid var(--lp-line-strong)', background: 'rgba(14, 46, 78, 0.85)' }}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between mb-7">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: 'var(--lp-mint)' }} />
-                  <span className="text-[0.8125rem] font-semibold" style={{ color: 'var(--lp-t2)' }}>Live Dashboard</span>
-                </div>
-                <span className="text-xs lp-num" style={{ color: 'var(--lp-t4)' }}>Last sync: 4s ago</span>
-              </div>
-
-              {/* Compliance Score Gauge */}
-              <div className="flex items-center gap-7 mb-7">
-                <div className="relative w-24 h-24 shrink-0">
-                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="8" />
-                    <circle
-                      cx="50" cy="50" r="42" fill="none" stroke="url(#gaugeGrad)" strokeWidth="8"
-                      strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset="15.8"
-                      className="animate-[gaugeIn_1.2s_ease-out_0.4s_both]"
-                    />
-                    <defs>
-                      <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#4E9FD4" />
-                        <stop offset="100%" stopColor="#3BB75E" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-[1.75rem] font-bold lp-num tracking-[-0.03em]">
-                      94<span className="text-sm font-semibold" style={{ color: 'var(--lp-t3)' }}>%</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-2.5 flex-1">
-                  {[
-                    { level: 'Low', count: 2, color: '#3BB75E', bar: 'w-1/4' },
-                    { level: 'Medium', count: 5, color: '#F5B944', bar: 'w-2/4' },
-                    { level: 'High', count: 1, color: '#FF8E8E', bar: 'w-1/6' },
-                  ].map((r) => (
-                    <div key={r.level} className="flex items-center gap-2.5 text-[0.8125rem]">
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: r.color }} />
-                      <span className="w-14" style={{ color: 'var(--lp-t3)' }}>{r.level}</span>
-                      <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,.07)' }}>
-                        <div className={`h-full rounded-full ${r.bar}`} style={{ background: r.color, opacity: .7 }} />
-                      </div>
-                      <span className="w-4 text-right lp-num" style={{ color: 'var(--lp-t2)' }}>{r.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Audit Trail Feed */}
-              <div className="pt-5" style={{ borderTop: '1px solid var(--lp-line)' }}>
-                <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] mb-3.5" style={{ color: 'var(--lp-t4)' }}>
-                  Recent Audit Trail
-                </p>
-                <div className="space-y-3">
-                  {[
-                    { action: 'NAFDAC submission approved', user: 'Dr. Okonkwo', time: '2m ago', color: '#3BB75E' },
-                    { action: 'Risk assessment updated', user: 'C. Ifeanyi', time: '18m ago', color: '#4E9FD4' },
-                  ].map((entry, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.4, delay: 0.8 + i * 0.3 }}
-                      className="flex items-start gap-2.5 text-[0.8125rem]"
-                    >
-                      <div className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: entry.color }} />
-                      <div className="flex-1 min-w-0">
-                        <span className="font-semibold" style={{ color: entry.color }}>{entry.action}</span>
-                        <span style={{ color: 'var(--lp-t4)' }}> — {entry.user}</span>
-                      </div>
-                      <span className="shrink-0 lp-num" style={{ color: 'var(--lp-t4)' }}>{entry.time}</span>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <LiveDashboardPreview />
           </MotionWrap>
         </div>
       </Section>
