@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import '@fontsource-variable/plus-jakarta-sans';
 import LiveDashboardPreview from './landing/LiveDashboardPreview';
 import {
   ShieldCheck, Zap, Globe2, FileCheck2, BarChart3, Lock, CheckCircle2,
@@ -123,17 +122,15 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           --lp-line: rgba(255, 255, 255, 0.09);
           --lp-line-strong: rgba(255, 255, 255, 0.18);
 
-          /* accents
-             A muted mid-blue rather than a saturated cyan. High-chroma cyan
-             glows against a dark ground — especially at display sizes — and
-             reads as neon rather than considered. These two tones are picked
-             for contrast on the navy: --lp-accent clears 5:1 for text, and
-             --lp-accent-strong clears 4.8:1 against white for button labels. */
-          --lp-accent: #4E9FD4;
-          --lp-accent-strong: #2A78B0;
-          --lp-accent-soft: rgba(78, 159, 212, 0.10);
+          /* accents — drawn from the Figma primary ramp rather than invented.
+             The ramp gives exactly what a dark ground needs: a light step for
+             text (300) and a saturated step for fills (500). */
+          --lp-accent: var(--primary-300);        /* #7ca1f3 — 6.1:1 on the navy, for text and links */
+          --lp-accent-strong: var(--primary-500);  /* #2563eb — button fills, 5.1:1 against white */
+          --lp-accent-hover: var(--primary-400);   /* #5182ef */
+          --lp-accent-soft: var(--primary-alpha-10);
           --lp-mint: #3BB75E;
-          --lp-coral: #FF8E8E;
+          --lp-coral: var(--red-100);              /* #fb3748 */
           --lp-gold: #F5B944;
 
           /* type */
@@ -142,7 +139,8 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           --lp-t3: #86A0BA;
           --lp-t4: #5F7B98;
 
-          --lp-font: 'Plus Jakarta Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+          /* Mulish, per the Figma style guide. Loaded once in index.css. */
+          --lp-font: var(--font-sans);
 
           background: var(--lp-bg);
           color: var(--lp-t1);
@@ -169,48 +167,48 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
         .lp-section[id] { scroll-margin-top: 88px; }
 
         /* ── Typography ─────────────────────────── */
-        .lp-display {
-          font-size: clamp(2.75rem, 5.6vw, 4.5rem);
-          font-weight: 700;
-          letter-spacing: -0.035em;
-          line-height: 1.03;
+        /* All type below maps to a Figma token. Letter-spacing is 0 and
+           heading weight is 500 (Medium) throughout, as specified — the scale
+           tops out at heading-07 (54px), so the hero no longer runs to 72px. */
+        .lp-display {                                  /* heading-05 → heading-07 */
+          font-size: clamp(var(--type-heading-05-size), 4.6vw, var(--type-heading-07-size));
+          font-weight: var(--type-heading-07-weight);
+          line-height: 1.185;
           text-wrap: balance;
           margin: 0;
         }
-        .lp-h2 {
-          font-size: clamp(2rem, 3.4vw, 2.875rem);
-          font-weight: 700;
-          letter-spacing: -0.028em;
-          line-height: 1.1;
+        .lp-h2 {                                       /* heading-05 → heading-06 */
+          font-size: clamp(var(--type-heading-05-size), 3.2vw, var(--type-heading-06-size));
+          font-weight: var(--type-heading-06-weight);
+          line-height: 1.19;
           text-wrap: balance;
           margin: 0;
         }
-        .lp-h3 {
-          font-size: 1.1875rem;
-          font-weight: 600;
-          letter-spacing: -0.012em;
-          line-height: 1.35;
+        .lp-h3 {                                       /* heading-03 */
+          font-size: var(--type-heading-03-size);
+          line-height: var(--type-heading-03-lh);
+          font-weight: var(--type-heading-03-weight);
           margin: 0;
         }
-        .lp-lead {
-          font-size: clamp(1.0625rem, 1.4vw, 1.25rem);
-          line-height: 1.65;
+        .lp-lead {                                     /* body-long-02 */
+          font-size: var(--type-body-long-02-size);
+          line-height: var(--type-body-long-02-lh);
           color: var(--lp-t2);
           margin: 0;
         }
-        .lp-body {
-          font-size: 0.96875rem;
-          line-height: 1.7;
+        .lp-body {                                     /* body-long-01 */
+          font-size: var(--type-body-long-01-size);
+          line-height: var(--type-body-long-01-lh);
           color: var(--lp-t2);
           margin: 0;
         }
-        .lp-small { font-size: 0.875rem; line-height: 1.6; color: var(--lp-t3); margin: 0; }
-        .lp-micro { font-size: 0.8125rem; line-height: 1.55; color: var(--lp-t4); margin: 0; }
-        .lp-eyebrow {
+        .lp-small { font-size: var(--type-body-short-01-size); line-height: var(--type-body-short-01-lh); color: var(--lp-t3); margin: 0; }
+        .lp-micro { font-size: var(--type-caption-01-size); line-height: var(--type-caption-01-lh); color: var(--lp-t4); margin: 0; }
+        .lp-eyebrow {                                  /* heading-01 */
           display: inline-block;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          letter-spacing: 0.01em;
+          font-size: var(--type-heading-01-size);
+          line-height: var(--type-heading-01-lh);
+          font-weight: var(--type-heading-01-weight);
           color: var(--lp-accent);
           margin: 0 0 14px;
         }
@@ -223,10 +221,12 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           justify-content: center;
           gap: 8px;
           font-family: var(--lp-font);
-          font-size: 0.9375rem;
-          font-weight: 600;
-          letter-spacing: -0.005em;
-          padding: 14px 26px;
+          /* heading-01 (14/18, 600) at the sheet's 48px default height */
+          font-size: var(--type-heading-01-size);
+          line-height: var(--type-heading-01-lh);
+          font-weight: var(--type-heading-01-weight);
+          min-height: var(--control-height-default);
+          padding: 0 26px;
           border-radius: 10px;
           border: 1px solid transparent;
           cursor: pointer;
@@ -237,7 +237,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
           background: var(--lp-accent-strong);
           color: #FFFFFF;
         }
-        .lp-btn--primary:hover { background: #3389C4; transform: translateY(-1px); }
+        .lp-btn--primary:hover { background: var(--lp-accent-hover); transform: translateY(-1px); }
         .lp-btn--ghost {
           background: transparent;
           border-color: var(--lp-line-strong);
@@ -488,7 +488,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
          ════════════════════════════════════════════════ */}
       <Section tone="raised" className="py-24 md:py-32">
         <MotionWrap>
-          <div className="text-center mb-16 max-w-2xl mx-auto">
+          <div className="mb-16 max-w-2xl">
             <p className="lp-eyebrow">The Problem</p>
             <h2 className="lp-h2">Compliance in pharma is broken</h2>
             <p className="lp-lead mt-5">
@@ -539,7 +539,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
          ════════════════════════════════════════════════ */}
       <Section id="features" className="py-24 md:py-32">
         <MotionWrap>
-          <div className="text-center mb-16 max-w-2xl mx-auto">
+          <div className="mb-16 max-w-2xl">
             <p className="lp-eyebrow">Platform Features</p>
             <h2 className="lp-h2">Everything you need to stay compliant</h2>
             <p className="lp-lead mt-5">
@@ -604,7 +604,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
          ════════════════════════════════════════════════ */}
       <Section tone="raised" className="py-24 md:py-32">
         <MotionWrap>
-          <div className="text-center mb-16">
+          <div className="mb-16 max-w-2xl">
             <p className="lp-eyebrow">What Leaders Say</p>
             <h2 className="lp-h2">Trusted by compliance teams worldwide</h2>
           </div>
@@ -654,7 +654,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
          ════════════════════════════════════════════════ */}
       <Section id="pricing" className="py-24 md:py-32">
         <MotionWrap>
-          <div className="text-center mb-16 max-w-2xl mx-auto">
+          <div className="mb-16 max-w-2xl">
             <p className="lp-eyebrow">Pricing</p>
             <h2 className="lp-h2">Plans that scale with your compliance needs</h2>
             <p className="lp-lead mt-5">No hidden fees. Cancel anytime. All plans include security hardening.</p>
@@ -750,7 +750,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
          ════════════════════════════════════════════════ */}
       <Section id="security" tone="raised" className="py-24 md:py-32">
         <MotionWrap>
-          <div className="text-center mb-16 max-w-2xl mx-auto">
+          <div className="mb-16 max-w-2xl">
             <p className="lp-eyebrow">Security &amp; Compliance</p>
             <h2 className="lp-h2">Enterprise-grade security by default</h2>
             <p className="lp-lead mt-5">
@@ -767,13 +767,14 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
               { icon: Globe2, title: 'GDPR Compliant', desc: 'Data retention, right to erasure, consent management' },
               { icon: Clock, title: '99.9% Uptime SLA', desc: 'Enterprise-tier with 24/7 monitoring' },
             ].map((item, i) => (
-              <div key={i} className="lp-card lp-card--hover !p-6 text-center">
+              <div key={i} className="lp-card lp-card--hover !p-6">
                 <item.icon
-                  className="w-6 h-6 mx-auto mb-4"
+                  className="w-6 h-6 mb-4"
                   strokeWidth={1.5}
                   style={{ color: 'var(--lp-mint)' }}
                 />
-                <h3 className="text-[0.9375rem] font-semibold mb-1.5">{item.title}</h3>
+                {/* heading-01 */}
+                <h3 className="type-heading-01 mb-1.5">{item.title}</h3>
                 <p className="lp-micro">{item.desc}</p>
               </div>
             ))}
@@ -786,7 +787,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
          ════════════════════════════════════════════════ */}
       <Section id="cta" className="py-24 md:py-32">
         <MotionWrap>
-          <div className="max-w-2xl mx-auto text-center">
+          <div className="max-w-2xl">
             <div
               className="p-10 md:p-14 rounded-3xl"
               style={{
@@ -794,14 +795,14 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                 background: 'linear-gradient(180deg, rgba(78, 159, 212,.12) 0%, rgba(14,46,78,.6) 70%)',
               }}
             >
-              <Award className="w-10 h-10 mx-auto mb-6" strokeWidth={1.5} style={{ color: 'var(--lp-accent)' }} />
+              <Award className="w-10 h-10 mb-6" strokeWidth={1.5} style={{ color: 'var(--lp-accent)' }} />
               <h2 className="lp-h2">Ready to automate compliance?</h2>
               <p className="lp-lead mt-5">
                 Join leading pharmaceutical companies that trust Criateur OS. Request a demo or join our early access waitlist.
               </p>
 
               {!submitted ? (
-                <form onSubmit={handleWaitlist} className="mt-9 flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+                <form onSubmit={handleWaitlist} className="mt-9 flex flex-col sm:flex-row gap-3 max-w-md">
                   <div className="relative flex-1">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--lp-t4)' }} />
                     <input
@@ -822,7 +823,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
                   className="mt-9 p-5 rounded-xl"
                   style={{ background: 'rgba(59,183,94,.12)', border: '1px solid rgba(59,183,94,.3)' }}
                 >
-                  <CheckCircle2 className="w-6 h-6 mx-auto mb-2" style={{ color: 'var(--lp-mint)' }} />
+                  <CheckCircle2 className="w-6 h-6 mb-2" style={{ color: 'var(--lp-mint)' }} />
                   <p className="font-semibold" style={{ color: 'var(--lp-mint)' }}>You're on the list!</p>
                   <p className="lp-small mt-1">We'll reach out within 24 hours to schedule your demo.</p>
                 </div>
@@ -843,7 +844,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToSignup }: L
       >
         <div style={{ borderTop: '1px solid var(--lp-line)', borderBottom: '1px solid var(--lp-line)' }} className="py-16">
           <MotionWrap>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-10 text-center">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
               {[
                 { target: 140, suffix: '+', label: 'Database Tables' },
                 { target: 60, suffix: '+', label: 'Modules' },

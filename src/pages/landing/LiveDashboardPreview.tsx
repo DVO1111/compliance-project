@@ -201,7 +201,8 @@ export default function LiveDashboardPreview() {
             />
             <defs>
               <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#4E9FD4" />
+                {/* Figma Colors/Primary/300 — the ramp step that carries on a dark ground */}
+                <stop offset="0%" stopColor="var(--primary-300)" />
                 <stop offset="100%" stopColor="#3BB75E" />
               </linearGradient>
             </defs>
