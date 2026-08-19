@@ -74,27 +74,28 @@ export default function MetricCard({
     // Normalize delta from props
     const delta = deltaProp || (trendValue !== undefined ? { value: trendValue } : undefined);
 
-    // Theme-aware styles based on variant
-    const cardStyle = variant ? {
-        background: `var(--metric-${variant}-bg)`,
-        borderColor: "rgba(255, 255, 255, 0.1)",
-    } : {};
-
-    const titleColor = variant ? `var(--metric-${variant}-secondary)` : undefined;
-    const valueColor = variant ? `var(--metric-${variant}-text)` : undefined;
-    const subtextColor = variant ? `var(--metric-${variant}-secondary)` : undefined;
-    const iconBg = variant ? `var(--metric-${variant}-delta-bg)` : "var(--color-accent-soft)";
-    const iconColor = variant ? `var(--metric-${variant}-accent)` : undefined;
-    const sparkColor = variant ? "rgba(255,255,255,0.6)" : "var(--color-accent)";
+    // `variant` used to paint a full-bleed gradient with white text. The Figma
+    // style guide has no gradients — surfaces are flat with a subtle stroke —
+    // so the variant now carries *meaning* instead: it tints the value and the
+    // icon so a card that needs action reads as such at a glance.
+    const TONE: Record<string, string> = {
+        red: "var(--color-danger)",
+        yellow: "var(--color-warning)",
+        green: "var(--color-success)",
+        blue: "var(--color-accent)",
+        purple: "var(--color-accent)",
+    };
+    const tone = variant ? TONE[variant] ?? "var(--color-accent)" : "var(--color-accent)";
+    const valueColor = variant && variant !== "purple" && variant !== "blue"
+        ? tone
+        : "var(--color-text-primary)";
 
     return (
         <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            whileHover={{ y: -3, transition: { duration: 0.2 } }}
-            className={`dash-card h-full min-h-[100px] p-3.5 relative overflow-hidden flex flex-col justify-between ${onClick ? "cursor-pointer" : ""} ${className}`}
-            style={cardStyle}
+            className={`dash-card h-full min-h-[104px] p-4 flex flex-col justify-between ${onClick ? "cursor-pointer" : ""} ${className}`}
             onClick={onClick}
             role={onClick ? "button" : undefined}
             tabIndex={onClick ? 0 : undefined}
@@ -106,64 +107,48 @@ export default function MetricCard({
                     : undefined
             }
         >
-            {/* Subtle background wave/pattern if variant is present */}
-            {variant && (
-                <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-                    <svg width="120" height="80" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M0 80C30 70 40 40 70 30C100 20 120 40 120 0V80H0Z" fill="white" />
-                    </svg>
-                </div>
-            )}
-
-            <div className="flex items-start justify-between gap-3 relative z-10">
+            <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
+                    {/* label-01 */}
                     <p
-                        className="text-[9px] font-black uppercase tracking-wider opacity-80 truncate"
+                        className="type-label-01 truncate"
                         title={title}
-                        style={{ color: titleColor || "var(--color-text-secondary)" }}
+                        style={{ color: "var(--color-text-secondary)" }}
                     >
                         {title}
                     </p>
+                    {/* heading-04 — the number is the point of the card */}
                     <p
-                        className="text-xl font-black mt-0.5 tabular-nums"
-                        style={{ color: valueColor || "var(--color-text-primary)" }}
+                        className="type-heading-04 mt-1 tabular-nums"
+                        style={{ color: valueColor }}
                     >
                         <AnimatedNumber target={valStr} />
                     </p>
                 </div>
-                <div
-                    className="p-2 rounded-xl shrink-0 backdrop-blur-sm"
-                    style={{ background: iconBg }}
-                >
-                    <Icon className={`w-4 h-4 ${iconColor ? "" : "dash-accent"}`} style={{ color: iconColor }} />
-                </div>
+                <Icon className="w-5 h-5 shrink-0" style={{ color: tone }} />
             </div>
 
-            <div className="mt-4 relative z-10">
+            <div className="mt-3">
                 {trendData && trendData.length > 0 && (
                     <div className="mb-2">
-                        <Sparkline data={trendData} color={sparkColor} height={24} />
+                        <Sparkline data={trendData} color={tone} height={24} />
                     </div>
                 )}
 
                 <div className="flex items-center gap-2">
                     {delta && (
-                        <div
-                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+                        <span
+                            className="type-caption-01 px-1.5 py-0.5 rounded-md"
                             style={{
-                                background: variant ? `var(--metric-${variant}-delta-bg)` : (delta.value >= 0 ? "var(--color-success-soft)" : "var(--color-danger-soft)"),
-                                color: variant ? `var(--metric-${variant}-delta-text)` : (delta.value >= 0 ? "var(--color-success)" : "var(--color-danger)")
+                                background: delta.value >= 0 ? "var(--color-success-soft)" : "var(--color-danger-soft)",
+                                color: delta.value >= 0 ? "var(--color-success)" : "var(--color-danger)",
                             }}
                         >
-                            {delta.value >= 0 ? "↑" : "↓"}
-                            {Math.abs(delta.value)}%
-                        </div>
+                            {delta.value >= 0 ? "\u2191" : "\u2193"}{Math.abs(delta.value)}%
+                        </span>
                     )}
                     {subtext && (
-                        <p
-                            className="text-[9px] font-medium truncate opacity-70"
-                            style={{ color: subtextColor || "var(--color-text-tertiary)" }}
-                        >
+                        <p className="type-caption-01 truncate" style={{ color: "var(--color-text-tertiary)" }}>
                             {subtext}
                         </p>
                     )}

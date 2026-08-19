@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
-import { useDashboardLayout, type WidgetConfig } from "../../hooks/useDashboardLayout";
-import SortableWidgetGrid from "./ui/SortableWidgetGrid";
 import { supabase } from "../../lib/supabase";
 import { useJurisdictionStore } from "../../stores/jurisdictionStore";
 import ExecutiveTrendsWidget from "./widgets/ExecutiveTrendsWidget";
@@ -26,6 +24,7 @@ import UpcomingDeadlinesWidget from "./widgets/UpcomingDeadlinesWidget";
 import ActiveWorkflowsWidget from "./widgets/ActiveWorkflowsWidget";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPermissions } from "../../lib/permissions";
+import DashboardSection from "./ui/DashboardSection";
 import MetricCard from "./ui/MetricCard";
 import ThemeSwitcher from "./ui/ThemeSwitcher";
 import QuickActionsBar from "./ui/QuickActionsBar";
@@ -39,7 +38,6 @@ import {
   Scale,
   Upload,
   FileText,
-  RotateCcw,
   Share2,
   ShieldAlert,
   ClipboardList,
@@ -418,6 +416,11 @@ export default function DashboardPage({
   const isExecutive = role === "executive";
   const isLegal = role === "compliance" || role === "legal";
   const isMarketing = role === "marketing";
+  const isQuality = role === "quality";
+
+  // True once any module has been used — gates the tiers that would otherwise
+  // render empty scaffolding on a brand-new workspace.
+  const hasAnyActivity = !!(moduleActivity && Object.values(moduleActivity).some(Boolean));
 
   const approvalPct = useMemo(() => {
     if (!exec) return "—";
@@ -559,10 +562,12 @@ export default function DashboardPage({
             : 'dash-card dash-border shadow-sm'
         }`}>
           <div>
-            <h2 className="text-lg font-bold dash-text tracking-tight">
+            {/* heading-03 */}
+            <h2 className="type-heading-03 dash-text">
               Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}
             </h2>
-            <p className="text-[11px] dash-text-secondary mt-0.5 font-medium">
+            {/* body-short-01 — was text-[11px], below the guide's 12px floor */}
+            <p className="type-body-short-01 dash-text-secondary mt-0.5">
               {activityLoading
                 ? "Loading your workspace…"
                 : loading || pipeline.loading
@@ -584,10 +589,16 @@ export default function DashboardPage({
           <div className="flex items-center gap-3 flex-wrap">
             <RegulatorBadge compact />
             <ThemeSwitcher />
+            {/* Export is a secondary action — a dashboard is for acting on
+                today's work, not for producing a file. */}
             <button
               onClick={() => setIsExportModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white shadow-lg hover:-translate-y-0.5 transition-all"
-              style={{ background: "var(--color-accent)" }}
+              className="inline-flex items-center gap-2 px-3 rounded-xl type-heading-01 border transition-colors hover:bg-[var(--color-surface-alt)]"
+              style={{
+                height: "var(--control-height-md)",
+                borderColor: "var(--color-border)",
+                color: "var(--color-text-secondary)",
+              }}
             >
               <Share2 className="w-4 h-4" />
               Export
@@ -599,65 +610,82 @@ export default function DashboardPage({
       {/* ── Quick Actions ──────────────────────────────────────── */}
       <QuickActionsBar role={role} perms={perms} />
 
-      {/* ── KPI Row ────────────────────────────────────────────── */}
-      <motion.div
-        variants={stagger}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1600px] mx-auto items-stretch auto-rows-fr"
+      {/* ══ Tier 1 — Needs attention ══════════════════════════════
+          The four ranked KPI slots, with the matching items listed directly
+          beneath them. The count and the list were previously two separate
+          bands ~600px apart saying the same thing. */}
+      <DashboardSection
+        title="Needs attention"
+        subtitle="Where your compliance posture is slipping today"
+        className="max-w-[1600px] mx-auto"
       >
-        {activityLoading
-          ? Array.from({ length: 4 }).map((_, i) => (
-            <motion.div key={`sk-${i}`} variants={fadeUp} className="h-full">
-              <SkeletonMetric className="h-full" />
-            </motion.div>
-          ))
-          : kpiCards.length === 0
-          ? (
-            <motion.div variants={fadeUp} className="col-span-full">
-              <div className="dash-card border dash-border rounded-2xl p-8 text-center">
-                <p className="text-sm font-semibold dash-text mb-1">Your workspace is ready</p>
-                <p className="text-xs dash-text-secondary">Start using any module — compliance data will appear here automatically.</p>
-              </div>
-            </motion.div>
-          )
-          : kpiCards.map((c, idx) => (
-            <motion.div key={`${c.title}-${idx}`} variants={fadeUp} className="h-full">
-              <MetricCard
-                title={c.title}
-                value={c.value}
-                icon={c.icon}
-                subtext={c.subtext}
-                trendData={c.trendData}
-                trendValue={c.trendValue}
-                onClick={c.onClick}
-                variant={c.variant}
-                className="h-full"
-              />
-            </motion.div>
-          ))}
-      </motion.div>
+        <div className="space-y-4">
+          <motion.div
+            variants={stagger}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch auto-rows-fr"
+          >
+            {activityLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                <motion.div key={`sk-${i}`} variants={fadeUp} className="h-full">
+                  <SkeletonMetric className="h-full" />
+                </motion.div>
+              ))
+              : kpiCards.length === 0
+              ? (
+                <motion.div variants={fadeUp} className="col-span-full">
+                  <div className="dash-card border dash-border rounded-2xl p-8">
+                    <p className="type-heading-02 dash-text mb-1">Your workspace is ready</p>
+                    <p className="type-body-short-01 dash-text-secondary">
+                      Start using any module — compliance data will appear here automatically.
+                    </p>
+                  </div>
+                </motion.div>
+              )
+              : kpiCards.map((c, idx) => (
+                <motion.div key={`${c.title}-${idx}`} variants={fadeUp} className="h-full">
+                  <MetricCard
+                    title={c.title}
+                    value={c.value}
+                    icon={c.icon}
+                    subtext={c.subtext}
+                    trendData={c.trendData}
+                    trendValue={c.trendValue}
+                    onClick={c.onClick}
+                    variant={c.variant}
+                    className="h-full"
+                  />
+                </motion.div>
+              ))}
+          </motion.div>
 
-      {/* ── Active Workflows (cross-module summary) ───────────────── */}
-      {companyId && (
-        <div className="max-w-[1600px] mx-auto">
-          <ActiveWorkflowsWidget companyId={companyId} />
+          {companyId && hasAnyActivity && (
+            <NeedsAttentionWidget companyId={companyId} access={perms} />
+          )}
         </div>
+      </DashboardSection>
+
+      {/* ══ Tier 2 — Work in flight ═══════════════════════════════ */}
+      {companyId && hasAnyActivity && (
+        <DashboardSection
+          title="Work in flight"
+          subtitle="What is moving through the workspace right now"
+          className="max-w-[1600px] mx-auto"
+        >
+          <div className="space-y-4">
+            <ActiveWorkflowsWidget companyId={companyId} />
+            {/* Single activity feed. It used to render here at limit 8 and again
+                inside the widget grid at limit 5 — the same query twice. */}
+            <ActivityFeedWidget companyId={companyId} limit={8} />
+          </div>
+        </DashboardSection>
       )}
 
-      {/* ── Hero Row: Needs Attention + Activity Feed ──────────── */}
-      {/* Health score / compliance rates live in Compliance Report.  */}
-      {/* Dashboard shows operational: what to act on, what just happened. */}
-      {companyId && moduleActivity && Object.values(moduleActivity).some(Boolean) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-[1600px] mx-auto">
-          <NeedsAttentionWidget companyId={companyId} access={perms} />
-          <ActivityFeedWidget companyId={companyId} limit={8} />
-        </div>
-      )}
-
-      {/* ── Widget Sections (Drag & Drop) ──────────────────────── */}
-      <WidgetArea
-        role={role}
+      {/* ══ Tier 3 — Context ══════════════════════════════════════
+          Trends and distributions: for reading, not acting, so they sit
+          below the fold in a plain grid. */}
+      <ContextArea
         companyId={companyId}
         userId={userId}
         perms={perms}
@@ -666,6 +694,7 @@ export default function DashboardPage({
         isExecutive={isExecutive}
         isLegal={isLegal}
         isMarketing={isMarketing}
+        isQuality={isQuality}
         moduleActivity={moduleActivity}
         onNavigateToArchive={onNavigateToArchive}
       />
@@ -680,10 +709,13 @@ export default function DashboardPage({
   );
 }
 
-/* ─────────────────── Widget Area (sorted) ──────────────────── */
+/* ─────────────────── Tier 3 — Context ──────────────────────────
+   Was a drag-and-drop grid backed by useDashboardLayout and per-role
+   persisted order. That machinery made hierarchy impossible to design for —
+   the "first thing you see" cannot be composed if the order is user-shuffled
+   — so the layout is now fixed and the ordering code is gone. */
 
-function WidgetArea({
-  role,
+function ContextArea({
   companyId,
   userId,
   perms,
@@ -692,10 +724,10 @@ function WidgetArea({
   isExecutive,
   isLegal,
   isMarketing,
+  isQuality,
   moduleActivity,
   onNavigateToArchive,
 }: {
-  role: string;
   companyId?: string;
   userId?: string;
   perms: ReturnType<typeof getPermissions>;
@@ -704,100 +736,102 @@ function WidgetArea({
   isExecutive: boolean;
   isLegal: boolean;
   isMarketing: boolean;
+  isQuality: boolean;
   moduleActivity: ModuleActivity | null;
   onNavigateToArchive?: () => void;
 }) {
-  const defaultWidgets = useMemo((): WidgetConfig[] => {
-    const widgets: WidgetConfig[] = [];
-    if (!companyId) return widgets;
+  const panels = useMemo(() => {
+    const out: { id: string; span: number; node: React.ReactNode }[] = [];
+    if (!companyId) return out;
 
-    const hasContent = !!(moduleActivity?.content && (perms.canUpload || perms.canViewLegalReview));
-    const hasRisks   = !!(moduleActivity?.risks && perms.canViewGrcFrameworks);
-    const hasObligations = !!(moduleActivity?.obligations && perms.canViewGrcFrameworks);
-    const hasCapas   = !!(moduleActivity?.capas && perms.canViewGrcFrameworks);
-    const hasAnyActivity = !!(moduleActivity && Object.values(moduleActivity).some(Boolean));
+    const hasContent      = !!(moduleActivity?.content && (perms.canUpload || perms.canViewLegalReview));
+    const hasRisks        = !!(moduleActivity?.risks && perms.canViewRiskRegister);
+    const hasObligations  = !!(moduleActivity?.obligations && perms.canViewObligations);
+    const hasCapas        = !!(moduleActivity?.capas && perms.canViewCapaManagement);
 
-    // Content widgets — role determines which; moduleActivity determines whether they mount
     if (hasContent) {
       if (isExecutive) {
-        widgets.push(
-          { id: "exec-trends",       colSpan: 2, render: () => <ExecutiveTrendsWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
-          { id: "exec-breakdown",    colSpan: 1, render: () => <ExecBreakdownWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
-          { id: "exec-longest-wait", colSpan: 1, render: () => <LongestWaitingItemsWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
-          { id: "exec-sla",          colSpan: 2, render: () => <ExecutiveSlaWidget companyId={companyId} /> },
+        out.push(
+          { id: "exec-trends",       span: 2, node: <ExecutiveTrendsWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+          { id: "exec-breakdown",    span: 1, node: <ExecBreakdownWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+          { id: "exec-longest-wait", span: 1, node: <LongestWaitingItemsWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+          { id: "exec-sla",          span: 2, node: <ExecutiveSlaWidget companyId={companyId} /> },
         );
       }
       if (isLegal) {
-        widgets.push(
-          { id: "legal-queue", colSpan: 3, render: () => <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} /> },
-          { id: "legal-sla",   colSpan: 3, render: () => <LegalSlaWidget companyId={companyId} /> },
+        out.push(
+          { id: "legal-queue", span: 3, node: <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} /> },
+          { id: "legal-sla",   span: 3, node: <LegalSlaWidget companyId={companyId} /> },
         );
       }
       if (isMarketing && userId) {
-        widgets.push(
-          { id: "mkt-pipeline",  colSpan: 3, render: () => <MarketingPipelineWidget companyId={companyId} loading={pipeline.loading} errorMsg={pipeline.errorMsg} payload={pipeline.payload} onRefresh={pipeline.refresh} /> },
-          { id: "mkt-schedule",  colSpan: 1, render: () => <ScheduleWidget companyId={companyId} userId={userId} jurisdiction={jurisdictionFilter} /> },
-          { id: "mkt-stats",     colSpan: 1, render: () => <MyStatsWidget companyId={companyId} userId={userId} /> },
-          { id: "mkt-quiz",      colSpan: 3, render: () => <DailyQuizWidget /> },
+        out.push(
+          { id: "mkt-pipeline", span: 3, node: <MarketingPipelineWidget companyId={companyId} loading={pipeline.loading} errorMsg={pipeline.errorMsg} payload={pipeline.payload} onRefresh={pipeline.refresh} /> },
+          { id: "mkt-schedule", span: 1, node: <ScheduleWidget companyId={companyId} userId={userId} jurisdiction={jurisdictionFilter} /> },
+          { id: "mkt-stats",    span: 1, node: <MyStatsWidget companyId={companyId} userId={userId} /> },
+          { id: "mkt-quiz",     span: 3, node: <DailyQuizWidget /> },
         );
       }
-      // Module-access users (not a named role) with content review permission
-      if (!isExecutive && !isLegal && !isMarketing && perms.canViewLegalReview) {
-        widgets.push({ id: 'mod-legal-queue', colSpan: 3, render: () => <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} /> });
+      if (!isExecutive && !isLegal && !isMarketing && !isQuality && perms.canViewLegalReview) {
+        out.push({ id: "mod-legal-queue", span: 3, node: <LegalQueueWidget companyId={companyId} jurisdiction={jurisdictionFilter} limit={5} /> });
       }
     }
 
-    // Risk widgets — only when this workspace has risk data
+    // Quality / production managers live in batches, CAPAs and SOPs. They
+    // previously fell through every branch and got a content-marketing
+    // compliance matrix instead of anything from their own job.
+    if (isQuality && userId) {
+      out.push({ id: "quality-stats", span: 1, node: <MyStatsWidget companyId={companyId} userId={userId} /> });
+    }
+
     if (hasRisks) {
-      widgets.push(
-        { id: "risk-dist",   colSpan: 1, render: () => <RiskDistributionWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
-        { id: "risk-causes", colSpan: isExecutive ? 3 : 2, render: () => <TopRiskCausesWidget companyId={companyId} jurisdiction={jurisdictionFilter} userId={!isExecutive && !isLegal ? userId : undefined} /> },
+      out.push(
+        { id: "risk-dist",   span: 1, node: <RiskDistributionWidget companyId={companyId} jurisdiction={jurisdictionFilter} /> },
+        { id: "risk-causes", span: isExecutive ? 3 : 2, node: <TopRiskCausesWidget companyId={companyId} jurisdiction={jurisdictionFilter} userId={!isExecutive && !isLegal ? userId : undefined} /> },
       );
     }
 
-    // Upcoming deadlines — when obligations or CAPAs exist
+    // One deadlines panel. Marketing used to get a second identical copy.
     if (hasObligations || hasCapas) {
-      widgets.push({ id: "deadlines", colSpan: 1, render: () => <UpcomingDeadlinesWidget companyId={companyId} /> });
+      out.push({ id: "deadlines", span: 1, node: <UpcomingDeadlinesWidget companyId={companyId} /> });
     }
 
-    // Marketing: extra deadlines slot after pipeline
-    if (isMarketing && hasContent) {
-      widgets.push({ id: "mkt-deadlines", colSpan: 1, render: () => <UpcomingDeadlinesWidget companyId={companyId} /> });
+    // Content-shaped panels only for workspaces that actually review content —
+    // these used to mount for everyone, including pharma manufacturers who
+    // never touch marketing material.
+    if (hasContent) {
+      out.push(
+        { id: "jurisdiction-health", span: 1, node: <JurisdictionHealthWidget companyId={companyId} /> },
+        { id: "compliance-matrix",   span: 2, node: <ComplianceMatrixWidget onNavigateToArchive={onNavigateToArchive} /> },
+      );
     }
 
-    // Activity feed — when any module has been used
-    if (hasAnyActivity) {
-      widgets.push({ id: "activity", colSpan: 2, render: () => <ActivityFeedWidget companyId={companyId} limit={5} /> });
-    }
-
-    // Always present
-    widgets.push(
-      { id: "shared-jurisdiction-health", colSpan: 1, render: () => <JurisdictionHealthWidget companyId={companyId} /> },
-      { id: "shared-compliance-matrix",   colSpan: 2, render: () => <ComplianceMatrixWidget onNavigateToArchive={onNavigateToArchive} /> },
-    );
-
-    return widgets;
+    return out;
   }, [
-    companyId, userId, jurisdictionFilter, pipeline,
-    moduleActivity, isExecutive, isLegal, isMarketing, onNavigateToArchive,
-    perms.canUpload, perms.canViewLegalReview, perms.canViewGrcFrameworks,
+    companyId, userId, jurisdictionFilter, pipeline, moduleActivity,
+    isExecutive, isLegal, isMarketing, isQuality, onNavigateToArchive,
+    perms.canUpload, perms.canViewLegalReview, perms.canViewRiskRegister,
+    perms.canViewObligations, perms.canViewCapaManagement,
   ]);
 
-  const { orderedWidgets, moveWidget, resetLayout } = useDashboardLayout(role, defaultWidgets);
+  if (panels.length === 0) return null;
 
   return (
-    <div className="space-y-4 max-w-[1600px] mx-auto">
-      <div className="flex justify-end">
-        <button
-          onClick={resetLayout}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium dash-text-tertiary hover:dash-text-secondary transition-colors"
-          style={{ background: "var(--color-surface-alt)", border: "1px solid var(--color-border)" }}
-        >
-          <RotateCcw className="w-3 h-3" />
-          Reset Layout
-        </button>
+    <DashboardSection
+      title="Context"
+      subtitle="Trends and distributions across the workspace"
+      className="max-w-[1600px] mx-auto"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+        {panels.map((panel) => (
+          <div
+            key={panel.id}
+            className={panel.span === 3 ? "lg:col-span-3" : panel.span === 2 ? "lg:col-span-2" : ""}
+          >
+            {panel.node}
+          </div>
+        ))}
       </div>
-      <SortableWidgetGrid widgets={orderedWidgets} onMove={moveWidget} />
-    </div>
+    </DashboardSection>
   );
 }

@@ -39,11 +39,12 @@ export default function DashboardSection({
             {title && (
                 <div className="flex items-end justify-between gap-4 flex-wrap">
                     <div>
-                        <h3 className="text-sm font-semibold dash-text tracking-tight">
+                        {/* heading-02 / body-short-01 */}
+                        <h3 className="type-heading-02 dash-text">
                             {title}
                         </h3>
                         {subtitle && (
-                            <p className="text-xs dash-text-secondary mt-0.5">{subtitle}</p>
+                            <p className="type-body-short-01 dash-text-secondary mt-0.5">{subtitle}</p>
                         )}
                     </div>
                     {actions && <div className="flex items-center gap-2">{actions}</div>}
