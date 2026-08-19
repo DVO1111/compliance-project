@@ -6,7 +6,7 @@ import { supabase } from "../../lib/supabase";
 import { useJurisdictionStore } from "../../stores/jurisdictionStore";
 import ExecutiveTrendsWidget from "./widgets/ExecutiveTrendsWidget";
 import RiskDistributionWidget from "./widgets/RiskDistributionWidget";
-import JurisdictionSelector from "../Common/JurisdictionSelector";
+import RegulatorBadge from "../Common/RegulatorBadge";
 import ComplianceMatrixWidget from "./widgets/ComplianceMatrixWidget";
 import ExecBreakdownWidget from "./widgets/ExecBreakdownWidget";
 import ActivityFeedWidget from "./widgets/ActivityFeedWidget";
@@ -582,7 +582,7 @@ export default function DashboardPage({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <JurisdictionSelector compact />
+            <RegulatorBadge compact />
             <ThemeSwitcher />
             <button
               onClick={() => setIsExportModalOpen(true)}
@@ -598,11 +598,6 @@ export default function DashboardPage({
 
       {/* ── Quick Actions ──────────────────────────────────────── */}
       <QuickActionsBar role={role} perms={perms} />
-
-      {/* ── Full Jurisdiction Selector ─────────────────────────── */}
-      <div className="max-w-[1600px] mx-auto">
-        <JurisdictionSelector />
-      </div>
 
       {/* ── KPI Row ────────────────────────────────────────────── */}
       <motion.div

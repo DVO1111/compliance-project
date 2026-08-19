@@ -19,7 +19,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useJurisdictionStore } from '../../stores/jurisdictionStore';
 import Toast from '../Common/Toast';
 import ExtractionSpinner from './ExtractionSpinner';
-import JurisdictionSelector from '../Common/JurisdictionSelector';
+import RegulatorBadge from '../Common/RegulatorBadge';
 import ComparisonMatrix from '../Common/ComparisonMatrix';
 import type { Database } from '../../lib/database.types';
 import { notify } from '../../integrations/services/notificationService';
@@ -674,10 +674,10 @@ export default function UploadPage() {
             <span className="text-xs dash-text-tertiary ml-2">(max 10MB per file)</span>
           </p>
         </div>
-        <JurisdictionSelector compact />
+        <RegulatorBadge compact />
       </div>
 
-      <JurisdictionSelector />
+      <RegulatorBadge />
 
       {!companyId && (
         <div className="dash-card border border-behance-amber-200 rounded-lg p-4">

@@ -1,6 +1,13 @@
 import { useState, FormEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ShieldCheck, ArrowLeft, MailCheck } from 'lucide-react';
+import {
+  INDUSTRY_OPTIONS,
+  JURISDICTION_LABELS,
+  getRegulatorOptions,
+  toJurisdictionId,
+} from '../../lib/regulatoryProfile';
+import { useMemo } from 'react';
 
 interface SignupPageProps {
   onToggleLogin: () => void;
@@ -13,6 +20,19 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [organization, setOrganization] = useState('');
+  const [industryType, setIndustryType] = useState('');
+  const [jurisdiction, setJurisdiction] = useState('');
+
+  // Regulators depend on the industry — a pharmaceutical manufacturer picks
+  // between NAFDAC, FDA, EMA and AMA; a logistics operator sees Customs, CBP…
+  const regulatorOptions = useMemo(
+    () => (industryType ? getRegulatorOptions(industryType) : []),
+    [industryType]
+  );
+  const selectedRegulator = useMemo(
+    () => regulatorOptions.find(o => o.jurisdiction === toJurisdictionId(jurisdiction)) ?? null,
+    [regulatorOptions, jurisdiction]
+  );
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -28,7 +48,7 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
       // If a pending invite token exists, pass it to signUp so the
       // company creation step is skipped (the invite RPC handles it).
       const pendingInvite = localStorage.getItem('pending_invite_token') || undefined;
-      const { needsVerification } = await signUp(email, password, fullName, organization, pendingInvite);
+      const { needsVerification } = await signUp(email, password, fullName, organization, pendingInvite, industryType, jurisdiction);
       if (needsVerification) {
         // A code was emailed. Move to the verify step; the profile/company are
         // created once the code is confirmed.
@@ -150,6 +170,52 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
               placeholder="Acme Therapeutics"
               required
             />
+          </div>
+
+          <div>
+            <label htmlFor="industryType" className="block text-sm font-medium dash-text mb-1.5">
+              Industry
+            </label>
+            <select
+              id="industryType"
+              value={industryType}
+              onChange={(e) => { setIndustryType(e.target.value); setJurisdiction(''); }}
+              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:border-[var(--color-accent)] dash-text transition-colors"
+              required
+            >
+              <option value="" disabled>Select your industry</option>
+              {INDUSTRY_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="jurisdiction" className="block text-sm font-medium dash-text mb-1.5">
+              Regulatory body
+            </label>
+            <select
+              id="jurisdiction"
+              value={jurisdiction}
+              onChange={(e) => setJurisdiction(e.target.value)}
+              disabled={!industryType}
+              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:border-[var(--color-accent)] dash-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              required
+            >
+              <option value="" disabled>
+                {industryType ? 'Select your regulator' : 'Choose an industry first'}
+              </option>
+              {regulatorOptions.map(o => (
+                <option key={o.jurisdiction} value={o.jurisdiction}>
+                  {o.short} — {JURISDICTION_LABELS[o.jurisdiction]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs dash-text-tertiary">
+              {selectedRegulator
+                ? selectedRegulator.description
+                : 'This sets the rules your content and records are checked against. It cannot be changed later from inside the app.'}
+            </p>
           </div>
 
           <div>

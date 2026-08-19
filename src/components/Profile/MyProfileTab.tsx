@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import RegulatorBadge from '../Common/RegulatorBadge';
 import { supabase } from '../../lib/supabase';
 import {
     User, Mail, Building2, Briefcase, Globe, Clock, Languages, Phone,
@@ -174,15 +175,16 @@ export default function MyProfileTab() {
                     />
                 </FieldRow>
 
-                <FieldRow icon={Globe} label="Default Jurisdiction">
-                    <select
-                        value={form.default_jurisdiction}
-                        onChange={e => setForm(f => ({ ...f, default_jurisdiction: e.target.value }))}
-                        className="w-full px-3 py-2 border border-[var(--color-input-border)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent outline-none bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
-                    >
-                        <option value="">Select jurisdiction…</option>
-                        {JURISDICTIONS.map(j => <option key={j} value={j}>{j}</option>)}
-                    </select>
+                {/* Read-only: the regulator is set once at sign-up and scopes every
+                    scan, risk score and audit record already on file. Changing it
+                    here would silently re-scope that history. */}
+                <FieldRow icon={Globe} label="Regulatory Body">
+                    <div className="flex items-center gap-3">
+                        <RegulatorBadge />
+                        <span className="type-caption-01" style={{ color: 'var(--color-text-tertiary)' }}>
+                            Set at sign-up — contact your workspace owner to change it
+                        </span>
+                    </div>
                 </FieldRow>
 
                 <FieldRow icon={Clock} label="Timezone">

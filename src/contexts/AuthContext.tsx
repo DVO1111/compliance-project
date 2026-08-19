@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { useJurisdictionStore } from '../stores/jurisdictionStore';
+import { toJurisdictionId } from '../lib/regulatoryProfile';
 import type { Database } from '../lib/database.types';
 import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
@@ -27,7 +29,10 @@ interface AuthContextType {
     password: string,
     fullName: string,
     organization: string,
-    inviteToken?: string
+    inviteToken?: string,
+    /** Industry and regulator, chosen at sign-up and fixed thereafter. */
+    industryType?: string,
+    jurisdiction?: string
   ) => Promise<{ needsVerification: boolean }>;
   verifySignupCode: (email: string, token: string) => Promise<void>;
   resendSignupCode: (email: string) => Promise<void>;
@@ -165,12 +170,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Idempotent — subsequent calls return immediately once warmed.
     initFrameworkLibrary().catch(() => {});
 
+    // The workspace's regulatory jurisdiction was fixed at sign-up — publish it
+    // to the store the widgets and the compliance engine read, so nothing has
+    // to guess or offer a picker.
+    useJurisdictionStore.getState().hydrate(
+      toJurisdictionId((baseProfile as any).default_jurisdiction ?? (baseProfile as any).primary_markets?.[0])
+    );
+
     setProfile({ ...baseProfile, company_role, module_access, customPermissions });
     setLoading(false);
     initialLoadDone.current = true;
   };
 
-  const signUp = async (email: string, password: string, fullName: string, organization: string, inviteToken?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    organization: string,
+    inviteToken?: string,
+    industryType?: string,
+    jurisdiction?: string,
+  ) => {
     // Create the auth user. With "Confirm email" enabled in Supabase, this sends
     // a verification code and returns NO session — the user is not signed in yet.
     // The signup details are stashed in user_metadata so we can create the profile
@@ -183,6 +203,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName,
           organization,
           invite_token: inviteToken ?? null,
+          // Regulatory scope is chosen at sign-up and is a property of the
+          // workspace from then on — stashed here so it survives the email
+          // verification round trip.
+          industry_type: industryType ?? null,
+          default_jurisdiction: jurisdiction ?? null,
         },
       },
     });
@@ -240,7 +265,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.getItem('pending_invite_token') ??
       undefined;
 
-    await completeSignupProfile(verifiedUser.id, verifiedUser.email, fullName, organization, inviteToken || undefined);
+    await completeSignupProfile(
+      verifiedUser.id,
+      verifiedUser.email,
+      fullName,
+      organization,
+      inviteToken || undefined,
+      (meta.industry_type as string | null) ?? undefined,
+      (meta.default_jurisdiction as string | null) ?? undefined
+    );
   };
 
   // Creates the profile / company / membership rows for a freshly verified user.
@@ -249,8 +282,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userEmail: string,
     fullName: string,
     organization: string,
-    inviteToken?: string
+    inviteToken?: string,
+    industryType?: string,
+    jurisdiction?: string
   ) => {
+    // Regulatory scope, set once here. `primary_markets` is seeded with the
+    // same jurisdiction so the onboarding wizard and the profile screen agree
+    // rather than each holding their own idea of the workspace's market.
+    const regulatoryFields = {
+      ...(industryType ? { industry_type: industryType } : {}),
+      ...(jurisdiction ? { default_jurisdiction: jurisdiction, primary_markets: [jurisdiction] } : {}),
+    };
     try {
       if (inviteToken) {
         // ── Invite path: skip company creation ──
@@ -262,6 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName,
           organization: organization,
           onboarding_completed: false,
+          ...regulatoryFields,
         });
 
         if (profileError && (profileError as any).code !== '23505') throw profileError;
@@ -286,6 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           organization: organization,
           company_id: companyId,
           onboarding_completed: false,
+          ...regulatoryFields,
         });
 
         if (profileError) throw profileError;

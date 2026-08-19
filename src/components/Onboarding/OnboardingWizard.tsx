@@ -76,11 +76,14 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Industry, organisation and market are captured at sign-up. Seed the wizard
+  // from the profile so the user isn't asked the same questions twice — and so
+  // the industry-specific seeding below still has a value to work from.
   const [data, setData] = useState<OnboardingData>({
-    companyName: '',
+    companyName: (profile as any)?.organization ?? '',
     logoUrl: '',
-    industryType: '',
-    primaryMarkets: [],
+    industryType: (profile as any)?.industry_type ?? '',
+    primaryMarkets: ((profile as any)?.primary_markets as string[] | null) ?? [],
     productCategories: [],
     role: '',
     department: '',

@@ -105,3 +105,41 @@ export function getRegulatorInfo(
 ): RegulatorInfo {
   return REGULATORS[categorize(industryType)][jurisdiction];
 }
+
+/**
+ * Industries offered at sign-up. The labels are the values persisted to
+ * `profiles.industry_type`, so they must keep categorising correctly through
+ * `categorize()` — and "Logistics & Courier" in particular is matched exactly
+ * by MainLayout to switch the navigation into logistics mode.
+ */
+export const INDUSTRY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Pharmaceutical Manufacturing', label: 'Pharmaceutical manufacturing' },
+  { value: 'Medical Devices', label: 'Medical devices' },
+  { value: 'Food & Beverage', label: 'Food & beverage' },
+  { value: 'Cosmetics & Personal Care', label: 'Cosmetics & personal care' },
+  { value: 'Healthcare Provider', label: 'Healthcare provider' },
+  { value: 'Logistics & Courier', label: 'Logistics & courier' },
+  { value: 'Financial Services', label: 'Financial services' },
+  { value: 'Advertising & Marketing Agency', label: 'Advertising & marketing agency' },
+  { value: 'Other', label: 'Other' },
+];
+
+export interface RegulatorOption extends RegulatorInfo {
+  jurisdiction: JurisdictionId;
+}
+
+/**
+ * The regulators that apply to an industry, one per jurisdiction — the option
+ * list behind the sign-up picker. A pharmaceutical manufacturer sees NAFDAC,
+ * FDA, EMA and AMA; a logistics operator sees Customs, CBP and so on.
+ */
+export function getRegulatorOptions(industryType: string | null | undefined): RegulatorOption[] {
+  const family = REGULATORS[categorize(industryType)];
+  return JURISDICTION_IDS.map((jurisdiction) => ({ jurisdiction, ...family[jurisdiction] }));
+}
+
+/** Narrows an arbitrary stored string back to a known jurisdiction id. */
+export function toJurisdictionId(value: string | null | undefined): JurisdictionId | null {
+  const v = (value ?? '').trim().toLowerCase();
+  return (JURISDICTION_IDS as string[]).includes(v) ? (v as JurisdictionId) : null;
+}
