@@ -745,8 +745,8 @@ function ContextArea({
     if (!companyId) return out;
 
     const hasContent      = !!(moduleActivity?.content && (perms.canUpload || perms.canViewLegalReview));
-    const hasRisks        = !!(moduleActivity?.risks && perms.canViewRiskRegister);
-    const hasObligations  = !!(moduleActivity?.obligations && perms.canViewObligations);
+    const hasRisks        = !!moduleActivity?.risks;
+    const hasObligations  = !!moduleActivity?.obligations;
     const hasCapas        = !!(moduleActivity?.capas && perms.canViewCapaManagement);
 
     if (hasContent) {
@@ -810,8 +810,7 @@ function ContextArea({
   }, [
     companyId, userId, jurisdictionFilter, pipeline, moduleActivity,
     isExecutive, isLegal, isMarketing, isQuality, onNavigateToArchive,
-    perms.canUpload, perms.canViewLegalReview, perms.canViewRiskRegister,
-    perms.canViewObligations, perms.canViewCapaManagement,
+    perms.canUpload, perms.canViewLegalReview, perms.canViewCapaManagement,
   ]);
 
   if (panels.length === 0) return null;

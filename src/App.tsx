@@ -10,6 +10,11 @@ import OnboardingCompany from './pages/OnboardingCompany';
 import AcceptInvitePage from './components/company/AcceptInvitePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LandingPage from './pages/LandingPage';
+import PlatformPage from './pages/PlatformPage';
+import WhoItsForPage from './pages/WhoItsForPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+import type { MarketingPage } from './pages/landing/shell';
 import LoginPage from './components/Auth/LoginPage';
 import SignupPage from './components/Auth/SignupPage';
 import OnboardingWizard from './components/Onboarding/OnboardingWizard';
@@ -116,7 +121,7 @@ import OrgManagementPanel from './components/Enterprise/OrgManagementPanel';
 import EnterpriseDashboardPage from './components/Enterprise/EnterpriseDashboardPage';
 import PharmaIntegrationsPage from './components/PharmaIntegrations/PharmaIntegrationsPage';
 
-type UnauthView = 'landing' | 'login' | 'signup';
+type UnauthView = 'landing' | 'platform' | 'who' | 'about' | 'contact' | 'login' | 'signup';
 
 function isValidPageId(value: any): value is PageId {
   return (
@@ -399,10 +404,52 @@ function AppContent() {
       );
     }
 
+    // The marketing pages address each other by name; 'home' is the landing
+    // view, every other page id is its own view.
+    const goToMarketingPage = (page: MarketingPage) =>
+      setUnauthView(page === 'home' ? 'landing' : page);
+
+    if (unauthView === 'platform') {
+      return (
+        <PlatformPage
+          onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToPage={goToMarketingPage}
+        />
+      );
+    }
+
+    if (unauthView === 'who') {
+      return (
+        <WhoItsForPage
+          onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToPage={goToMarketingPage}
+        />
+      );
+    }
+
+    if (unauthView === 'about') {
+      return (
+        <AboutPage
+          onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToPage={goToMarketingPage}
+        />
+      );
+    }
+
+    if (unauthView === 'contact') {
+      return (
+        <ContactPage
+          onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToPage={goToMarketingPage}
+        />
+      );
+    }
+
     return (
       <LandingPage
         onNavigateToLogin={() => setUnauthView('login')}
         onNavigateToSignup={() => setUnauthView('signup')}
+        onNavigateToPage={goToMarketingPage}
       />
     );
   }

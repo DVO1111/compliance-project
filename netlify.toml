@@ -4,3 +4,45 @@
 
 [context.production]
   environment = { NODE_VERSION = "18" }
+
+# ── Canonical domain ──────────────────────────────
+# criateur.com is the site's home. Netlify still serves the generated
+# *.netlify.app address, and leaving it live splits SEO between two hosts and
+# lets people bookmark the wrong one — so it is redirected permanently.
+#
+# Set criateur.com as the primary domain in Netlify (Site configuration →
+# Domain management) so Netlify issues the certificate and handles the
+# apex/www pair; this rule covers the netlify.app address, which that setting
+# does not redirect on its own.
+[[redirects]]
+  from = "https://criateur-os.netlify.app/*"
+  to = "https://criateur.com/:splat"
+  status = 301
+  force = true
+
+# ── SPA fallback ──────────────────────────────────
+# Without this, any path other than / is a hard 404 from Netlify's static
+# file server — the bundle never loads, so the client-side router never gets
+# a chance to handle the URL. This matters more now than it did on a bare
+# preview URL: people will link to and refresh real paths on criateur.com.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# ── Security headers ──────────────────────────────
+# The Content-Security-Policy stays in index.html, where it already lives, so
+# there is one copy of it rather than two that can drift apart.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+# Vite writes content-hashed filenames into /assets, so those are immutable.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
