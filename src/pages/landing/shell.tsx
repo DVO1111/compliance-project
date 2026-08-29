@@ -14,7 +14,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Mail, MapPin, Linkedin, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 /** The marketing pages, matching the copy deck's site map exactly. */
@@ -77,58 +77,39 @@ export interface NavLink {
   active?: boolean;
 }
 
-/* ── Brand mark ───────────────────────────────────
-   NOTE: the design exports the logo as a PNG from Figma's asset host, and
-   this environment's egress proxy blocks that host — so the mark could not
-   be downloaded. This is a stand-in built to the same geometry (radiating
-   strokes, De York green) so the page is not shipped logo-less. Replace it
-   with the real export: drop the file in and swap this component's body. */
-function CriateurMark({ className = '' }: { className?: string }) {
-  const rays = Array.from({ length: 12 }, (_, i) => i * 30);
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true" focusable="false">
-      {rays.map((deg, i) => (
-        <rect
-          key={deg}
-          x="15.1"
-          y={i % 2 === 0 ? 1.5 : 3.5}
-          width="1.8"
-          height={i % 2 === 0 ? 6 : 4}
-          rx="0.9"
-          fill="var(--lp-accent)"
-          opacity={i % 3 === 0 ? 1 : 0.65}
-          transform={`rotate(${deg} 16 16)`}
-        />
-      ))}
-      <circle cx="16" cy="16" r="4.4" fill="var(--lp-accent-strong)" />
-    </svg>
-  );
-}
+/* ── Brand ────────────────────────────────────────
+   The supplied artwork, two cuts: the on-dark lockup for the site itself,
+   and the light one for the paper surfaces (the batch record in the hero),
+   where the navy wordmark is legible. Raster, as supplied — swap both for
+   SVG when vector versions exist and nothing else needs to change. */
+export const LOGO_ON_DARK = '/criateur-logo-ondark.png';
+export const LOGO_LIGHT = '/criateur-logo-light.png';
 
-export function BrandLockup({ onClick }: { onClick?: () => void }) {
-  const inner = (
-    <>
-      <CriateurMark className="w-8 h-8 shrink-0" />
-      <span
-        className="text-[1.375rem] font-semibold tracking-[-0.02em]"
-        style={{ fontFamily: 'var(--lp-font-display)', color: 'var(--lp-t1)' }}
-      >
-        Criateur
-      </span>
-    </>
+export function BrandLockup({
+  onClick, height = 40,
+}: {
+  onClick?: () => void;
+  height?: number;
+}) {
+  const img = (
+    <img
+      src={LOGO_ON_DARK}
+      alt="Criateur"
+      style={{ height, width: 'auto', display: 'block' }}
+    />
   );
-  if (!onClick) return <span className="flex items-center gap-2">{inner}</span>;
+  if (!onClick) return img;
   return (
-    <button onClick={onClick} className="flex items-center gap-2" aria-label="Criateur home">
-      {inner}
+    <button onClick={onClick} aria-label="Criateur home" style={{ display: 'block', flexShrink: 0 }}>
+      {img}
     </button>
   );
 }
 
 /* ── Navigation ───────────────────────────────
-   The design floats the links in their own bordered capsule, centred, with
-   the mark and the CTA on the outside — so the nav reads as one control
-   rather than a rule across the top. */
+   The design floats the links in their own bordered capsule between the
+   mark and the CTA, so the nav reads as one control rather than a rule
+   across the top. */
 export function MarketingNav({
   links, onHome, onLogin, onCta, ctaLabel,
 }: {
@@ -144,47 +125,59 @@ export function MarketingNav({
   return (
     <nav
       className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl"
-      style={{ background: 'rgba(8, 19, 26, 0.82)', borderBottom: '1px solid var(--lp-line)' }}
+      style={{ background: 'rgba(8, 19, 26, 0.86)', borderBottom: '1px solid var(--lp-line-soft)' }}
     >
-      <div className="lp-container lp-section flex items-center justify-between h-[90px] gap-4">
-        <BrandLockup onClick={close(onHome)} />
+      <div
+        className="flex flex-wrap items-center"
+        style={{ maxWidth: 1240, margin: '0 auto', padding: '14px clamp(20px,4vw,40px)', gap: '16px 24px' }}
+      >
+        <BrandLockup onClick={close(onHome)} height={36} />
 
-        <div
-          className="hidden md:flex items-center gap-1 px-2 py-1 rounded-xl"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--lp-line)' }}
+        <span
+          className="hidden md:flex flex-wrap items-center"
+          style={{
+            margin: '0 auto', gap: 4, padding: 5, borderRadius: 10,
+            border: '1px solid var(--lp-line)', background: 'rgba(255,255,255,0.03)',
+          }}
         >
           {links.map((l) => (
             <button
               key={l.label}
               onClick={close(l.onClick)}
-              className="px-4 py-2 rounded-lg text-[0.9375rem] transition"
+              className="whitespace-nowrap shrink-0 transition"
               style={{
-                color: l.active ? 'var(--lp-t1)' : 'var(--lp-t2)',
-                background: l.active ? 'rgba(255,255,255,0.05)' : 'transparent',
+                fontSize: 14,
+                padding: '8px 16px',
+                borderRadius: 8,
+                color: l.active ? 'var(--lp-paper)' : 'rgba(207,222,255,0.86)',
+                background: l.active ? 'rgba(255,255,255,0.06)' : 'transparent',
               }}
               aria-current={l.active ? 'page' : undefined}
             >
               {l.label}
             </button>
           ))}
-        </div>
+        </span>
 
-        <div className="hidden md:flex items-center gap-4">
-          <button
-            onClick={onLogin}
-            className="text-[0.9375rem] transition hover:opacity-80"
-            style={{ color: 'var(--lp-t2)' }}
-          >
+        <span className="hidden md:flex items-center gap-4 shrink-0">
+          <button onClick={onLogin} style={{ fontSize: 14, color: 'rgba(207,222,255,0.86)' }} className="transition hover:opacity-80">
             Sign In
           </button>
-          <button onClick={close(onCta)} className="lp-btn lp-btn--primary !py-2.5 !px-5 !text-[0.875rem]">
+          <button
+            onClick={close(onCta)}
+            className="whitespace-nowrap shrink-0 inline-flex items-center transition"
+            style={{
+              background: 'var(--lp-green)', color: 'var(--lp-paper)',
+              padding: '10px 20px', fontSize: 14, fontWeight: 600, borderRadius: 8,
+            }}
+          >
             {ctaLabel}
           </button>
-        </div>
+        </span>
 
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden"
+          className="md:hidden ml-auto"
           style={{ color: 'var(--lp-t2)' }}
           aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
         >
@@ -202,13 +195,13 @@ export function MarketingNav({
               key={l.label}
               onClick={close(l.onClick)}
               className="block w-full text-left text-[0.9375rem]"
-              style={{ color: l.active ? 'var(--lp-t1)' : 'var(--lp-t2)' }}
+              style={{ color: l.active ? 'var(--lp-paper)' : 'rgba(207,222,255,0.86)' }}
             >
               {l.label}
             </button>
           ))}
           <hr style={{ borderColor: 'var(--lp-line)' }} />
-          <button onClick={close(onLogin)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'var(--lp-t2)' }}>Sign In</button>
+          <button onClick={close(onLogin)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign In</button>
           <button onClick={close(onCta)} className="lp-btn lp-btn--primary lp-btn--block">{ctaLabel}</button>
         </div>
       )}
@@ -218,99 +211,80 @@ export function MarketingNav({
 
 /* ── Footer ───────────────────────────────────── */
 export function MarketingFooter({
-  onNavigate, onCta, ctaLabel,
+  onNavigate, onCta, ctaLabel: _ctaLabel,
 }: {
   onNavigate: (page: MarketingPage) => void;
   onCta: () => void;
-  ctaLabel: string;
+  /** Accepted for call-site compatibility; the design's footer has no CTA. */
+  ctaLabel?: string;
 }) {
-  /* The design's Product column names capabilities rather than pages. They
-     all live on Platform & Features, so that is where they point — better
-     than four dead links or four spans that look clickable. */
-  const productLinks = ['CoA Generator', 'Audit trail', 'Tenant isolation', 'Built for NAFDAC'];
+  const col = { fontFamily: 'var(--lp-font-mono)', fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: 'rgba(207,222,255,0.5)', marginBottom: 20 };
+  const link = { color: 'rgba(207,222,255,0.86)', fontSize: 14.5 };
 
   return (
-    <footer style={{ borderTop: '1px solid var(--lp-line)' }}>
-      <div className="lp-container lp-section py-16">
-        <div className="grid md:grid-cols-4 gap-10 lg:gap-16">
-          <div className="md:col-span-1">
-            <div className="mb-5"><BrandLockup /></div>
-            <p className="lp-small" style={{ maxWidth: '20rem' }}>
-              Criateur is the compliance system for regulated manufacturers &mdash;
-              certificates, batch records and the trail that proves them.
-            </p>
-            <div className="flex items-center gap-2 mt-7">
-              <a
-                href="https://www.linkedin.com/company/criateur"
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Criateur on LinkedIn"
-                className="w-9 h-9 rounded-lg flex items-center justify-center transition"
-                style={{ border: '1px solid var(--lp-line-strong)', color: 'var(--lp-accent)' }}
-              >
-                <Linkedin className="w-4 h-4" />
-              </a>
-              <a
-                href="mailto:hello@criateur.com"
-                aria-label="Email Criateur"
-                className="w-9 h-9 rounded-lg flex items-center justify-center transition"
-                style={{ border: '1px solid var(--lp-line-strong)', color: 'var(--lp-accent)' }}
-              >
-                <Mail className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-
-          <div>
-            <p className="lp-mono-up mb-5" style={{ color: 'var(--lp-t4)' }}>Product</p>
-            <ul className="space-y-3 text-[0.9375rem]" style={{ color: 'var(--lp-t2)' }}>
-              {productLinks.map((label) => (
-                <li key={label}>
-                  <button onClick={() => onNavigate('platform')} className="transition hover:text-white">{label}</button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="lp-mono-up mb-5" style={{ color: 'var(--lp-t4)' }}>Company</p>
-            <ul className="space-y-3 text-[0.9375rem]" style={{ color: 'var(--lp-t2)' }}>
-              <li><button onClick={onCta} className="transition hover:text-white">{ctaLabel}</button></li>
-              <li><button onClick={() => onNavigate('who')} className="transition hover:text-white">Who it&rsquo;s for</button></li>
-              <li><button onClick={() => onNavigate('about')} className="transition hover:text-white">About</button></li>
-              <li><button onClick={() => onNavigate('contact')} className="transition hover:text-white">Contact</button></li>
-            </ul>
-          </div>
-
-          <div>
-            <p className="lp-mono-up mb-5" style={{ color: 'var(--lp-t4)' }}>Contact</p>
-            <div className="space-y-4">
-              <a href="mailto:hello@criateur.com" className="flex items-start gap-2.5 text-[0.9375rem] transition hover:text-white" style={{ color: 'var(--lp-t2)' }}>
-                <Mail className="w-4 h-4 mt-1 shrink-0" style={{ color: 'var(--lp-accent)' }} />
-                hello@criateur.com
-              </a>
-              <p className="flex items-start gap-2.5 text-[0.9375rem]" style={{ color: 'var(--lp-t2)' }}>
-                <MapPin className="w-4 h-4 mt-1 shrink-0" style={{ color: 'var(--lp-accent)' }} />
-                Lagos, Nigeria
-              </p>
-            </div>
-            {/* The design carries "TODO: phone, office address" and "TODO:
-                docs, legal" as visible placeholder text. Those are notes to
-                the designer, not copy, so they are not rendered. */}
-          </div>
+    <footer style={{ background: 'var(--lp-bg)', color: 'rgba(207,222,255,0.86)' }}>
+      <div
+        className="flex flex-wrap items-start"
+        style={{ maxWidth: 1240, margin: '0 auto', padding: '88px clamp(20px,4vw,40px) 0', gap: '52px 40px' }}
+      >
+        <div style={{ flex: '0 1 330px', minWidth: 260 }}>
+          <button onClick={() => onNavigate('home')} aria-label="Criateur home" style={{ display: 'block' }}>
+            <img src={LOGO_ON_DARK} alt="Criateur" style={{ height: 80, width: 'auto', display: 'block', marginBottom: 24 }} />
+          </button>
+          <p style={{ fontSize: 15.5, lineHeight: 1.6, color: 'rgba(207,222,255,0.7)', margin: '0 0 8px', maxWidth: '32ch' }}>
+            The operating system for regulated manufacturing.
+          </p>
+          <p style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(207,222,255,0.5)', margin: 0 }}>
+            Nigeria.
+          </p>
         </div>
 
         <div
-          className="mt-14 pt-7 flex flex-col md:flex-row items-center justify-between gap-4"
-          style={{ borderTop: '1px solid var(--lp-line)' }}
+          className="grid"
+          style={{ flex: '1 1 400px', minWidth: 0, gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 28, alignItems: 'start' }}
         >
-          <p className="lp-mono-up" style={{ color: 'var(--lp-t4)' }}>
-            &copy; Criateur {new Date().getFullYear()}. All rights reserved.
-          </p>
-          <div className="flex items-center gap-7">
-            <span className="lp-mono-up" style={{ color: 'var(--lp-t4)' }}>Privacy Policy</span>
-            <span className="lp-mono-up" style={{ color: 'var(--lp-t4)' }}>Terms &amp; Conditions</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={col}>Product</div>
+            <div className="flex flex-col gap-[13px]">
+              <button onClick={() => onNavigate('platform')} style={link} className="text-left hover:text-white transition">Platform</button>
+              <button onClick={() => onNavigate('who')} style={link} className="text-left hover:text-white transition">Who It&rsquo;s For</button>
+            </div>
           </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={col}>Company</div>
+            <div className="flex flex-col gap-[13px]">
+              <button onClick={() => onNavigate('about')} style={link} className="text-left hover:text-white transition">About</button>
+              <button onClick={() => onNavigate('contact')} style={link} className="text-left hover:text-white transition">Contact</button>
+            </div>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={col}>Legal</div>
+            {/* No pages behind these yet, so they are text rather than links
+                that go nowhere. */}
+            <div className="flex flex-col gap-[13px]">
+              <span style={{ ...link, color: 'rgba(207,222,255,0.5)' }}>Privacy Policy</span>
+              <span style={{ ...link, color: 'rgba(207,222,255,0.5)' }}>Terms of Use</span>
+            </div>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={col}>Contact</div>
+            <div className="flex flex-col gap-[13px]">
+              <a href="mailto:hello@criateur.com" style={link} className="hover:text-white transition">hello@criateur.com</a>
+              <button onClick={onCta} style={link} className="text-left hover:text-white transition">Book a demo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1240, margin: '0 auto', padding: '0 clamp(20px,4vw,40px)' }}>
+        <div
+          style={{
+            borderTop: '1px solid rgba(207,222,255,0.14)', marginTop: 60, padding: '24px 0 32px',
+            fontFamily: 'var(--lp-font-mono)', fontSize: 11, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: 'rgba(207,222,255,0.45)',
+          }}
+        >
+          &copy; {new Date().getFullYear()} Criateur. Nigeria.
         </div>
       </div>
     </footer>
@@ -331,7 +305,7 @@ export function MarketingStyles() {
         --lp-bg-deep: #060F15;         /* one step down, for banded sections */
         --lp-surface: rgba(255, 255, 255, 0.03);
         --lp-surface-hi: rgba(255, 255, 255, 0.06);
-        --lp-line: rgba(207, 222, 255, 0.10);
+        --lp-line: rgba(207, 222, 255, 0.14);
         --lp-line-strong: rgba(207, 222, 255, 0.16);
 
         /* ── Accent ───────────────────────────────
@@ -362,8 +336,35 @@ export function MarketingStyles() {
            family to the ground instead of laying neutral haze over it. */
         --lp-t1: #FBF9F5;
         --lp-t2: rgba(207, 222, 255, 0.78);
-        --lp-t3: rgba(207, 222, 255, 0.62);
+        --lp-t3: rgba(207, 222, 255, 0.66);
         --lp-t4: rgba(207, 222, 255, 0.42);
+
+        /* ── Design-file tokens ───────────────────
+           Names and values taken verbatim from the landing-page design
+           source, so a value can be traced back to it rather than guessed
+           at. The --lp-accent/--lp-t* names above are kept because the
+           other four marketing pages already build on them. */
+        --lp-green: #478D4B;
+        --lp-green-deep: #1E5620;
+        --lp-green-glow: #7EC48C;
+        --lp-blue: #183470;
+        --lp-blue-tint: #CFDEFF;
+        --lp-amber-tint: #FBECCC;
+        --lp-verified: #12A05A;
+        --lp-attention: #F08128;
+        --lp-hold: #C62F1E;
+        --lp-hold-lite: #FF8C7A;
+        --lp-periwinkle: #9DB6EE;
+        --lp-ink: #26262F;
+        --lp-stone: #E6E2DB;
+        --lp-slate: #75747F;
+        /* Section grounds. The page alternates between a green-cast and a
+           blue-cast band, each fading in and out of the base at the seams. */
+        --lp-sec-green: #0B1D1B;
+        --lp-sec-blue: #0A1727;
+        --lp-seam: #0B1A21;
+        --lp-line-soft: rgba(207, 222, 255, 0.09);
+        --lp-dim: rgba(207, 222, 255, 0.66);
 
         /* ── Type families ────────────────────────
            Three, per the design. Loaded once in index.css; self-hosted so
@@ -691,6 +692,24 @@ export function MarketingStyles() {
       /* ── Capability bullet ─────────────────── */
       .lp-bullet { display: flex; gap: 10px; align-items: flex-start; }
       .lp-bullet-dot { flex-shrink: 0; margin-top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--lp-accent); }
+
+      /* ── Motion ───────────────────────────────
+         The hero's batch record plays its assembly once: the rules draw,
+         the results drop in, and the two live chips settle from their
+         in-progress state to their final one. It is the product's own
+         behaviour, not decoration, which is why it runs once and stops. */
+      @keyframes recIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+      @keyframes ruleDraw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+      @keyframes chipMidOut { 0%, 58% { opacity: 1; } 72%, 100% { opacity: 0; } }
+      @keyframes chipFinalIn { 0%, 62% { opacity: 0; } 78%, 100% { opacity: 1; } }
+      @keyframes stageTick { 0%, 58% { opacity: 1; } 66%, 100% { opacity: 0; } }
+      @keyframes stageDone { 0%, 62% { opacity: 0; } 72%, 100% { opacity: 1; } }
+      /* Under reduced motion the record shows its finished state immediately
+         rather than animating to it. */
+      @media (prefers-reduced-motion: reduce) {
+        .lp-root [data-mid] { opacity: 0 !important; }
+        .lp-root [data-final] { opacity: 1 !important; }
+      }
 
       /* ── Motion ─────────────────────────────── */
       @keyframes orbFloat {
