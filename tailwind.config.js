@@ -71,6 +71,11 @@ export default {
         // previous value named Inter, but no font was ever loaded — no link
         // tag, no @font-face — so the whole app fell back to the system sans.
         sans: ['Mulish Variable', 'Mulish', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        // Marketing-site families. The app keeps Mulish; these are used by
+        // the landing pages via the --lp-font-* tokens.
+        display: ['Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Georgia', 'serif'],
+        body: ['Sora Variable', 'Sora', 'system-ui', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       // Type scale from the Figma style guide. Pairs each size with its
       // designed line height, so `text-heading-04` sets both.

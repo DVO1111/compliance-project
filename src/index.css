@@ -1,6 +1,15 @@
-/* Mulish — the typeface specified by the Figma style guide. Self-hosted, so
-   it is served same-origin and satisfies the app's `font-src 'self'` CSP. */
+/* Mulish — the typeface specified by the Figma style guide for the app.
+   Self-hosted, so it is served same-origin and satisfies `font-src 'self'`. */
 @import '@fontsource-variable/mulish';
+
+/* The marketing site runs on its own three-family stack, per the landing-page
+   design: Bricolage Grotesque for headings, Sora for body, IBM Plex Mono for
+   labels and machine data. Self-hosted for the same CSP reason — a Google
+   Fonts <link> would be blocked outright. */
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/sora';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
 
 /* Design tokens transcribed from Figma — see src/styles/tokens.css */
 @import './styles/tokens.css';
@@ -355,14 +364,17 @@ select option {
   color: var(--color-text-primary);
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
-textarea {
+/* The marketing pages carry their own dark palette, so their fields opt out
+   of this !important rule — it was otherwise repainting them white.
+   `.lp-input` is the icon-padded email field, `.lp-field` the plain ones. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not(.lp-input):not(.lp-field),
+textarea:not(.lp-field) {
   background-color: var(--color-surface) !important;
   color: var(--color-text-primary) !important;
 }
 
-input::placeholder,
-textarea::placeholder {
+input:not(.lp-input):not(.lp-field)::placeholder,
+textarea:not(.lp-field)::placeholder {
   color: var(--color-text-tertiary) !important;
   opacity: 1;
 }
