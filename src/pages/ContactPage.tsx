@@ -34,6 +34,7 @@ const REQUIRED: { name: FieldName; label: string; type?: string; autoComplete?: 
 
 interface ContactPageProps {
   onNavigateToLogin: () => void;
+  onNavigateToSignup: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
 
@@ -48,7 +49,7 @@ interface ContactPageProps {
  * shown only after the insert actually succeeds, so nobody is told they are
  * on the list when the row never landed.
  */
-export default function ContactPage({ onNavigateToLogin, onNavigateToPage }: ContactPageProps) {
+export default function ContactPage({ onNavigateToLogin, onNavigateToSignup, onNavigateToPage }: ContactPageProps) {
   useScrollToTopOnMount();
 
   const [values, setValues] = useState<Record<FieldName | 'notes', string>>({
@@ -117,6 +118,7 @@ export default function ContactPage({ onNavigateToLogin, onNavigateToPage }: Con
       <MarketingNav
         onHome={() => onNavigateToPage('home')}
         onLogin={onNavigateToLogin}
+        onSignup={onNavigateToSignup}
         onCta={() => onNavigateToPage('contact')}
         ctaLabel="Join the Waitlist"
         links={[

@@ -413,6 +413,7 @@ function AppContent() {
       return (
         <PlatformPage
           onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToSignup={() => setUnauthView('signup')}
           onNavigateToPage={goToMarketingPage}
         />
       );
@@ -422,6 +423,7 @@ function AppContent() {
       return (
         <WhoItsForPage
           onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToSignup={() => setUnauthView('signup')}
           onNavigateToPage={goToMarketingPage}
         />
       );
@@ -431,6 +433,7 @@ function AppContent() {
       return (
         <AboutPage
           onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToSignup={() => setUnauthView('signup')}
           onNavigateToPage={goToMarketingPage}
         />
       );
@@ -440,6 +443,7 @@ function AppContent() {
       return (
         <ContactPage
           onNavigateToLogin={() => setUnauthView('login')}
+          onNavigateToSignup={() => setUnauthView('signup')}
           onNavigateToPage={goToMarketingPage}
         />
       );
