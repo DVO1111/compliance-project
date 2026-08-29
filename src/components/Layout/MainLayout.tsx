@@ -61,6 +61,13 @@ import {
   FileStack,
   Truck,
   ScrollText,
+  FileCheck2,
+  Gauge,
+  Network,
+  History,
+  Trash2,
+  Lock,
+  ChevronRight,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 
@@ -167,7 +174,9 @@ export type PageId =
   // Compliance Alerting Engine
   | 'compliance-alerting'
   // AI Audit Preparation
-  | 'audit-prep';
+  | 'audit-prep'
+  // Certificate of Analysis register
+  | 'coa';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -181,6 +190,44 @@ type NavigateToEventDetail = {
 };
 
 const CORRECTION_OPEN_KEY = 'cc_open_correction_id';
+const COLLAPSED_NAV_KEY = 'cc_collapsed_nav_categories';
+
+/**
+ * Sidebar group order — the compliance cycle: see what needs me, do the work,
+ * prove it happened, then everything that supports it.
+ *
+ * Declared explicitly rather than inferred from array position, because a
+ * couple of items change category by industry (training records) and would
+ * otherwise pull their group to the top of the sidebar.
+ */
+const CATEGORY_ORDER = [
+  'Home',
+  'Quality Operations',
+  'Logistics Operations',
+  'Controls & Frameworks',
+  'Risk',
+  'Regulatory',
+  'Policies',
+  'Audit & Evidence',
+  'Content Compliance',
+  'AI Governance',
+  'Administration',
+  'External Partners',
+];
+
+/** Groups a user is unlikely to touch daily start collapsed. */
+const DEFAULT_COLLAPSED = ['Content Compliance', 'AI Governance', 'Administration'];
+
+function loadCollapsedCategories(): string[] {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_NAV_KEY);
+    if (!raw) return DEFAULT_COLLAPSED;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : DEFAULT_COLLAPSED;
+  } catch {
+    return DEFAULT_COLLAPSED;
+  }
+}
 
 export default function MainLayout({
   children,
@@ -191,6 +238,7 @@ export default function MainLayout({
   const { plan, isTrialing, daysRemaining } = usePlan();
   const [toastParams, setToastParams] = useState<{ message: string; type?: 'success' | 'warning' } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>(loadCollapsedCategories);
 
   const industryType = (profile as any)?.industry_type as string | null | undefined;
   const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
@@ -245,97 +293,118 @@ export default function MainLayout({
     category: string;
     hidden?: boolean;
   }[] = [
-      // ── 1. Overview ──────────────────────────────────────────────────
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'Overview' },
-      { id: 'compliance-reporting', label: 'Compliance Report', icon: Activity, category: 'Overview', hidden: !perms.canViewComplianceReporting },
-      { id: 'team-chat', label: 'Team Chat', icon: MessageSquare, category: 'Overview' },
-      { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, category: 'Overview' },
+      // ── 1. Home — "what needs me today" ──────────────────────────────
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'Home' },
+      { id: 'command-center', label: 'Command Center', icon: Gauge, category: 'Home', hidden: !perms.canViewGrcDashboard },
+      { id: 'compliance-reporting', label: 'Compliance Report', icon: Activity, category: 'Home', hidden: !perms.canViewComplianceReporting },
+      { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, category: 'Home' },
+      { id: 'enterprise-dashboard', label: 'Group Overview', icon: Network, category: 'Home', hidden: !profile?.organization_id || !perms.canViewComplianceReporting },
+      { id: 'team-chat', label: 'Team Chat', icon: MessageSquare, category: 'Home' },
 
-      // ── 2. Manufacturing & Quality ───────────────────────────────────
-      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Manufacturing & Quality', hidden: isLogisticsProfile || !usesManufacturingQuality },
-      { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Manufacturing & Quality', hidden: !perms.canViewCapaManagement || !usesManufacturingQuality },
-      { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Manufacturing & Quality', hidden: !usesManufacturingQuality },
-      { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Manufacturing & Quality', hidden: !usesManufacturingQuality },
-      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Manufacturing & Quality', hidden: isLogisticsProfile || !usesManufacturingQuality },
-      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Manufacturing & Quality', hidden: isLogisticsProfile || !usesManufacturingQuality },
-      { id: 'contraband-rejection', label: 'Contraband Rejection', icon: PackageX,    category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
-      { id: 'shipment-event-log',  label: 'Shipment Event Log',  icon: Truck,       category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
-      { id: 'cn-declarations',     label: 'CN22/CN23 Declarations', icon: ScrollText, category: 'Manufacturing & Quality', hidden: !isLogisticsProfile },
+      // ── 2. Quality Operations ────────────────────────────────────────
+      { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'coa', label: 'Certificates of Analysis', icon: FileCheck2, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Quality Operations', hidden: !perms.canViewCapaManagement || !usesManufacturingQuality },
+      { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Quality Operations', hidden: !usesManufacturingQuality },
+      { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
+      { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      // Training records are inspection evidence for a manufacturer — an
+      // inspector asks for them. They stay in Administration for sectors that
+      // don't run a quality system.
+      { id: 'training-log', label: 'Training Records', icon: GraduationCap, category: usesManufacturingQuality ? 'Quality Operations' : 'Administration', hidden: !perms.canViewTraining },
+      { id: 'training-simulation', label: 'Training Sim', icon: GraduationCap, category: usesManufacturingQuality ? 'Quality Operations' : 'Administration', hidden: !perms.canViewTrainingSimulation },
 
-      // ── 3. Governance & Policy ───────────────────────────────────────
-      { id: 'policies', label: 'Policies', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewPolicies },
-      { id: 'my-policies', label: 'My Policies', icon: ShieldCheck, category: 'Governance & Policy', hidden: !perms.canViewMyPolicies },
-      { id: 'grc-dashboard', label: 'GRC Posture', icon: BarChart3, category: 'Governance & Policy', hidden: !perms.canViewGrcDashboard },
-      { id: 'grc-frameworks', label: 'GRC Frameworks', icon: ShieldCheck, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
-      { id: 'grc-controls', label: 'GRC Controls', icon: ListChecks, category: 'Governance & Policy', hidden: !perms.canViewGrcControls },
-      { id: 'grc-automation', label: 'GRC Automation', icon: Zap, category: 'Governance & Policy', hidden: !perms.canViewGrcAutomation },
-      { id: 'obligations', label: 'Obligations', icon: Scale, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
-      { id: 'risk-register', label: 'Risk Register', icon: ShieldAlert, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
-      { id: 'compliance-alerting', label: 'Compliance Alerts', icon: Bell, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
-      { id: 'audit-prep', label: 'AI Audit Prep', icon: Sparkles, category: 'Governance & Policy', hidden: !perms.canViewGrcFrameworks },
+      // ── 3. Logistics Operations ──────────────────────────────────────
+      { id: 'shipment-event-log',  label: 'Shipment Event Log',  icon: Truck,       category: 'Logistics Operations', hidden: !isLogisticsProfile },
+      { id: 'contraband-rejection', label: 'Contraband Rejection', icon: PackageX,  category: 'Logistics Operations', hidden: !isLogisticsProfile },
+      { id: 'cn-declarations',     label: 'CN22/CN23 Declarations', icon: ScrollText, category: 'Logistics Operations', hidden: !isLogisticsProfile },
 
-      // ── 4. Content & Marketing Compliance ────────────────────────────
-      { id: 'upload', label: 'Upload Content', icon: Upload, category: 'Content & Marketing Compliance', hidden: !perms.canUpload },
-      { id: 'legal-review', label: 'Legal Review', icon: Scale, category: 'Content & Marketing Compliance', hidden: !perms.canViewLegalReview },
-      { id: 'content-blocks', label: 'Content Blocks', icon: Blocks, category: 'Content & Marketing Compliance', hidden: !perms.canViewContentBlocks },
-      { id: 'archive', label: 'Content Archive', icon: Archive, category: 'Content & Marketing Compliance', hidden: !perms.canViewArchive },
-      { id: 'channel-rules', label: 'Channel Rules', icon: Layers, category: 'Content & Marketing Compliance', hidden: !perms.canViewChannelRules },
-      { id: 'claim-extraction', label: 'Claim NLP', icon: FileSearch, category: 'Content & Marketing Compliance', hidden: !perms.canViewClaimExtraction },
-      { id: 'translation-compliance', label: 'Translation', icon: Languages, category: 'Content & Marketing Compliance', hidden: !perms.canViewTranslationCompliance },
-      { id: 'agency-portal', label: 'Agency Portal', icon: Briefcase, category: 'Content & Marketing Compliance', hidden: !perms.canViewAgencyPortal },
-      { id: 'consent-management', label: 'Consent Mgmt', icon: UserCheck, category: 'Content & Marketing Compliance', hidden: !perms.canViewConsentManagement },
+      // ── 4. Controls & Frameworks ─────────────────────────────────────
+      // Two parallel framework/control systems still exist in the schema
+      // (grc_* and framework_*). Until they are merged they at least sit
+      // together, so it is obvious they are the same job.
+      { id: 'grc-dashboard', label: 'Control Posture', icon: BarChart3, category: 'Controls & Frameworks', hidden: !perms.canViewGrcDashboard },
+      { id: 'framework-library', label: 'Framework Library', icon: Layers, category: 'Controls & Frameworks' },
+      { id: 'grc-frameworks', label: 'GRC Frameworks', icon: ShieldCheck, category: 'Controls & Frameworks', hidden: !perms.canViewGrcFrameworks },
+      { id: 'grc-controls', label: 'Controls', icon: ListChecks, category: 'Controls & Frameworks', hidden: !perms.canViewGrcControls },
+      { id: 'control-monitoring', label: 'Control Health', icon: ClipboardCheck, category: 'Controls & Frameworks' },
+      { id: 'grc-automation', label: 'Automated Testing', icon: Zap, category: 'Controls & Frameworks', hidden: !perms.canViewGrcAutomation },
+      { id: 'obligations', label: 'Obligations', icon: Scale, category: 'Controls & Frameworks', hidden: !perms.canViewObligations },
 
-      // ── 5. Regulatory Intelligence ───────────────────────────────────
-      { id: 'framework-library', label: 'Framework Library', icon: Layers, category: 'Regulatory Intelligence' },
-      { id: 'control-monitoring', label: 'Control Health', icon: ClipboardCheck, category: 'Regulatory Intelligence' },
-      { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch,  category: 'Regulatory Intelligence', hidden: isLogisticsProfile },
-      { id: 'son-compliance',     label: 'SON Compliance',     icon: Award,       category: 'Regulatory Intelligence', hidden: isLogisticsProfile },
-      { id: 'ctd-dossier',        label: 'CTD Dossier Tracker', icon: FileStack,  category: 'Regulatory Intelligence', hidden: isLogisticsProfile },
-      { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory Intelligence' },
-      { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory Intelligence', hidden: !perms.canViewRegulatoryLibrary },
-      { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewHorizonScanning },
-      { id: 'drift-monitor', label: 'Drift Monitor', icon: Radar, category: 'Regulatory Intelligence', hidden: !perms.canViewDriftMonitor },
-      { id: 'policy-assistant', label: 'Policy Assistant', icon: FileEdit, category: 'Regulatory Intelligence' },
+      // ── 5. Risk ──────────────────────────────────────────────────────
+      { id: 'risk-register', label: 'Risk Register', icon: ShieldAlert, category: 'Risk', hidden: !perms.canViewRiskRegister },
+      { id: 'predictive-risk', label: 'Risk Modeling', icon: BrainCircuit, category: 'Risk', hidden: !perms.canViewPredictiveRisk },
+      { id: 'compliance-alerting', label: 'Compliance Alerts', icon: Bell, category: 'Risk', hidden: !perms.canViewComplianceAlerts },
+      { id: 'vendors', label: 'Vendors', icon: Building2, category: 'Risk', hidden: !perms.canViewVendors },
+      { id: 'vendor-scorecard', label: 'Vendor Scorecard', icon: Building2, category: 'Risk', hidden: !perms.canViewVendorScorecard },
+      { id: 'crisis-response', label: 'Crisis Response', icon: Siren, category: 'Risk', hidden: !perms.canViewCrisisResponse },
+      { id: 'whistleblower', label: 'Internal Reports', icon: ShieldAlert, category: 'Risk', hidden: !perms.canViewWhistleblower },
 
-      // ── 6. Risk & Monitoring ─────────────────────────────────────────
-      { id: 'predictive-risk', label: 'Risk Modeling', icon: BrainCircuit, category: 'Risk & Monitoring', hidden: !perms.canViewPredictiveRisk },
-      { id: 'social-listening', label: 'Social Listening', icon: Radio, category: 'Risk & Monitoring', hidden: !perms.canViewSocialListening },
-      { id: 'website-monitoring', label: 'Web Monitoring', icon: Globe, category: 'Risk & Monitoring', hidden: !perms.canViewWebsiteMonitoring },
-      { id: 'crisis-response', label: 'Crisis Response', icon: Siren, category: 'Risk & Monitoring', hidden: !perms.canViewCrisisResponse },
-      { id: 'whistleblower', label: 'Internal Reports', icon: ShieldAlert, category: 'Risk & Monitoring', hidden: !perms.canViewWhistleblower },
-      { id: 'programmatic-ad', label: 'Ad Compliance', icon: MonitorDot, category: 'Risk & Monitoring', hidden: !perms.canViewProgrammaticAd },
+      // ── 6. Regulatory ────────────────────────────────────────────────
+      // License Vault holds the company's own NAFDAC licences, so it belongs
+      // here — it was previously filed under vendor management.
+      { id: 'license-vault', label: 'Licences & Permits', icon: FileKey, category: 'Regulatory', hidden: !perms.canViewLicenseVault },
+      { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch,  category: 'Regulatory', hidden: isLogisticsProfile },
+      { id: 'son-compliance',     label: 'SON Compliance',     icon: Award,       category: 'Regulatory', hidden: isLogisticsProfile },
+      { id: 'ctd-dossier',        label: 'CTD Dossier Tracker', icon: FileStack,  category: 'Regulatory', hidden: isLogisticsProfile },
+      { id: 'horizon-scanning', label: 'Horizon Scan', icon: Radar, category: 'Regulatory', hidden: !perms.canViewHorizonScanning },
+      { id: 'drift-monitor', label: 'Drift Monitor', icon: Radar, category: 'Regulatory', hidden: !perms.canViewDriftMonitor },
+      { id: 'regulations', label: 'Regulations Ledger', icon: BookOpen, category: 'Regulatory' },
+      { id: 'regulatory-library', label: 'Reg Library', icon: Library, category: 'Regulatory', hidden: !perms.canViewRegulatoryLibrary },
 
-      // ── 7. Provider & Vendor Management ─────────────────────────────
-      { id: 'vendor-scorecard', label: 'Vendor Scorecard', icon: Building2, category: 'Provider & Vendor', hidden: !perms.canViewVendorScorecard },
-      { id: 'vendors', label: 'Vendors', icon: Building2, category: 'Provider & Vendor', hidden: !perms.canViewVendors },
-      { id: 'license-vault', label: 'License Vault', icon: FileKey, category: 'Provider & Vendor', hidden: !perms.canViewLicenseVault },
+      // ── 7. Policies ──────────────────────────────────────────────────
+      { id: 'policies', label: 'Policies', icon: Scale, category: 'Policies', hidden: !perms.canViewPolicies },
+      { id: 'my-policies', label: 'My Policies', icon: ShieldCheck, category: 'Policies', hidden: !perms.canViewMyPolicies },
+      { id: 'policy-assistant', label: 'Policy Assistant', icon: FileEdit, category: 'Policies' },
 
-      // ── 8. AI Governance ─────────────────────────────────────────────
+      // ── 8. Audit & Evidence ──────────────────────────────────────────
+      { id: 'audit-trail', label: 'Audit Trail', icon: ShieldCheck, category: 'Audit & Evidence', hidden: !perms.canViewAuditTrail },
+      { id: 'audit-sessions', label: 'Audit Workspace', icon: ClipboardCheck, category: 'Audit & Evidence', hidden: !perms.canViewAuditWorkspace },
+      { id: 'audit-prep', label: 'AI Audit Prep', icon: Sparkles, category: 'Audit & Evidence', hidden: !perms.canViewAuditPrep },
+      { id: 'governance-timeline', label: 'Governance Timeline', icon: History, category: 'Audit & Evidence', hidden: !perms.canViewGovernanceTimeline },
+      { id: 'platform-evidence-ingestions', label: 'Evidence Ingestions', icon: FileStack, category: 'Audit & Evidence', hidden: !perms.canViewEvidenceIngestions },
+      { id: 'legal-holds', label: 'Legal Holds', icon: Lock, category: 'Audit & Evidence', hidden: !perms.canViewLegalHold },
+      { id: 'retention-policies', label: 'Data Retention', icon: Trash2, category: 'Audit & Evidence', hidden: !perms.canViewRetention },
+
+      // ── 9. Content Compliance ────────────────────────────────────────
+      { id: 'upload', label: 'Upload Content', icon: Upload, category: 'Content Compliance', hidden: !perms.canUpload },
+      { id: 'legal-review', label: 'Legal Review', icon: Scale, category: 'Content Compliance', hidden: !perms.canViewLegalReview },
+      { id: 'archive', label: 'Content Archive', icon: Archive, category: 'Content Compliance', hidden: !perms.canViewArchive },
+      { id: 'content-calendar', label: 'Content Calendar', icon: CalendarDays, category: 'Content Compliance', hidden: !perms.canUpload },
+      { id: 'content-blocks', label: 'Content Blocks', icon: Blocks, category: 'Content Compliance', hidden: !perms.canViewContentBlocks },
+      { id: 'channel-rules', label: 'Channel Rules', icon: Layers, category: 'Content Compliance', hidden: !perms.canViewChannelRules },
+      { id: 'claim-extraction', label: 'Claim NLP', icon: FileSearch, category: 'Content Compliance', hidden: !perms.canViewClaimExtraction },
+      { id: 'translation-compliance', label: 'Translation', icon: Languages, category: 'Content Compliance', hidden: !perms.canViewTranslationCompliance },
+      { id: 'agency-portal', label: 'Agency Portal', icon: Briefcase, category: 'Content Compliance', hidden: !perms.canViewAgencyPortal },
+      { id: 'consent-management', label: 'Consent Mgmt', icon: UserCheck, category: 'Content Compliance', hidden: !perms.canViewConsentManagement },
+      { id: 'social-listening', label: 'Social Listening', icon: Radio, category: 'Content Compliance', hidden: !perms.canViewSocialListening },
+      { id: 'website-monitoring', label: 'Web Monitoring', icon: Globe, category: 'Content Compliance', hidden: !perms.canViewWebsiteMonitoring },
+      { id: 'programmatic-ad', label: 'Ad Compliance', icon: MonitorDot, category: 'Content Compliance', hidden: !perms.canViewProgrammaticAd },
+
+      // ── 10. AI Governance — governing your AI, not AI helping you ────
       { id: 'ai-dashboard', label: 'AI Dashboard', icon: LayoutDashboard, category: 'AI Governance', hidden: !perms.canViewAIDashboard },
-      { id: 'ai-assets', label: 'AI Assets', icon: BrainCircuit, category: 'AI Governance', hidden: !perms.canViewAIGovernance },
+      { id: 'ai-assets', label: 'AI Systems Register', icon: BrainCircuit, category: 'AI Governance', hidden: !perms.canViewAIGovernance },
       { id: 'ai-usage', label: 'AI Usage', icon: Activity, category: 'AI Governance', hidden: !perms.canViewAIUsage },
       { id: 'ai-reviews', label: 'AI Reviews', icon: ShieldCheck, category: 'AI Governance', hidden: !perms.canViewAIReviews },
       { id: 'ai-prompts', label: 'AI Prompts', icon: FileEdit, category: 'AI Governance', hidden: !perms.canViewAIPrompts },
       { id: 'ai-incidents', label: 'AI Incidents', icon: ShieldAlert, category: 'AI Governance', hidden: !perms.canViewAIIncidents },
 
-      // ── 9. Audit & Evidence ──────────────────────────────────────────
-      { id: 'audit-trail', label: 'Audit Trail', icon: ShieldCheck, category: 'Audit & Evidence', hidden: !perms.canViewAuditTrail },
-      { id: 'audit-sessions', label: 'Audit Workspace', icon: ClipboardCheck, category: 'Audit & Evidence', hidden: !perms.canViewAuditWorkspace },
-
-      // ── 10. Administration ───────────────────────────────────────────
-      { id: 'billing', label: 'Billing & Plan', icon: CreditCard, category: 'Administration', hidden: !perms.canViewMembers },
-      { id: 'company-settings', label: 'Company Settings', icon: Building2, category: 'Administration', hidden: !perms.canViewMembers },
+      // ── 11. Administration ───────────────────────────────────────────
+      { id: 'billing', label: 'Billing & Plan', icon: CreditCard, category: 'Administration', hidden: !perms.canViewBilling },
+      { id: 'company-settings', label: 'Company Settings', icon: Building2, category: 'Administration', hidden: !perms.canManageRoles },
       { id: 'company-members', label: 'Members', icon: User, category: 'Administration', hidden: !perms.canViewMembers },
       { id: 'company-invites', label: 'Invites', icon: User, category: 'Administration', hidden: !perms.canInvite },
       { id: 'company-departments', label: 'Departments', icon: User, category: 'Administration', hidden: !perms.canInvite },
-      { id: 'integrations', label: 'Integrations', icon: Plug, category: 'Administration', hidden: !perms.canViewLicenseVault },
-      { id: 'platform-webhooks', label: 'Outbound Webhooks', icon: Radio, category: 'Administration', hidden: !perms.canViewWebhooks },
-      { id: 'platform-jobs', label: 'Platform Jobs', icon: Activity, category: 'Administration', hidden: !perms.canViewPlatformJobs },
-      { id: 'secret-vault', label: 'Secret Vault', icon: FileKey, category: 'Administration', hidden: !perms.canManageRoles && profile?.role !== 'admin' },
       { id: 'role-management', label: 'Role Management', icon: KeyRound, category: 'Administration', hidden: !perms.canManageRoles },
       { id: 'org-management', label: 'Org Management', icon: Building2, category: 'Administration', hidden: !profile?.organization_id || !perms.canManageRoles },
-      { id: 'training-log', label: 'Training Log', icon: GraduationCap, category: 'Administration', hidden: !perms.canViewTraining },
-      { id: 'training-simulation', label: 'Training Sim', icon: GraduationCap, category: 'Administration', hidden: !perms.canViewTrainingSimulation },
+      { id: 'identity-providers', label: 'Single Sign-On', icon: Fingerprint, category: 'Administration', hidden: !perms.canViewIdentity },
+      { id: 'integrations', label: 'Integrations', icon: Plug, category: 'Administration', hidden: !perms.canViewIntegrations },
+      { id: 'pharma-integrations', label: 'Pharma Integrations', icon: FlaskConical, category: 'Administration', hidden: !perms.canViewPharmaIntegrations },
+      { id: 'platform-webhooks', label: 'Outbound Webhooks', icon: Radio, category: 'Administration', hidden: !perms.canViewWebhooks },
+      { id: 'platform-jobs', label: 'Platform Jobs', icon: Activity, category: 'Administration', hidden: !perms.canViewPlatformJobs },
+      { id: 'platform-ecosystem', label: 'Partner Ecosystem', icon: Network, category: 'Administration', hidden: !perms.canViewEcosystem },
+      { id: 'secret-vault', label: 'Secret Vault', icon: FileKey, category: 'Administration', hidden: !perms.canManageRoles && profile?.role !== 'admin' },
       { id: 'partner-verification', label: 'Partner Verification', icon: ShieldCheck, category: 'Administration', hidden: !perms.canManageRoles },
 
       // ── Hidden / external ────────────────────────────────────────────
@@ -351,7 +420,20 @@ export default function MainLayout({
   const displayNavItems = isAuditorPortal
     ? visibleNavItems.filter(item => item.id === 'audit-sessions' || item.id === 'audit-session-detail')
     : visibleNavItems;
-  const categories = [...new Set(displayNavItems.map(item => item.category))];
+  const categories = [...new Set(displayNavItems.map(item => item.category))]
+    .sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category];
+      try {
+        localStorage.setItem(COLLAPSED_NAV_KEY, JSON.stringify(next));
+      } catch { /* storage unavailable — collapse still works for this session */ }
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen flex font-sans bg-[var(--color-bg)] text-[var(--color-text-primary)]">
@@ -395,10 +477,30 @@ export default function MainLayout({
             const items = displayNavItems.filter(item => item.category === category);
             if (items.length === 0) return null;
 
+            // A collapsed group still opens itself when it holds the current page,
+            // so navigating from a KPI or a link never lands you somewhere the
+            // sidebar can't show you.
+            const holdsCurrentPage = items.some(item => item.id === currentPage);
+            const isCollapsed = collapsedCategories.includes(category) && !holdsCurrentPage;
+
             return (
               <div key={category} className="dash-card border dash-border rounded-2xl p-2.5 shadow-sm space-y-1">
-                <h4 className="px-3 text-[10px] font-bold uppercase tracking-widest dash-text-tertiary mb-2 text-left">{category}</h4>
-                {items.map((item) => {
+                <button
+                  onClick={() => toggleCategory(category)}
+                  aria-expanded={!isCollapsed}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 rounded-lg hover:dash-surface-alt transition-colors group/cat"
+                >
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary text-left">{category}</h4>
+                  <span className="flex items-center gap-1.5 dash-text-tertiary">
+                    {isCollapsed && (
+                      <span className="text-[10px] font-semibold tabular-nums">{items.length}</span>
+                    )}
+                    {isCollapsed
+                      ? <ChevronRight size={14} strokeWidth={2} />
+                      : <ChevronDown size={14} strokeWidth={2} />}
+                  </span>
+                </button>
+                {!isCollapsed && items.map((item) => {
                   const Icon = item.icon;
                   const isActive = currentPage === item.id;
                   return (
@@ -451,7 +553,9 @@ export default function MainLayout({
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-[var(--color-text-secondary)] hover:dash-surface-alt hover:text-[var(--color-text-primary)] transition-colors group"
           >
             <KeyRound size={20} strokeWidth={1.5} className="flex-shrink-0 dash-text-tertiary group-hover:text-[var(--color-text-primary)]" />
-            <span className="font-medium tracking-wide">Settings</span>
+            {/* Opens the personal security tab — "Settings" collided with the
+                company-wide Company Settings page under Administration. */}
+            <span className="font-medium tracking-wide">My Account</span>
           </button>
           <button
             onClick={() => signOut()}

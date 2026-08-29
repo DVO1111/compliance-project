@@ -1,3 +1,10 @@
+/* Mulish — the typeface specified by the Figma style guide. Self-hosted, so
+   it is served same-origin and satisfies the app's `font-src 'self'` CSP. */
+@import '@fontsource-variable/mulish';
+
+/* Design tokens transcribed from Figma — see src/styles/tokens.css */
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

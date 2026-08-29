@@ -19,6 +19,7 @@ export const MODULE_KEYS = [
   'policy_management',
   'vendor_management',
   'ai_governance',
+  'quality_operations',
 ] as const;
 
 export type ModuleKey = typeof MODULE_KEYS[number];
@@ -74,6 +75,12 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
     description: 'AI assets, usage logs, incidents, reviews, and prompts',
     icon: 'BrainCircuit',
   },
+  {
+    key: 'quality_operations',
+    name: 'Quality Operations',
+    description: 'Batch release, CoAs, CAPA, SOPs, change control, GMP inspection',
+    icon: 'FlaskConical',
+  },
 ];
 
 /**
@@ -113,6 +120,12 @@ export const MODULE_TO_PERMISSIONS: Record<ModuleKey, Partial<Permissions>> = {
     canViewWhistleblower: true,
     canViewPredictiveRisk: true,
     canViewCapaManagement: true,
+    // Previously reached via canViewGrcFrameworks — kept in this bundle so
+    // existing invitees don't lose access when the flags were split out.
+    canViewObligations: true,
+    canViewRiskRegister: true,
+    canViewComplianceAlerts: true,
+    canViewAuditPrep: true,
   },
   policy_management: {
     canViewPolicies: true,
@@ -132,6 +145,18 @@ export const MODULE_TO_PERMISSIONS: Record<ModuleKey, Partial<Permissions>> = {
     canViewAIIncidents: true,
     canViewAIReviews: true,
     canViewAIPrompts: true,
+  },
+  quality_operations: {
+    canViewCapaManagement: true,
+    canViewTraining: true,
+    canViewTrainingSimulation: true,
+    canViewLicenseVault: true,
+    canViewAuditTrail: true,
+    canViewAuditWorkspace: true,
+    canViewAuditExports: true,
+    canViewAuditPrep: true,
+    canViewGrcControls: true,
+    canViewGrcDashboard: true,
   },
 };
 

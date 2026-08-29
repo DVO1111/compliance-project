@@ -1,0 +1,169 @@
+/**
+ * Design tokens — Criateur Compliance
+ *
+ * Transcribed from the Figma "Compliance" file, Style guide page:
+ * https://www.figma.com/design/YjEnAr8C8eoAud481sqjtN/Compliance?node-id=31-3
+ *
+ * This file is the code-side source of truth for type and colour. When the
+ * Figma style guide changes, change it here — do not re-declare these values
+ * inside components.
+ *
+ * Two notes carried over from the Figma file:
+ *
+ *  1. The style guide states a typesetting rule explicitly: "We always
+ *     left-align type; we never center it."
+ *
+ *  2. Three conflicting `button-primary` values exist as variables in the
+ *     file — #6B5DD3 (purple) on the Button section and #0BCE5A (green) on the
+ *     Input section. The rendered Button component sheet is unambiguously blue,
+ *     matching Colors/Primary/500, so that is what is encoded below. The other
+ *     two look like leftovers from earlier explorations and are worth deleting
+ *     in Figma so the variables stop disagreeing with the artboards.
+ */
+
+:root {
+  /* ── Type family ──────────────────────────────────────────────
+     Mulish, self-hosted via @fontsource-variable/mulish.
+     Weights in use: 400 Regular, 500 Medium, 600 SemiBold. */
+  --font-sans: 'Mulish Variable', 'Mulish', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* ── Type scale ───────────────────────────────────────────────
+     size / line-height, letter-spacing 0 throughout.
+     Headings 01–02 are for component and layout headings; 03–07 are
+     layout headings. */
+  --type-heading-01-size: 0.875rem;   /* 14px */
+  --type-heading-01-lh: 1.125rem;     /* 18px */
+  --type-heading-01-weight: 600;
+
+  --type-heading-02-size: 1rem;       /* 16px */
+  --type-heading-02-lh: 1.375rem;     /* 22px */
+  --type-heading-02-weight: 600;
+
+  --type-heading-03-size: 1.25rem;    /* 20px */
+  --type-heading-03-lh: 1.625rem;     /* 26px */
+  --type-heading-03-weight: 500;
+
+  --type-heading-04-size: 1.75rem;    /* 28px */
+  --type-heading-04-lh: 2.125rem;     /* 34px */
+  --type-heading-04-weight: 500;
+
+  --type-heading-05-size: 2rem;       /* 32px */
+  --type-heading-05-lh: 2.5rem;       /* 40px */
+  --type-heading-05-weight: 500;
+
+  --type-heading-06-size: 2.625rem;   /* 42px */
+  --type-heading-06-lh: 3.125rem;     /* 50px */
+  --type-heading-06-weight: 500;
+
+  --type-heading-07-size: 3.375rem;   /* 54px */
+  --type-heading-07-lh: 4rem;         /* 64px */
+  --type-heading-07-weight: 500;
+
+  --type-body-short-01-size: 0.875rem; /* 14/18 */
+  --type-body-short-01-lh: 1.125rem;
+  --type-body-long-01-size: 0.875rem;  /* 14/20 */
+  --type-body-long-01-lh: 1.25rem;
+  --type-body-short-02-size: 1rem;     /* 16/22 */
+  --type-body-short-02-lh: 1.375rem;
+  --type-body-long-02-size: 1rem;      /* 16/24 */
+  --type-body-long-02-lh: 1.5rem;
+
+  --type-body-link-01-size: 0.75rem;   /* 12/16 */
+  --type-body-link-01-lh: 1rem;
+  --type-body-link-02-size: 0.875rem;  /* 14/18 */
+  --type-body-link-02-lh: 1.125rem;
+
+  --type-label-01-size: 0.75rem;       /* 12/16 */
+  --type-label-01-lh: 1rem;
+  --type-label-02-size: 0.875rem;      /* 14/18 */
+  --type-label-02-lh: 1.125rem;
+  --type-caption-01-size: 0.75rem;     /* 12/16 */
+  --type-caption-01-lh: 1rem;
+  --type-helper-text-01-size: 0.75rem; /* 12/16 */
+  --type-helper-text-01-lh: 1rem;
+
+  /* ── Colour: primary ramp ─────────────────────────────────── */
+  --primary-100: #d3e0fb;
+  --primary-200: #a8c1f7;
+  --primary-300: #7ca1f3;
+  --primary-400: #5182ef;
+  --primary-500: #2563eb;
+  --primary-700: #1041ae;
+  --primary-alpha-10: #2563eb1a;
+  --primary-alpha-50: #2563eb80;
+
+  /* ── Colour: neutrals ─────────────────────────────────────── */
+  --neutral-100: #ffffff;
+  --neutral-500: #a4a4a4;
+  --neutral-600: #8e8e8e;
+  --neutral-1000: #333333;
+
+  /* ── Colour: status ───────────────────────────────────────── */
+  --red-100: #fb3748;
+
+  /* ── Semantic: text ───────────────────────────────────────── */
+  --text-primary: #070808;
+  --text-secondary: #525252;
+  --text-placeholder: #9ba2a6;
+  --text-disabled: #b6bbbe;
+  --text-on-primary-btn: #ffffff;
+  --text-on-secondary-btn: #ffffff;
+  --text-on-color-disabled: #ffffff;
+
+  /* ── Semantic: surface and stroke ─────────────────────────── */
+  --bg-neutral: #f7f7f8;
+  --stroke-subtle-01: #ecedee;
+  --stroke-strong-01: #d1d4d6;
+
+  /* ── Semantic: buttons ────────────────────────────────────── */
+  --button-primary: var(--primary-500);
+  --button-primary-hover: var(--primary-400);
+  --button-primary-active: var(--primary-700);
+  --button-secondary: #393939;
+  --button-tertiary: #ffffff;
+  --button-tertiary-hover: #f4f3fc;
+  --button-tertiary-disabled: #ecedee;
+  --button-danger: var(--red-100);
+  --button-danger-hover: #fa0511;
+  --button-danger-active: #c8040e;
+  --button-danger-disabled: #fb3640;
+
+  /* ── Semantic: links and icons ────────────────────────────── */
+  --link-primary: var(--primary-500);
+  --link-primary-hover: var(--primary-400);
+  --link-primary-active: var(--primary-700);
+  --icon-disabled: #b6bbbe;
+  --icon-on-color-secondary: #ffffff;
+
+  /* ── Control sizing ───────────────────────────────────────────
+     Button heights from the Button component sheet; icons are 16px
+     at every size except Large, which uses 19px. */
+  --control-height-sm: 32px;
+  --control-height-md: 40px;
+  --control-height-default: 48px;
+  --control-height-lg: 56px;
+  --control-icon: 16px;
+  --control-icon-lg: 19px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Type utility classes — use these instead of ad-hoc font sizes so
+   the scale stays honest.
+   ────────────────────────────────────────────────────────────── */
+.type-heading-01 { font-size: var(--type-heading-01-size); line-height: var(--type-heading-01-lh); font-weight: var(--type-heading-01-weight); }
+.type-heading-02 { font-size: var(--type-heading-02-size); line-height: var(--type-heading-02-lh); font-weight: var(--type-heading-02-weight); }
+.type-heading-03 { font-size: var(--type-heading-03-size); line-height: var(--type-heading-03-lh); font-weight: var(--type-heading-03-weight); }
+.type-heading-04 { font-size: var(--type-heading-04-size); line-height: var(--type-heading-04-lh); font-weight: var(--type-heading-04-weight); }
+.type-heading-05 { font-size: var(--type-heading-05-size); line-height: var(--type-heading-05-lh); font-weight: var(--type-heading-05-weight); }
+.type-heading-06 { font-size: var(--type-heading-06-size); line-height: var(--type-heading-06-lh); font-weight: var(--type-heading-06-weight); }
+.type-heading-07 { font-size: var(--type-heading-07-size); line-height: var(--type-heading-07-lh); font-weight: var(--type-heading-07-weight); }
+
+.type-body-short-01 { font-size: var(--type-body-short-01-size); line-height: var(--type-body-short-01-lh); font-weight: 400; }
+.type-body-long-01  { font-size: var(--type-body-long-01-size);  line-height: var(--type-body-long-01-lh);  font-weight: 400; }
+.type-body-short-02 { font-size: var(--type-body-short-02-size); line-height: var(--type-body-short-02-lh); font-weight: 400; }
+.type-body-long-02  { font-size: var(--type-body-long-02-size);  line-height: var(--type-body-long-02-lh);  font-weight: 400; }
+
+.type-label-01       { font-size: var(--type-label-01-size);       line-height: var(--type-label-01-lh);       font-weight: 400; }
+.type-label-02       { font-size: var(--type-label-02-size);       line-height: var(--type-label-02-lh);       font-weight: 400; }
+.type-caption-01     { font-size: var(--type-caption-01-size);     line-height: var(--type-caption-01-lh);     font-weight: 400; }
+.type-helper-text-01 { font-size: var(--type-helper-text-01-size); line-height: var(--type-helper-text-01-lh); font-weight: 400; }

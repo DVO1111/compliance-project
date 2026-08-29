@@ -111,6 +111,10 @@ import ShipmentEventLogPage from './components/Logistics/ShipmentEventLogPage';
 import CN2223DeclarationPage from './components/Logistics/CN2223DeclarationPage';
 import ComplianceAlertingPage from './components/Alerts/ComplianceAlertingPage';
 import AuditPrepPage from './components/AuditPrep/AuditPrepPage';
+import CoaRegisterPage from './components/Coa/CoaRegisterPage';
+import OrgManagementPanel from './components/Enterprise/OrgManagementPanel';
+import EnterpriseDashboardPage from './components/Enterprise/EnterpriseDashboardPage';
+import PharmaIntegrationsPage from './components/PharmaIntegrations/PharmaIntegrationsPage';
 
 type UnauthView = 'landing' | 'login' | 'signup';
 
@@ -201,7 +205,18 @@ function isValidPageId(value: any): value is PageId {
     value === 'shipment-event-log' ||
     value === 'cn-declarations' ||
     value === 'compliance-alerting' ||
-    value === 'audit-prep'
+    value === 'audit-prep' ||
+    value === 'coa' ||
+    // Previously missing, so a reload or deep link while on any of these
+    // silently dropped the user back to the dashboard.
+    value === 'ai-dashboard' ||
+    value === 'ai-assets' ||
+    value === 'ai-asset-detail' ||
+    value === 'ai-usage' ||
+    value === 'ai-incidents' ||
+    value === 'org-management' ||
+    value === 'enterprise-dashboard' ||
+    value === 'pharma-integrations'
   );
 }
 
@@ -490,7 +505,7 @@ function AppContent() {
         return perms.canViewTraining ? <TrainingLogPage /> : <AccessDenied />;
 
       case 'company-settings':
-        return perms.canViewMembers ? <CompanySettingsPage /> : <AccessDenied />;
+        return perms.canManageRoles ? <CompanySettingsPage /> : <AccessDenied />;
 
       case 'company-members':
         return perms.canViewMembers ? <MembersPage /> : <AccessDenied />;
@@ -511,13 +526,13 @@ function AppContent() {
         return <NotificationsPage />;
 
       case 'billing':
-        return <BillingPage />;
+        return perms.canViewBilling ? <BillingPage /> : <AccessDenied />;
 
       case 'license-vault':
         return perms.canViewLicenseVault ? <LicenseVaultPage /> : <AccessDenied />;
 
       case 'integrations':
-        return perms.canViewLicenseVault ? (
+        return perms.canViewIntegrations ? (
           <FeatureGate feature="custom_integrations" featureLabel="Custom Integrations">
             <IntegrationsPage />
           </FeatureGate>
@@ -669,19 +684,19 @@ function AppContent() {
         return perms.canViewAuditWorkspace ? <AuditSessionDetailPage auditSessionId={currentAuditSessionId} onBack={() => setCurrentPage('audit-sessions')} /> : <AccessDenied />;
 
       case 'risk-register':
-        return perms.canViewGrcFrameworks ? <RiskRegisterPage /> : <AccessDenied />;
+        return perms.canViewRiskRegister ? <RiskRegisterPage /> : <AccessDenied />;
 
       case 'risk-detail':
-        return perms.canViewGrcFrameworks ? <RiskDetailDrawer riskId={currentRiskId} onBack={() => setCurrentPage('risk-register')} /> : <AccessDenied />;
+        return perms.canViewRiskRegister ? <RiskDetailDrawer riskId={currentRiskId} onBack={() => setCurrentPage('risk-register')} /> : <AccessDenied />;
 
       case 'command-center':
-        return perms.canViewAuditTrail ? <CommandCenterPage /> : <AccessDenied />;
+        return perms.canViewGrcDashboard ? <CommandCenterPage /> : <AccessDenied />;
 
       case 'obligations':
-        return perms.canViewGrcFrameworks ? <ObligationListPage /> : <AccessDenied />;
+        return perms.canViewObligations ? <ObligationListPage /> : <AccessDenied />;
 
       case 'obligation-detail':
-        return perms.canViewGrcFrameworks ? <ObligationDetailPage obligationId={currentObligationId!} onBack={() => setCurrentPage('obligations')} /> : <AccessDenied />;
+        return perms.canViewObligations ? <ObligationDetailPage obligationId={currentObligationId!} onBack={() => setCurrentPage('obligations')} /> : <AccessDenied />;
 
       case 'identity-providers':
         return perms.canViewIdentity ? (
@@ -809,10 +824,28 @@ function AppContent() {
         return isLogisticsProfile ? <CN2223DeclarationPage /> : <AccessDenied />;
 
       case 'compliance-alerting':
-        return perms.canViewGrcFrameworks ? <ComplianceAlertingPage /> : <AccessDenied />;
+        return perms.canViewComplianceAlerts ? <ComplianceAlertingPage /> : <AccessDenied />;
 
       case 'audit-prep':
-        return perms.canViewGrcFrameworks ? <AuditPrepPage /> : <AccessDenied />;
+        return perms.canViewAuditPrep ? <AuditPrepPage /> : <AccessDenied />;
+
+      case 'coa':
+        return isLogisticsProfile ? <AccessDenied /> : <CoaRegisterPage />;
+
+      // These three had a PageId and a component but no case, so navigating to
+      // them silently fell through to the dashboard.
+      case 'org-management':
+        return perms.canManageRoles && profile?.organization_id
+          ? <OrgManagementPanel organizationId={profile.organization_id} currentUserId={profile.id} />
+          : <AccessDenied />;
+
+      case 'enterprise-dashboard':
+        return perms.canViewComplianceReporting && profile?.organization_id
+          ? <EnterpriseDashboardPage organizationId={profile.organization_id} />
+          : <AccessDenied />;
+
+      case 'pharma-integrations':
+        return perms.canViewPharmaIntegrations ? <PharmaIntegrationsPage /> : <AccessDenied />;
 
       default:
         return <DashboardPage />;

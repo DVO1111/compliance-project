@@ -41,6 +41,21 @@ export interface CoaRecord {
   updated_at: string;
 }
 
+/**
+ * Every CoA issued by a company, newest first — backs the CoA register page.
+ * Certificates were previously only reachable per-batch, from inside the batch
+ * detail modal, so there was no way to find or re-issue one after the fact.
+ */
+export async function listCoasForCompany(companyId: string): Promise<CoaRecord[]> {
+  const { data, error } = await (supabase as any)
+    .from('certificate_of_analysis')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+  if (error) { logger.error('listCoasForCompany:', error); return []; }
+  return data ?? [];
+}
+
 export async function listCoasForBatch(batchId: string): Promise<CoaRecord[]> {
   const { data, error } = await (supabase as any)
     .from('certificate_of_analysis')
