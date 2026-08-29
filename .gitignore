@@ -52,3 +52,6 @@ tmp/
 /db_data_dump.sql
 /schema_dump.sql
 /schema_snapshot.sql
+
+# Local Netlify folder
+.netlify

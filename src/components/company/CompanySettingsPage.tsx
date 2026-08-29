@@ -19,6 +19,8 @@ interface CompanySettings {
     brand_color: string;
     tagline: string;
     website_url: string;
+    project_name: string;
+    regulatory_body_access: string;
 }
 
 const DEFAULTS: CompanySettings = {
@@ -27,7 +29,20 @@ const DEFAULTS: CompanySettings = {
     brand_color: '#1e3a8a',
     tagline: '',
     website_url: '',
+    project_name: '',
+    regulatory_body_access: '',
 };
+
+const REGULATORY_BODY_OPTIONS = [
+    { value: '', label: 'No regulator selected' },
+    { value: 'nafdac', label: 'NAFDAC' },
+    { value: 'fda', label: 'FDA' },
+    { value: 'ema', label: 'EMA' },
+    { value: 'who', label: 'WHO' },
+    { value: 'mdcn', label: 'MDCN' },
+    { value: 'son', label: 'SON' },
+    { value: 'other', label: 'Other / Multiple' },
+];
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
     return (
@@ -82,6 +97,8 @@ export default function CompanySettingsPage() {
                     brand_color: (data as any).brand_color || '#1e3a8a',
                     tagline: (data as any).tagline || '',
                     website_url: (data as any).website_url || '',
+                    project_name: (data as any).project_name || '',
+                    regulatory_body_access: (data as any).regulatory_body_access || '',
                 });
             }
             setLoading(false);
@@ -281,6 +298,18 @@ export default function CompanySettingsPage() {
                         </div>
                     </Field>
 
+                    {/* Project / Branch */}
+                    <Field label="Project / Branch" hint="Set the project or branch this administrator is managing.">
+                        <input
+                            type="text"
+                            value={settings.project_name}
+                            onChange={e => setSettings(p => ({ ...p, project_name: e.target.value }))}
+                            disabled={!isAdminOrOwner}
+                            placeholder="e.g. East Africa Market Entry"
+                            className="w-full border dash-border rounded-xl px-4 py-2.5 text-sm dash-text bg-[var(--color-surface)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] disabled:opacity-60 transition-all"
+                        />
+                    </Field>
+
                     {/* Tagline */}
                     <Field label="Tagline" hint="A short description shown in your workspace header.">
                         <input
@@ -332,6 +361,22 @@ export default function CompanySettingsPage() {
                                 className="w-full border dash-border rounded-xl pl-10 pr-4 py-2.5 text-sm dash-text bg-[var(--color-surface)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] disabled:opacity-60 transition-all"
                             />
                         </div>
+                    </Field>
+
+                    {/* Regulatory body access */}
+                    <Field label="Regulatory Body Access" hint="Choose the regulatory body that should have access to this company's data.">
+                        <select
+                            value={settings.regulatory_body_access}
+                            onChange={e => setSettings(p => ({ ...p, regulatory_body_access: e.target.value }))}
+                            disabled={!isAdminOrOwner}
+                            className="w-full border dash-border rounded-xl px-4 py-2.5 text-sm dash-text bg-[var(--color-surface)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] disabled:opacity-60 transition-all"
+                        >
+                            {REGULATORY_BODY_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
                     </Field>
                 </div>
             </div>

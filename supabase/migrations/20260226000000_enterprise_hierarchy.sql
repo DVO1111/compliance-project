@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS organizations (
 
 ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
 
+-- Ensure profiles has organization links before creating org-level policies
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'profiles' AND column_name = 'organization_id'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN organization_id uuid REFERENCES organizations(id);
+  END IF;
+END$$;
+
 -- Members of any company under this org can read the org row
 CREATE POLICY "Org members can view their organization"
   ON organizations FOR SELECT
