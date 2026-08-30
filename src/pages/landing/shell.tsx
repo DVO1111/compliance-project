@@ -223,7 +223,23 @@ export function MarketingNav({
   );
 }
 
-/* ── Footer ───────────────────────────────────── */
+/* ── Footer ─────────────────────────────────────
+   The product column. Four of these are the module sections on the Platform
+   page, addressed by the anchor ids PlatformPage already assigns
+   (module-1..module-5). Pharmacovigilance and Food Safety & Allergens have
+   no marketing destination yet — they exist only inside the product — so
+   they are set as text rather than links that go nowhere, matching how the
+   Legal column already handles the same situation. */
+const PRODUCT_ITEMS: { label: string; anchor?: string; page?: MarketingPage }[] = [
+  { label: 'Platform Overview', page: 'platform' },
+  { label: 'Batch Execution (eBMR)', anchor: 'module-1' },
+  { label: 'Quality Events (QMS)', anchor: 'module-2' },
+  { label: 'Regulatory Affairs', anchor: 'module-4' },
+  { label: 'Pharmacovigilance' },
+  { label: 'Food Safety & Allergens' },
+  { label: 'Audit & Recall', anchor: 'module-5' },
+];
+
 export function MarketingFooter({
   onNavigate, onCta, ctaLabel: _ctaLabel,
 }: {
@@ -234,6 +250,15 @@ export function MarketingFooter({
 }) {
   const col = { fontFamily: 'var(--lp-font-mono)', fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: 'rgba(207,222,255,0.5)', marginBottom: 20 };
   const link = { color: 'rgba(207,222,255,0.86)', fontSize: 14.5 };
+
+  /* Switch to the Platform page, then move to the module. The delay lets
+     PlatformPage mount and run its own scroll-to-top first; without it the
+     mount would land on top of the anchor scroll. Already on Platform, the
+     page does not remount and the scroll happens immediately. */
+  const goToModule = (anchor: string) => {
+    onNavigate('platform');
+    window.setTimeout(() => scrollToId(anchor), 140);
+  };
 
   return (
     <footer style={{ background: 'var(--lp-bg)', color: 'rgba(207,222,255,0.86)' }}>
@@ -260,8 +285,15 @@ export function MarketingFooter({
           <div style={{ minWidth: 0 }}>
             <div style={col}>Product</div>
             <div className="flex flex-col gap-[13px]">
-              <button onClick={() => onNavigate('platform')} style={link} className="text-left hover:text-white transition">Platform</button>
-              <button onClick={() => onNavigate('who')} style={link} className="text-left hover:text-white transition">Who It&rsquo;s For</button>
+              {PRODUCT_ITEMS.map((item) =>
+                item.page ? (
+                  <button key={item.label} onClick={() => onNavigate(item.page!)} style={link} className="text-left hover:text-white transition">{item.label}</button>
+                ) : item.anchor ? (
+                  <button key={item.label} onClick={() => goToModule(item.anchor!)} style={link} className="text-left hover:text-white transition">{item.label}</button>
+                ) : (
+                  <span key={item.label} style={{ ...link, color: 'rgba(207,222,255,0.5)' }}>{item.label}</span>
+                )
+              )}
             </div>
           </div>
           <div style={{ minWidth: 0 }}>
