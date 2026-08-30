@@ -7,10 +7,12 @@ import {
 import { useWaitlistSubmit } from './landing/useWaitlistSubmit';
 
 /* ── The core modules ─────────────────────────────
-   Block 2 of the Platform & Features deck, verbatim. Five modules with the
-   same shape, so they are data rather than five hand-written sections.
+   Block 2 of the Platform & Features deck, verbatim. Seven modules with the
+   same shape, so they are data rather than seven hand-written sections. The
+   numbering, anchor ids and hero jump-links all derive from the array order,
+   so a module only has to be added here.
 
-   Note the overlap with the home page: four of these five also appear there
+   Note the overlap with the home page: four of these also appear there
    in condensed form. That is deliberate in the deck — the home page makes the
    argument, this page proves it — so the layout here is deliberately different
    (numbered, full-width, three columns of detail) to avoid reading as a
@@ -66,6 +68,26 @@ const MODULES = [
       { title: '60-Second Mock Recalls', detail: 'Instantly map affected units across the distribution chain and generate NAFDAC-ready recall notification packages.' },
       { title: 'Unalterable Audit Trails', detail: 'Log every operator action chronologically and export sealed evidence packages backed by integrity manifests.' },
       { title: 'Verifiable CoAs', detail: 'Automatically generate Certificates of Analysis featuring embedded QR validation and SHA-256 cryptographic security seals.' },
+    ],
+  },
+  {
+    name: 'Pharmacovigilance (PV)', short: 'Pharmacovigilance',
+    heading: 'Start the clock the moment you become aware.',
+    body: 'Capture adverse events to ICH E2D structure and let the system derive every reporting obligation from the case itself. NAFDAC deadlines count from Day Zero, not from the day someone opened the file.',
+    points: [
+      { title: 'Validity-Gated Case Intake', detail: 'Compute ICSR validity against the four ICH minimum criteria and surface exactly which element is missing.' },
+      { title: 'Per-Jurisdiction Reporting Clocks', detail: 'Derive 7-day and 15-day NAFDAC obligations automatically and escalate at half, three-quarters and overdue.' },
+      { title: 'Auto-Populated Regulatory Forms', detail: 'Generate NAFDAC ADR and CIOMS I submissions directly from the case record for review before filing.' },
+    ],
+  },
+  {
+    name: 'Food Safety & Allergens', short: 'Food Safety',
+    heading: 'Evidence the control. Not just the intention.',
+    body: 'Map every allergen across materials, sites and products — including the hidden ones no ingredient name declares. Software cannot enforce physical segregation, but it can gate the line until the verification comes back clean.',
+    points: [
+      { title: 'Hidden Allergen Mapping', detail: 'Flag allergens carried in compound ingredients that never announce themselves on the label.' },
+      { title: 'Changeover Sequence Validation', detail: 'Determine the cleaning level each product changeover demands and flag sequences that create avoidable CIP.' },
+      { title: 'Verification-Gated Line Clearance', detail: 'Block clearance until an allergen kit check returns negative, and raise a deviation on any positive result.' },
     ],
   },
 ] as const;
@@ -163,8 +185,8 @@ export default function PlatformPage({ onNavigateToLogin, onNavigateToSignup, on
             </button>
           </div>
 
-          {/* The design closes the hero with the five modules as jump links,
-              so the page announces its own contents before you scroll. */}
+          {/* The design closes the hero with the modules as jump links, so
+              the page announces its own contents before you scroll. */}
           <div className="mt-12 pt-8" style={{ borderTop: '1px solid var(--lp-line)' }}>
             <div className="flex flex-wrap gap-2.5">
               {MODULES.map((m, i) => (

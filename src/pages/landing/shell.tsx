@@ -224,19 +224,17 @@ export function MarketingNav({
 }
 
 /* ── Footer ─────────────────────────────────────
-   The product column. Four of these are the module sections on the Platform
-   page, addressed by the anchor ids PlatformPage already assigns
-   (module-1..module-5). Pharmacovigilance and Food Safety & Allergens have
-   no marketing destination yet — they exist only inside the product — so
-   they are set as text rather than links that go nowhere, matching how the
-   Legal column already handles the same situation. */
+   Every item below is a module section on the Platform page, addressed by
+   the anchor ids PlatformPage assigns from its MODULES array order
+   (module-1..module-7). Adding a module there is what makes an anchor here
+   valid — never point one of these at an id that does not exist. */
 const PRODUCT_ITEMS: { label: string; anchor?: string; page?: MarketingPage }[] = [
   { label: 'Platform Overview', page: 'platform' },
   { label: 'Batch Execution (eBMR)', anchor: 'module-1' },
   { label: 'Quality Events (QMS)', anchor: 'module-2' },
   { label: 'Regulatory Affairs', anchor: 'module-4' },
-  { label: 'Pharmacovigilance' },
-  { label: 'Food Safety & Allergens' },
+  { label: 'Pharmacovigilance', anchor: 'module-6' },
+  { label: 'Food Safety & Allergens', anchor: 'module-7' },
   { label: 'Audit & Recall', anchor: 'module-5' },
 ];
 
