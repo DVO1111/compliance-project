@@ -161,7 +161,7 @@ interface LandingPageProps {
   onNavigateToPage: (page: MarketingPage) => void;
 }
 
-export default function LandingPage({ onNavigateToLogin, onNavigateToPage }: LandingPageProps) {
+export default function LandingPage({ onNavigateToLogin, onNavigateToSignup, onNavigateToPage }: LandingPageProps) {
   useScrollToTopOnMount();
   const [email, setEmail] = useState('');
   const { send, submitted, sending, error: submitError } = useWaitlistSubmit('home');
@@ -187,6 +187,7 @@ export default function LandingPage({ onNavigateToLogin, onNavigateToPage }: Lan
       <MarketingNav
         onHome={() => scrollToId('top')}
         onLogin={onNavigateToLogin}
+        onSignup={onNavigateToSignup}
         onCta={() => requestAccess('demo')}
         ctaLabel="Book a Factory Demo"
         links={[

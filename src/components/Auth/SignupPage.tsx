@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ShieldCheck, ArrowLeft, MailCheck } from 'lucide-react';
+import AuthShell, { AuthLink, AuthNotice } from './AuthShell';
 import {
   INDUSTRY_OPTIONS,
   JURISDICTION_LABELS,
@@ -96,91 +96,63 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-4 py-12 relative overflow-hidden">
-      {/* Ambient background glows */}
+    <AuthShell
+      tagline={
+        step === 'details'
+          ? 'Create your account to get started.'
+          : 'Enter the code we emailed you to confirm your identity.'
+      }
+      formTitle={step === 'details' ? 'Create your account' : 'Verify your email'}
+      onBackToLanding={onBackToLanding}
+      footer={
+        step === 'details' ? (
+          <>
+            Already have an account?{' '}
+            <AuthLink onClick={onToggleLogin}>Sign in</AuthLink>
+          </>
+        ) : undefined
+      }
+    >
+      {error && <AuthNotice tone="error">{error}</AuthNotice>}
+      {info && !error && <AuthNotice tone="info">{info}</AuthNotice>}
 
-      {onBackToLanding && (
-        <button
-          onClick={onBackToLanding}
-          className="absolute top-6 left-6 flex items-center space-x-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors z-10"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span>Back to Home</span>
-        </button>
-      )}
-
-      <div className="max-w-md w-full dash-card shadow-2xl p-8 relative z-10 border border-[var(--color-border)]">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-behance-blue/10 p-4 rounded-2xl mb-4 border border-behance-blue/20">
-            {step === 'details' ? (
-              <ShieldCheck className="w-8 h-8 text-behance-blue" />
-            ) : (
-              <MailCheck className="w-8 h-8 text-behance-blue" />
-            )}
-          </div>
-          <h1 className="text-2xl font-bold dash-text">
-            {step === 'details' ? 'Create Account' : 'Verify Your Email'}
-          </h1>
-          <p className="dash-text-secondary text-center mt-2">
-            {step === 'details'
-              ? 'Join Criateur Compliance Platform'
-              : 'Enter the code we emailed you to confirm your identity'}
-          </p>
-        </div>
-
-        {error && (
-          <div className="bg-[var(--color-danger)]/10 border border-red-500/20 text-[var(--color-danger)] px-4 py-3 rounded-lg text-sm mb-4">
-            {error}
-          </div>
-        )}
-        {info && !error && (
-          <div className="bg-behance-blue/10 border border-behance-blue/20 text-behance-blue px-4 py-3 rounded-lg text-sm mb-4">
-            {info}
-          </div>
-        )}
-
-        {step === 'details' && (
+      {step === 'details' && (
         <form onSubmit={handleSubmit} className="space-y-5">
-
           <div>
-            <label htmlFor="fullName" className="block text-sm font-medium dash-text mb-1.5">
-              Full Name
-            </label>
+            <label htmlFor="fullName" className="lp-field-label">Full name</label>
             <input
               type="text"
               id="fullName"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
+              className="lp-field"
               placeholder="Jane Doe"
+              autoComplete="name"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="organization" className="block text-sm font-medium dash-text mb-1.5">
-              Organization
-            </label>
+            <label htmlFor="organization" className="lp-field-label">Organization</label>
             <input
               type="text"
               id="organization"
               value={organization}
               onChange={(e) => setOrganization(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
+              className="lp-field"
               placeholder="Acme Therapeutics"
+              autoComplete="organization"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="industryType" className="block text-sm font-medium dash-text mb-1.5">
-              Industry
-            </label>
+            <label htmlFor="industryType" className="lp-field-label">Industry</label>
             <select
               id="industryType"
               value={industryType}
               onChange={(e) => { setIndustryType(e.target.value); setJurisdiction(''); }}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:border-[var(--color-accent)] dash-text transition-colors"
+              className="lp-field"
               required
             >
               <option value="" disabled>Select your industry</option>
@@ -191,15 +163,13 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
           </div>
 
           <div>
-            <label htmlFor="jurisdiction" className="block text-sm font-medium dash-text mb-1.5">
-              Regulatory body
-            </label>
+            <label htmlFor="jurisdiction" className="lp-field-label">Regulatory body</label>
             <select
               id="jurisdiction"
               value={jurisdiction}
               onChange={(e) => setJurisdiction(e.target.value)}
               disabled={!industryType}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:border-[var(--color-accent)] dash-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="lp-field disabled:opacity-50 disabled:cursor-not-allowed"
               required
             >
               <option value="" disabled>
@@ -211,7 +181,7 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
                 </option>
               ))}
             </select>
-            <p className="mt-1.5 text-xs dash-text-tertiary">
+            <p className="lp-micro" style={{ marginTop: 6 }}>
               {selectedRegulator
                 ? selectedRegulator.description
                 : 'This sets the rules your content and records are checked against. It cannot be changed later from inside the app.'}
@@ -219,53 +189,50 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium dash-text mb-1.5">
-              Email Address
-            </label>
+            <label htmlFor="email" className="lp-field-label">Work email</label>
             <input
               type="email"
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
-              placeholder="jane@example.com"
+              className="lp-field"
+              placeholder="jane@company.com"
+              autoComplete="email"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium dash-text mb-1.5">
-              Password
-            </label>
+            <label htmlFor="password" className="lp-field-label">Password</label>
             <input
               type="password"
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors"
+              className="lp-field"
               placeholder="••••••••"
+              autoComplete="new-password"
               minLength={6}
               required
             />
-            <p className="text-xs dash-text-tertiary mt-2">Minimum 6 characters</p>
+            <p className="lp-micro" style={{ marginTop: 6 }}>Minimum 6 characters</p>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-behance-blue hover:opacity-90 py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium mt-6 text-white shadow-lg shadow-behance-blue/20"
+            className="lp-btn lp-btn--primary lp-btn--block"
+            style={loading ? { opacity: 0.7 } : undefined}
           >
-            {loading ? 'Creating Account...' : 'Sign Up'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
-        )}
+      )}
 
-        {step === 'verify' && (
+      {step === 'verify' && (
         <form onSubmit={handleVerify} className="space-y-5">
           <div>
-            <label htmlFor="code" className="block text-sm font-medium dash-text mb-1.5">
-              Verification Code
-            </label>
+            <label htmlFor="code" className="lp-field-label">Verification code</label>
             <input
               type="text"
               id="code"
@@ -273,56 +240,37 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               inputMode="numeric"
               autoComplete="one-time-code"
-              className="w-full px-4 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-behance-blue/50 focus:border-behance-blue dash-text placeholder-[var(--color-text-tertiary)] transition-colors text-center text-2xl tracking-[0.5em]"
+              className="lp-field text-center"
+              style={{ fontFamily: 'var(--lp-font-mono)', fontSize: '1.5rem', letterSpacing: '0.4em' }}
               placeholder="000000"
               required
               autoFocus
             />
-            <p className="text-xs dash-text-tertiary mt-2">Enter the 6-digit code from your email</p>
+            <p className="lp-micro" style={{ marginTop: 6 }}>Enter the 6-digit code from your email</p>
           </div>
 
           <button
             type="submit"
             disabled={loading || code.length < 6}
-            className="w-full bg-behance-blue hover:opacity-90 py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium mt-6 text-white shadow-lg shadow-behance-blue/20"
+            className="lp-btn lp-btn--primary lp-btn--block"
+            style={loading || code.length < 6 ? { opacity: 0.6 } : undefined}
           >
-            {loading ? 'Verifying...' : 'Verify & Continue'}
+            {loading ? 'Verifying…' : 'Verify & continue'}
           </button>
 
-          <div className="flex items-center justify-between text-sm pt-2">
+          <div className="flex items-center justify-between text-sm pt-1">
             <button
               type="button"
               onClick={() => { setStep('details'); setError(''); setInfo(''); setCode(''); }}
-              className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+              className="transition hover:opacity-80"
+              style={{ color: 'var(--lp-t3)' }}
             >
               Change details
             </button>
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={loading}
-              className="text-behance-blue hover:text-[var(--color-accent-hover)] font-semibold transition-colors disabled:opacity-50"
-            >
-              Resend code
-            </button>
+            <AuthLink onClick={handleResend}>Resend code</AuthLink>
           </div>
         </form>
-        )}
-
-        {step === 'details' && (
-        <div className="mt-8 text-center">
-          <p className="dash-text-secondary text-sm">
-            Already have an account?{' '}
-            <button
-              onClick={onToggleLogin}
-              className="text-behance-blue hover:text-[var(--color-accent-hover)] font-semibold transition-colors"
-            >
-              Sign In
-            </button>
-          </p>
-        </div>
-        )}
-      </div>
-    </div>
+      )}
+    </AuthShell>
   );
 }

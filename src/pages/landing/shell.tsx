@@ -111,11 +111,14 @@ export function BrandLockup({
    mark and the CTA, so the nav reads as one control rather than a rule
    across the top. */
 export function MarketingNav({
-  links, onHome, onLogin, onCta, ctaLabel,
+  links, onHome, onLogin, onSignup, onCta, ctaLabel,
 }: {
   links: NavLink[];
   onHome: () => void;
   onLogin: () => void;
+  /** Opens the account-creation form. Distinct from onLogin — the two used to
+   *  share one button, so every "sign up" click landed on the sign-in form. */
+  onSignup: () => void;
   onCta: () => void;
   ctaLabel: string;
 }) {
@@ -159,9 +162,19 @@ export function MarketingNav({
           ))}
         </span>
 
-        <span className="hidden md:flex items-center gap-4 shrink-0">
-          <button onClick={onLogin} style={{ fontSize: 14, color: 'rgba(207,222,255,0.86)' }} className="transition hover:opacity-80">
+        <span className="hidden md:flex items-center gap-3 shrink-0">
+          <button onClick={close(onLogin)} style={{ fontSize: 14, color: 'rgba(207,222,255,0.86)' }} className="transition hover:opacity-80">
             Sign In
+          </button>
+          <button
+            onClick={close(onSignup)}
+            className="whitespace-nowrap shrink-0 transition hover:opacity-80"
+            style={{
+              border: '1px solid var(--lp-line-strong)', color: 'var(--lp-paper)',
+              padding: '9px 18px', fontSize: 14, fontWeight: 600, borderRadius: 8,
+            }}
+          >
+            Sign Up
           </button>
           <button
             onClick={close(onCta)}
@@ -202,6 +215,7 @@ export function MarketingNav({
           ))}
           <hr style={{ borderColor: 'var(--lp-line)' }} />
           <button onClick={close(onLogin)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign In</button>
+          <button onClick={close(onSignup)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign Up</button>
           <button onClick={close(onCta)} className="lp-btn lp-btn--primary lp-btn--block">{ctaLabel}</button>
         </div>
       )}
@@ -636,9 +650,23 @@ export function MarketingStyles() {
         background: rgba(255,255,255,.07);
       }
       .lp-field[aria-invalid="true"] { border-color: var(--lp-coral); }
-      /* Native dropdowns ignore inherited colour in most browsers. */
-      select.lp-field option { background: var(--lp-surface); color: var(--lp-t1); }
+      /* Native dropdowns ignore inherited colour in most browsers. The
+         popup is painted by the OS with no page behind it, so this has to
+         be an opaque colour — the translucent surface token rendered as
+         near-white and the options disappeared. */
+      select.lp-field option { background: #0E1D25; color: var(--lp-t1); }
       textarea.lp-field { resize: vertical; min-height: 96px; }
+
+      /* Browsers force their own background on autofilled fields, and
+         index.css pins that to the light app surface. Re-pin it inside
+         .lp-root so an autofilled email does not come back white. */
+      .lp-root input.lp-field:-webkit-autofill,
+      .lp-root input.lp-field:-webkit-autofill:hover,
+      .lp-root input.lp-field:-webkit-autofill:focus {
+        -webkit-text-fill-color: var(--lp-t1) !important;
+        -webkit-box-shadow: 0 0 0 1000px #101E26 inset !important;
+        caret-color: var(--lp-t1);
+      }
 
       .lp-field-label {
         display: block;
