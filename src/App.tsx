@@ -238,7 +238,28 @@ function AppContent() {
     }
   })();
 
-  const [unauthView, setUnauthView] = useState<UnauthView>('landing');
+  /* The marketing nav no longer offers Sign In — the public site is a
+     lead-generation site, not a product front door. Existing users get in at
+     /portal, which netlify.toml's SPA fallback already serves. Without this
+     the sign-in form would be unreachable: unauthView is state, not a route,
+     so removing the button would otherwise remove the only way to it.
+
+     /login stays as a silent alias. It is not advertised anywhere, but it is
+     the first path anyone guesses, and it may already have been shared — a
+     404-looking landing page for someone trying to sign in is not worth the
+     tidiness of retiring it. */
+  const SIGN_IN_PATHS = ['/portal', '/login'];
+
+  const wantsLogin = (() => {
+    try {
+      const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+      return SIGN_IN_PATHS.includes(path);
+    } catch {
+      return false;
+    }
+  })();
+
+  const [unauthView, setUnauthView] = useState<UnauthView>(wantsLogin ? 'login' : 'landing');
   const [currentPage, setCurrentPage] = useRoutePersistence<PageId>('dashboard', isValidPageId);
   const [currentPolicyId, setCurrentPolicyId] = useState<string | null>(null);
   const [currentVendorId, setCurrentVendorId] = useState<string | null>(null);
@@ -414,7 +435,6 @@ function AppContent() {
     if (unauthView === 'platform') {
       return (
         <PlatformPage
-          onNavigateToLogin={() => setUnauthView('login')}
           onRequestInfo={() => setUnauthView('contact')}
           onNavigateToPage={goToMarketingPage}
         />
@@ -424,7 +444,6 @@ function AppContent() {
     if (unauthView === 'who') {
       return (
         <WhoItsForPage
-          onNavigateToLogin={() => setUnauthView('login')}
           onRequestInfo={() => setUnauthView('contact')}
           onNavigateToPage={goToMarketingPage}
         />
@@ -434,7 +453,6 @@ function AppContent() {
     if (unauthView === 'about') {
       return (
         <AboutPage
-          onNavigateToLogin={() => setUnauthView('login')}
           onRequestInfo={() => setUnauthView('contact')}
           onNavigateToPage={goToMarketingPage}
         />
@@ -444,7 +462,6 @@ function AppContent() {
     if (unauthView === 'contact') {
       return (
         <ContactPage
-          onNavigateToLogin={() => setUnauthView('login')}
           onRequestInfo={() => setUnauthView('contact')}
           onNavigateToPage={goToMarketingPage}
         />
@@ -453,7 +470,6 @@ function AppContent() {
 
     return (
       <LandingPage
-        onNavigateToLogin={() => setUnauthView('login')}
         onRequestInfo={() => setUnauthView('contact')}
         onNavigateToPage={goToMarketingPage}
       />

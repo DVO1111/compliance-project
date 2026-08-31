@@ -156,12 +156,11 @@ const CAPABILITIES: {
 const ANCHORS = ['NAFDAC GMP', 'SON MANCAP & NIS', 'ISO 22000', 'PCN Regulations', 'HACCP'];
 
 interface LandingPageProps {
-  onNavigateToLogin: () => void;
   onRequestInfo: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
 
-export default function LandingPage({ onNavigateToLogin, onRequestInfo, onNavigateToPage }: LandingPageProps) {
+export default function LandingPage({ onRequestInfo, onNavigateToPage }: LandingPageProps) {
   useScrollToTopOnMount();
   const [email, setEmail] = useState('');
   const { send, submitted, sending, error: submitError } = useWaitlistSubmit('home');
@@ -186,7 +185,6 @@ export default function LandingPage({ onNavigateToLogin, onRequestInfo, onNaviga
 
       <MarketingNav
         onHome={() => scrollToId('top')}
-        onLogin={onNavigateToLogin}
         onRequestInfo={onRequestInfo}
         onCta={() => requestAccess('demo')}
         ctaLabel="Book a Factory Demo"

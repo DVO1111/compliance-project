@@ -34,7 +34,6 @@ const REQUIRED: { name: FieldName; label: string; type?: string; autoComplete?: 
 ];
 
 interface ContactPageProps {
-  onNavigateToLogin: () => void;
   onRequestInfo: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
@@ -54,7 +53,7 @@ interface ContactPageProps {
  * that call confirms delivery, so nobody is told their request was received
  * when nothing arrived.
  */
-export default function ContactPage({ onNavigateToLogin, onRequestInfo, onNavigateToPage }: ContactPageProps) {
+export default function ContactPage({ onRequestInfo, onNavigateToPage }: ContactPageProps) {
   useScrollToTopOnMount();
 
   const [values, setValues] = useState<Record<FieldName | 'notes', string>>({
@@ -122,7 +121,6 @@ export default function ContactPage({ onNavigateToLogin, onRequestInfo, onNaviga
 
       <MarketingNav
         onHome={() => onNavigateToPage('home')}
-        onLogin={onNavigateToLogin}
         onRequestInfo={() => scrollToId('waitlist')}
         onCta={() => onNavigateToPage('contact')}
         ctaLabel="Join the Waitlist"

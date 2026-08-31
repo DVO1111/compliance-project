@@ -78,12 +78,16 @@ export interface NavLink {
 }
 
 /* ── Brand ────────────────────────────────────────
-   The supplied artwork, two cuts: the on-dark lockup for the site itself,
-   and the light one for the paper surfaces (the batch record in the hero),
-   where the navy wordmark is legible. Raster, as supplied — swap both for
-   SVG when vector versions exist and nothing else needs to change. */
-export const LOGO_ON_DARK = '/criateur-logo-ondark.png';
-export const LOGO_LIGHT = '/criateur-logo-light.png';
+   The primary lockup from the brand asset kit, as vector. Two cuts, matching
+   the ground each sits on: the reverse cut (green mark, white wordmark) for
+   the dark site, and the full-colour cut (green mark, navy wordmark) for the
+   paper surfaces — the batch record in the hero — where white would vanish.
+
+   Every consumer goes through these two constants: the nav lockup and footer
+   below, the auth pages, and the hero mockup. Changing a path here changes
+   all of them. */
+export const LOGO_ON_DARK = '/criateur-logo-ondark.svg';
+export const LOGO_LIGHT = '/criateur-logo-light.svg';
 
 export function BrandLockup({
   onClick, height = 40,
@@ -111,15 +115,14 @@ export function BrandLockup({
    mark and the CTA, so the nav reads as one control rather than a rule
    across the top. */
 export function MarketingNav({
-  links, onHome, onLogin, onRequestInfo, onCta, ctaLabel,
+  links, onHome, onRequestInfo, onCta, ctaLabel,
 }: {
   links: NavLink[];
   onHome: () => void;
-  onLogin: () => void;
-  /** Sends someone to the contact form. Account creation is not open to the
-   *  public while the product is in pilot, so this sits where a "Sign Up"
-   *  button normally would: the way in is a conversation, not a signup form.
-   *  Existing users still reach the product through Sign In. */
+  /** Sends someone to the contact form. The nav carries no account controls
+   *  at all now — no Sign Up, no Sign In — because the public site is a
+   *  lead-generation site rather than a product front door. Existing users
+   *  sign in at /login, which App.tsx routes on directly. */
   onRequestInfo: () => void;
   onCta: () => void;
   ctaLabel: string;
@@ -165,9 +168,6 @@ export function MarketingNav({
         </span>
 
         <span className="hidden md:flex items-center gap-3 shrink-0">
-          <button onClick={close(onLogin)} style={{ fontSize: 14, color: 'rgba(207,222,255,0.86)' }} className="transition hover:opacity-80">
-            Sign In
-          </button>
           <button
             onClick={close(onRequestInfo)}
             className="whitespace-nowrap shrink-0 transition hover:opacity-80"
@@ -216,7 +216,6 @@ export function MarketingNav({
             </button>
           ))}
           <hr style={{ borderColor: 'var(--lp-line)' }} />
-          <button onClick={close(onLogin)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign In</button>
           <button onClick={close(onRequestInfo)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Request Info</button>
           <button onClick={close(onCta)} className="lp-btn lp-btn--primary lp-btn--block">{ctaLabel}</button>
         </div>

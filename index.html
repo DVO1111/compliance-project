@@ -5,9 +5,22 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://images.unsplash.com; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://*.ingest.de.sentry.io; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self';">
-  <!-- Previously pointed at the Vite scaffold icon, which was never shipped,
-       so the tab fell back to Chrome's blank globe. -->
-  <link rel="icon" type="image/png" href="/criateur-logo-ondark.png" />
+  <!-- The brand icon cut from the supplied asset kit (LOGO/ICON), not the
+       full lockup: at 16px the wordmark is an illegible smear. The green cut
+       is used because it is the only one that stays readable on both a light
+       and a dark tab strip — the full-colour cut's navy "Cr" disappears
+       against dark chrome, and the reverse cut's white "Cr" disappears
+       against light.
+
+       ICO first, SVG second: browsers that understand the SVG prefer the
+       later declaration and get a mark that stays sharp at any size, while
+       older ones fall back to the ICO's hinted 16/32/48 frames. -->
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
+  <!-- Reverse cut on the brand ground: iOS composites onto black otherwise. -->
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#08131A" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <title>Criateur — The operating system for regulated manufacturing</title>

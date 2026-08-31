@@ -101,7 +101,6 @@ const FOUNDATIONS = [
 ] as const;
 
 interface PlatformPageProps {
-  onNavigateToLogin: () => void;
   onRequestInfo: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
@@ -115,7 +114,7 @@ interface PlatformPageProps {
  * booking system or a contact page behind it yet, so they share one form and
  * differ only in the intent recorded against the address.
  */
-export default function PlatformPage({ onNavigateToLogin, onRequestInfo, onNavigateToPage }: PlatformPageProps) {
+export default function PlatformPage({ onRequestInfo, onNavigateToPage }: PlatformPageProps) {
   useScrollToTopOnMount();
   const [email, setEmail] = useState('');
   const { send, submitted, sending, error: submitError } = useWaitlistSubmit('platform');
@@ -146,7 +145,6 @@ export default function PlatformPage({ onNavigateToLogin, onRequestInfo, onNavig
 
       <MarketingNav
         onHome={() => onNavigateToPage('home')}
-        onLogin={onNavigateToLogin}
         onRequestInfo={onRequestInfo}
         onCta={() => requestAccess('walkthrough')}
         ctaLabel="Book a Walkthrough"
