@@ -7,13 +7,14 @@ import {
 import { useWaitlistSubmit } from './landing/useWaitlistSubmit';
 
 /* ── Direct channels ──────────────────────────────
-   The copy deck left both addresses as "[email address]". The general one is
-   now known — the landing-page design and the in-app support form both use
-   it — so it is filled in. No address has been confirmed for partnerships, so
-   that one stays null and the page says so rather than guessing. */
+   The copy deck left both addresses as "[email address]". Both are filled in
+   now. Each of these must exist as a real mailbox or alias on the criateur.com
+   domain before this page ships — a published address that bounces is worse
+   than the "Via the form" fallback this replaced. A null email falls back to
+   that wording, so unset one rather than leaving a dead address here. */
 const CHANNELS: { label: string; email: string | null }[] = [
   { label: 'General enquiries', email: 'hello@criateur.com' },
-  { label: 'Partnerships & pilots', email: null },
+  { label: 'Partnerships & pilots', email: 'partnerships@criateur.com' },
 ];
 
 const INDUSTRIES = [
@@ -34,7 +35,7 @@ const REQUIRED: { name: FieldName; label: string; type?: string; autoComplete?: 
 
 interface ContactPageProps {
   onNavigateToLogin: () => void;
-  onNavigateToSignup: () => void;
+  onRequestInfo: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
 
@@ -45,11 +46,15 @@ interface ContactPageProps {
  * appears to be missing from the copy, so this is read as a numbering slip
  * and the page follows the three blocks that exist.
  *
- * Submissions are written to public.waitlist_signups. The success state is
- * shown only after the insert actually succeeds, so nobody is told they are
- * on the list when the row never landed.
+ * This is also the Request Info form — the nav's Request Info button lands
+ * here rather than on a second form of its own.
+ *
+ * Submissions go to the request-info Edge Function, which stores the lead and
+ * emails it to the partnerships inbox. The success state is shown only after
+ * that call confirms delivery, so nobody is told their request was received
+ * when nothing arrived.
  */
-export default function ContactPage({ onNavigateToLogin, onNavigateToSignup, onNavigateToPage }: ContactPageProps) {
+export default function ContactPage({ onNavigateToLogin, onRequestInfo, onNavigateToPage }: ContactPageProps) {
   useScrollToTopOnMount();
 
   const [values, setValues] = useState<Record<FieldName | 'notes', string>>({
@@ -118,7 +123,7 @@ export default function ContactPage({ onNavigateToLogin, onNavigateToSignup, onN
       <MarketingNav
         onHome={() => onNavigateToPage('home')}
         onLogin={onNavigateToLogin}
-        onSignup={onNavigateToSignup}
+        onRequestInfo={() => scrollToId('waitlist')}
         onCta={() => onNavigateToPage('contact')}
         ctaLabel="Join the Waitlist"
         links={[
@@ -289,12 +294,14 @@ export default function ContactPage({ onNavigateToLogin, onNavigateToSignup, onN
               ) : (
                 <div role="status">
                   <CheckCircle2 className="w-8 h-8 mb-4" style={{ color: 'var(--lp-mint)' }} />
-                  <h3 className="lp-h3" style={{ color: 'var(--lp-mint)' }}>You&rsquo;re on the list.</h3>
+                  <h3 className="lp-h3" style={{ color: 'var(--lp-mint)' }}>Request received.</h3>
+                  {/* Only rendered once request-info has confirmed the lead
+                      reached the inbox or the table — never on a failed call.
+                      The old copy promised a confirmation email that nothing
+                      sends, so it is not claimed here. */}
                   <p className="lp-body mt-3">
-                    We&rsquo;ve received your facility&rsquo;s information. To help us prepare
-                    for your onboarding, look out for our confirmation email — you can reply
-                    to it directly with your current factory setup, or use the link inside to
-                    book a brief introductory call with our product leads.
+                    Thanks — we&rsquo;ve received your request. Our team will be in touch
+                    shortly.
                   </p>
                 </div>
               )}

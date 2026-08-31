@@ -383,6 +383,15 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
 
+# Public lead capture for the marketing site. verify_jwt is false because the
+# visitors submitting it are anonymous — this is the only unauthenticated
+# function in the project. It validates and rate-limits its own input.
+[functions.request-info]
+enabled = true
+verify_jwt = false
+import_map = "./functions/request-info/deno.json"
+entrypoint = "./functions/request-info/index.ts"
+
 [functions.notify]
 enabled = true
 verify_jwt = true

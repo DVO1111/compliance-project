@@ -3,11 +3,20 @@ import { useAuth } from '../../contexts/AuthContext';
 import AuthShell, { AuthLink, AuthNotice } from './AuthShell';
 
 interface LoginPageProps {
+  /** Kept for the invite flow and for when self-serve signup opens; the
+   *  public sign-in screen no longer offers it. */
   onToggleSignup: () => void;
+  /** Sends someone who has no account to the contact form instead. */
+  onRequestAccess: () => void;
   onBackToLanding?: () => void;
 }
 
-export default function LoginPage({ onToggleSignup, onBackToLanding }: LoginPageProps) {
+/**
+ * No "create an account" link while the product is in pilot. Accounts are
+ * provisioned by invitation, and an invited user reaches the signup form by
+ * their own invite route, so closing this one strands nobody.
+ */
+export default function LoginPage({ onRequestAccess, onBackToLanding }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,8 +44,8 @@ export default function LoginPage({ onToggleSignup, onBackToLanding }: LoginPage
       onBackToLanding={onBackToLanding}
       footer={
         <>
-          Don&rsquo;t have an account?{' '}
-          <AuthLink onClick={onToggleSignup}>Sign up</AuthLink>
+          Need access?{' '}
+          <AuthLink onClick={onRequestAccess}>Request info</AuthLink>
         </>
       }
     >

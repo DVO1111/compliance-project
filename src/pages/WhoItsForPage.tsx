@@ -80,12 +80,12 @@ const PERSONAS = [
 
 interface WhoItsForPageProps {
   onNavigateToLogin: () => void;
-  onNavigateToSignup: () => void;
+  onRequestInfo: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
 
 /** Page 3 of the marketing deck — Who It's For. */
-export default function WhoItsForPage({ onNavigateToLogin, onNavigateToSignup, onNavigateToPage }: WhoItsForPageProps) {
+export default function WhoItsForPage({ onNavigateToLogin, onRequestInfo, onNavigateToPage }: WhoItsForPageProps) {
   useScrollToTopOnMount();
   const reduceMotion = useReducedMotion();
 
@@ -133,7 +133,7 @@ export default function WhoItsForPage({ onNavigateToLogin, onNavigateToSignup, o
       <MarketingNav
         onHome={() => onNavigateToPage('home')}
         onLogin={onNavigateToLogin}
-        onSignup={onNavigateToSignup}
+        onRequestInfo={onRequestInfo}
         onCta={() => requestAccess('waitlist')}
         ctaLabel="Join the Waitlist"
         links={[

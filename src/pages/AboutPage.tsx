@@ -34,7 +34,7 @@ const PRINCIPLES = [
 
 interface AboutPageProps {
   onNavigateToLogin: () => void;
-  onNavigateToSignup: () => void;
+  onRequestInfo: () => void;
   onNavigateToPage: (page: MarketingPage) => void;
 }
 
@@ -48,7 +48,7 @@ interface AboutPageProps {
  * and the copy is explicit that this is what the engine is *built to
  * support*, not what it supports today.
  */
-export default function AboutPage({ onNavigateToLogin, onNavigateToSignup, onNavigateToPage }: AboutPageProps) {
+export default function AboutPage({ onNavigateToLogin, onRequestInfo, onNavigateToPage }: AboutPageProps) {
   useScrollToTopOnMount();
 
   const [email, setEmail] = useState('');
@@ -80,7 +80,7 @@ export default function AboutPage({ onNavigateToLogin, onNavigateToSignup, onNav
       <MarketingNav
         onHome={() => onNavigateToPage('home')}
         onLogin={onNavigateToLogin}
-        onSignup={onNavigateToSignup}
+        onRequestInfo={onRequestInfo}
         onCta={() => requestAccess('waitlist')}
         ctaLabel="Join the Waitlist"
         links={[

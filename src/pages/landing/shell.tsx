@@ -111,14 +111,16 @@ export function BrandLockup({
    mark and the CTA, so the nav reads as one control rather than a rule
    across the top. */
 export function MarketingNav({
-  links, onHome, onLogin, onSignup, onCta, ctaLabel,
+  links, onHome, onLogin, onRequestInfo, onCta, ctaLabel,
 }: {
   links: NavLink[];
   onHome: () => void;
   onLogin: () => void;
-  /** Opens the account-creation form. Distinct from onLogin — the two used to
-   *  share one button, so every "sign up" click landed on the sign-in form. */
-  onSignup: () => void;
+  /** Sends someone to the contact form. Account creation is not open to the
+   *  public while the product is in pilot, so this sits where a "Sign Up"
+   *  button normally would: the way in is a conversation, not a signup form.
+   *  Existing users still reach the product through Sign In. */
+  onRequestInfo: () => void;
   onCta: () => void;
   ctaLabel: string;
 }) {
@@ -167,14 +169,14 @@ export function MarketingNav({
             Sign In
           </button>
           <button
-            onClick={close(onSignup)}
+            onClick={close(onRequestInfo)}
             className="whitespace-nowrap shrink-0 transition hover:opacity-80"
             style={{
               border: '1px solid var(--lp-line-strong)', color: 'var(--lp-paper)',
               padding: '9px 18px', fontSize: 14, fontWeight: 600, borderRadius: 8,
             }}
           >
-            Sign Up
+            Request Info
           </button>
           <button
             onClick={close(onCta)}
@@ -215,7 +217,7 @@ export function MarketingNav({
           ))}
           <hr style={{ borderColor: 'var(--lp-line)' }} />
           <button onClick={close(onLogin)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign In</button>
-          <button onClick={close(onSignup)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign Up</button>
+          <button onClick={close(onRequestInfo)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Request Info</button>
           <button onClick={close(onCta)} className="lp-btn lp-btn--primary lp-btn--block">{ctaLabel}</button>
         </div>
       )}
