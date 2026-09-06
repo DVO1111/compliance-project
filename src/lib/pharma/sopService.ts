@@ -1,6 +1,20 @@
+/**
+ * SOP / Document Control — now backed by the Lifecycle Engine (D03).
+ *
+ * `sop_documents.status` is a DERIVED read model: the database keeps it in
+ * step with entity_current_state and rejects direct writes.
+ *
+ * `sop_versions` is deliberately NOT a lifecycle entity — the engine
+ * models the document family. Version `effective`/`superseded` are paired
+ * by `publish_sop_version()` inside one transaction, which is where the
+ * "one effective version per document" rule now lives.
+ */
+
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { transition as lifecycleTransition, getAvailableActions } from '../lifecycleService';
+import type { LifecycleAction } from '../lifecycleService';
 
 export type SopStatus = 'draft' | 'in_review' | 'approved' | 'effective' | 'superseded' | 'obsolete';
 export type SopVersionStatus = 'draft' | 'in_review' | 'approved' | 'effective' | 'superseded';
@@ -93,7 +107,7 @@ export async function createSopDocument(
       department: sop.department,
       category: sop.category,
       current_version: '1.0',
-      status: 'draft',
+      // status omitted: the lifecycle init trigger derives it
       owner_id: userId,
       review_due_date: sop.review_due_date ?? null,
     })
@@ -133,44 +147,72 @@ export async function listSopVersions(sopId: string): Promise<SopVersion[]> {
   return data ?? [];
 }
 
+/**
+ * Publish a version of an SOP.
+ *
+ * This used to be three independent PostgREST calls — supersede the old
+ * version, make the new one effective, promote the parent — with nothing
+ * shared between them. A failure part-way left the document with no
+ * effective version, or with a stale current_version. The whole operation
+ * now happens inside `publish_sop_version()`, so it is one transaction:
+ * all of it commits or none of it does.
+ *
+ * The parent document's state moves through the lifecycle engine inside
+ * that function; `sop_documents.status` is derived and cannot be written
+ * from here. `approved_by` is taken from the session by the database, not
+ * from the argument below, so a publish is attributed to whoever actually
+ * performed it.
+ */
 export async function publishSopVersion(
   versionId: string,
   sopId: string,
   companyId: string,
   userId: string
 ): Promise<void> {
-  // Supersede previous effective version
-  await (supabase as any)
-    .from('sop_versions')
-    .update({ status: 'superseded' })
-    .eq('sop_id', sopId)
-    .eq('status', 'effective');
-
-  const now = new Date().toISOString();
-  const { data: ver, error } = await (supabase as any)
-    .from('sop_versions')
-    .update({ status: 'effective', approved_by: userId, approved_at: now, effective_date: now.split('T')[0] })
-    .eq('id', versionId)
-    .select('version_number')
-    .single();
+  const { data, error } = await (supabase as any).rpc('publish_sop_version', {
+    p_version_id: versionId,
+    p_sop_id: sopId,
+    p_company_id: companyId,
+  });
 
   if (error) throw error;
 
-  // Promote parent SOP to effective
-  await (supabase as any)
-    .from('sop_documents')
-    .update({ status: 'effective', current_version: ver.version_number, effective_date: now.split('T')[0] })
-    .eq('id', sopId);
-
   await recordAuditEvent({
-    userId,
+    // the publisher the DATABASE resolved, not the caller's argument
+    userId: data?.actor_id ?? '',
     companyId,
     action: 'publish_sop_version',
     entityType: 'sop_document',
     entityId: sopId,
-    metadata: { version_id: versionId, version_number: ver.version_number },
+    metadata: {
+      version_id: versionId,
+      version_number: data?.version_number,
+      superseded_count: data?.superseded_count,
+      parent_transitioned: data?.parent_transitioned,
+    },
     captureEvidence: false,
   }).catch(e => logger.error('Audit failed for publish_sop_version:', e));
+}
+
+/** Move an SOP document through its lifecycle (outside the publish path). */
+export async function transitionSopDocument(
+  sopId: string,
+  companyId: string,
+  newStatus: SopStatus,
+): Promise<void> {
+  const result = await lifecycleTransition({
+    entityType: 'sop_document',
+    entityId: sopId,
+    actionKey: `set_${newStatus}`,
+    companyId,
+    metadata: { requested_status: newStatus },
+  });
+  if (!result.ok) throw new Error(result.message);
+}
+
+/** Actions the engine will currently allow on this SOP, for the UI. */
+export async function getSopActions(sopId: string, companyId: string): Promise<LifecycleAction[]> {
+  return getAvailableActions('sop_document', sopId, companyId);
 }
 
 export async function acknowledgeSopVersion(versionId: string, userId: string): Promise<void> {

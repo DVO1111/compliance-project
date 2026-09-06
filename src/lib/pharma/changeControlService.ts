@@ -1,6 +1,17 @@
+/**
+ * Change Control — now backed by the Lifecycle Engine (Deliverable 03).
+ *
+ * `change_controls.status` is a DERIVED read model. The database keeps it
+ * in step with entity_current_state and rejects any direct write, so
+ * reads below are unchanged while the engine owns the workflow. The only
+ * way to move a Change Control is `transitionChangeControl()`.
+ */
+
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { transition as lifecycleTransition, getAvailableActions } from '../lifecycleService';
+import type { LifecycleAction } from '../lifecycleService';
 
 export type ChangeControlStatus =
   | 'draft'
@@ -75,9 +86,12 @@ export async function createChangeControl(
   const seq = String((count ?? 0) + 1).padStart(4, '0');
   const changeNumber = `CC-${year}-${seq}`;
 
+  // `status` is not set here. A trigger initialises the record's lifecycle
+  // on insert and derives status from it, so naming a status would either
+  // be redundant or a lie the database immediately corrects.
   const { data, error } = await (supabase as any)
     .from('change_controls')
-    .insert({ ...cc, company_id: companyId, change_number: changeNumber, created_by: userId, status: 'draft' })
+    .insert({ ...cc, company_id: companyId, change_number: changeNumber, created_by: userId })
     .select()
     .single();
 
@@ -96,38 +110,94 @@ export async function createChangeControl(
   return data;
 }
 
-export async function updateChangeControlStatus(
+/** Actions the engine will currently allow on this record, for the UI. */
+export async function getChangeControlActions(
+  id: string,
+  companyId: string,
+): Promise<LifecycleAction[]> {
+  return getAvailableActions('change_control', id, companyId);
+}
+
+/**
+ * Move a Change Control to a new state.
+ *
+ * The state change goes through `lifecycle_transition`, which is the
+ * authoritative path and the security boundary: tenancy, actor identity,
+ * locked/terminal states and the mandatory-comment rule are all enforced
+ * in the database. `status` is not written here — the database derives it.
+ *
+ * The seeded graph is any-to-any, matching what the table permitted
+ * before this module was adopted, so no previously-possible move has
+ * become impossible. Moving into `rejected` now requires a comment
+ * server-side; previously that was enforced only by the browser.
+ *
+ * Returns nothing on success and throws on rejection, preserving the
+ * contract the UI already expects from this function.
+ */
+export async function transitionChangeControl(
   id: string,
   companyId: string,
   userId: string,
   newStatus: ChangeControlStatus,
   extra?: { rejectedReason?: string; impactAssessment?: string; effectiveDate?: string }
 ): Promise<void> {
-  const updates: any = { status: newStatus };
+  const result = await lifecycleTransition({
+    entityType: 'change_control',
+    entityId: id,
+    actionKey: `set_${newStatus}`,
+    companyId,
+    // the reason IS the comment the engine requires on the rejected path
+    comment: newStatus === 'rejected' ? (extra?.rejectedReason ?? undefined) : undefined,
+    metadata: { requested_status: newStatus },
+  });
 
-  if (newStatus === 'approved') { updates.approved_by = userId; updates.approved_at = new Date().toISOString(); }
+  if (!result.ok) throw new Error(result.message);
+
+  // The actor the DATABASE resolved from the session. Everything below
+  // attributes to this, never to the `userId` argument: the engine already
+  // refuses to record a transition against a user other than the caller,
+  // and the surrounding metadata should not be weaker than the history it
+  // describes.
+  const actorId = result.data.actor_id;
+
+  // Side-effect columns only — never `status`. These are attributes of the
+  // record, not a second copy of its state, so writing them here is not a
+  // dual write. Deliberately after the transition: if the engine refuses
+  // the move, none of this should be recorded.
+  const updates: Record<string, unknown> = {};
+  if (newStatus === 'approved') { updates.approved_by = actorId; updates.approved_at = new Date().toISOString(); }
   if (newStatus === 'rejected') updates.rejected_reason = extra?.rejectedReason ?? null;
   if (extra?.impactAssessment) updates.impact_assessment = extra.impactAssessment;
   if (extra?.effectiveDate) updates.effective_date = extra.effectiveDate;
 
-  const { error } = await (supabase as any)
-    .from('change_controls')
-    .update(updates)
-    .eq('id', id)
-    .eq('company_id', companyId);
-
-  if (error) throw error;
+  if (Object.keys(updates).length > 0) {
+    const { error } = await (supabase as any)
+      .from('change_controls')
+      .update(updates)
+      .eq('id', id)
+      .eq('company_id', companyId);
+    // the state has already moved and is recorded in lifecycle history;
+    // failing to stamp an attribute must not be reported as a failed move
+    if (error) logger.error('change_control attribute update failed after transition:', error);
+  }
 
   await recordAuditEvent({
-    userId,
+    userId: actorId ?? '',
     companyId,
     action: `change_control_${newStatus}`,
     entityType: 'change_control',
     entityId: id,
-    metadata: { new_status: newStatus, ...extra },
+    metadata: { new_status: newStatus, history_id: result.data.history_id, ...extra },
     captureEvidence: false,
   }).catch(e => logger.error('Audit failed for change_control status update:', e));
 }
+
+/**
+ * @deprecated Renamed to `transitionChangeControl`. Kept so no call site
+ * silently keeps a direct-write mental model; the implementation is the
+ * engine path and writing `status` directly is rejected by the database.
+ */
+export const updateChangeControlStatus = transitionChangeControl;
 
 export const CC_STATUS_LABELS: Record<ChangeControlStatus, string> = {
   draft: 'Draft',

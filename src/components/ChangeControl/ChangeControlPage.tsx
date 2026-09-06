@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   listChangeControls,
   createChangeControl,
-  updateChangeControlStatus,
+  transitionChangeControl,
   ChangeControl,
   ChangeControlStatus,
   ChangeType,
@@ -152,7 +152,7 @@ function DetailModal({ cc, companyId, userId, onClose, onAction }: {
     if (!next) return;
     setActionLoading(true);
     try {
-      await updateChangeControlStatus(cc.id, companyId, userId, next);
+      await transitionChangeControl(cc.id, companyId, userId, next);
       onAction();
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(false); }
@@ -163,7 +163,7 @@ function DetailModal({ cc, companyId, userId, onClose, onAction }: {
     if (!reason) return;
     setActionLoading(true);
     try {
-      await updateChangeControlStatus(cc.id, companyId, userId, 'rejected', { rejectedReason: reason });
+      await transitionChangeControl(cc.id, companyId, userId, 'rejected', { rejectedReason: reason });
       onAction();
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(false); }
@@ -316,7 +316,7 @@ export default function ChangeControlPage() {
     if (!next) return;
     setActionLoading(cc.id);
     try {
-      await updateChangeControlStatus(cc.id, companyId, userId, next);
+      await transitionChangeControl(cc.id, companyId, userId, next);
       await load();
     } catch (e: any) {
       alert(e.message);
@@ -330,7 +330,7 @@ export default function ChangeControlPage() {
     if (!reason) return;
     setActionLoading(cc.id);
     try {
-      await updateChangeControlStatus(cc.id, companyId, userId, 'rejected', { rejectedReason: reason });
+      await transitionChangeControl(cc.id, companyId, userId, 'rejected', { rejectedReason: reason });
       await load();
     } catch (e: any) {
       alert(e.message);

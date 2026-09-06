@@ -309,9 +309,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (profileError && (profileError as any).code !== '23505') throw profileError;
       } else {
-        // ── Normal signup path: create or join company ──
-        // 3) Get or create the company id from the organization/company name
-        const { data: companyId, error: companyError } = await (supabase as any).rpc('get_or_create_company', {
+        // ── Normal signup path: create the company ──
+        // 3) Create the company. This deliberately does NOT join an
+        //    existing company that happens to share the name: matching by
+        //    name used to make the caller its owner, which meant typing a
+        //    customer's company name here took over their tenant. A name
+        //    is a label, not a credential. Joining an existing company
+        //    happens only by invite.
+        const { data: companyId, error: companyError } = await (supabase as any).rpc('create_company', {
           p_name: organization,
         });
 
@@ -334,16 +339,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (profileError) throw profileError;
 
-        // 5) Register the founding user as owner in company_members
-        //    Use a real upsert (not ignoreDuplicates) so the role is always
-        //    set to 'owner' even if get_or_create_company already inserted a row.
-        await (supabase as any).from('company_members').upsert({
-          company_id: companyId,
-          user_id: userId,
-          role: 'owner',
-          status: 'active',
-          joined_at: new Date().toISOString(),
-        }, { onConflict: 'company_id,user_id' });
+        // create_company() already registered the caller as owner inside
+        // its own transaction. The client-side upsert that used to sit
+        // here was redundant, and the direct INSERT privilege it relied on
+        // has been revoked — anyone could otherwise write themselves into
+        // any company, which defeated tenancy everywhere.
       }
 
       // IMPORTANT: load the profile immediately so onboarding shows consistently

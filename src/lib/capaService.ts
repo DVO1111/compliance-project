@@ -1,6 +1,21 @@
+/**
+ * CAPA — now backed by the Lifecycle Engine (Deliverable 03).
+ *
+ * `capa_records.status` is a DERIVED read model: the database keeps it in
+ * step with entity_current_state and rejects direct writes, so every read
+ * below is unchanged. The only way to move a CAPA is
+ * `transitionCapa()`.
+ *
+ * `overdue` remains in the type because it remains in the lifecycle
+ * definition, but nothing writes it and no UI offers it. Overdue
+ * reporting is derived from `due_date`, exactly as before.
+ */
+
 import { supabase } from './supabase';
 import { logger } from './logger';
 import { recordAuditEvent } from './auditService';
+import { transition as lifecycleTransition, getAvailableActions } from './lifecycleService';
+import type { LifecycleAction } from './lifecycleService';
 
 export type CapaSource = 'audit_finding' | 'compliance_failure' | 'near_miss' | 'customer_complaint' | 'regulatory_action' | 'internal_review';
 export type CapaType = 'corrective' | 'preventive' | 'both';
@@ -33,7 +48,7 @@ export async function createCapa(companyId: string, userId: string, c: { title: 
   const rand = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
   const { data, error } = await (supabase as any).from('capa_records').insert({
     company_id: companyId, capa_number: `CAPA-${year}-${rand}`, title: c.title, description: c.description,
-    source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium', status: 'open',
+    source: c.source, capa_type: c.capa_type, priority: c.priority || 'medium',
     root_cause: c.root_cause || null, due_date: c.due_date || null, owner_name: c.owner_name || null, created_by: userId,
     control_id: c.controlId || null, control_code: c.controlCode || null,
     source_risk_id: c.sourceRiskId || null,
@@ -56,14 +71,46 @@ export async function hasPendingCapaForControl(companyId: string, controlId: str
   return (data ?? []).length > 0;
 }
 
-export async function updateCapaStatus(capaId: string, status: CapaStatus, companyId: string, userId: string): Promise<boolean> {
-  const updates: any = { status };
-  if (status === 'closed') updates.closed_at = new Date().toISOString();
-  const { error } = await (supabase as any).from('capa_records').update(updates).eq('id', capaId);
-  if (error) { logger.error('updateCapaStatus:', error); return false; }
-  try { await recordAuditEvent({ userId, companyId, action: 'capa.status_changed', entityType: 'capa', entityId: capaId, metadata: { status }, captureEvidence: false }); } catch { /* non-blocking */ }
+/** Actions the engine will currently allow on this CAPA, for the UI. */
+export async function getCapaActions(capaId: string, companyId: string): Promise<LifecycleAction[]> {
+  return getAvailableActions('capa_record', capaId, companyId);
+}
+
+/**
+ * Move a CAPA to a new state through the Lifecycle Engine.
+ *
+ * `status` and `closed_at` are not written here — the database derives
+ * both from the new state. The seeded graph is any-to-any, matching what
+ * the table permitted before adoption, so no move that used to work has
+ * become impossible.
+ *
+ * Returns false rather than throwing, preserving the contract the CAPA
+ * page already expects from this function.
+ */
+export async function transitionCapa(capaId: string, status: CapaStatus, companyId: string, userId: string): Promise<boolean> {
+  const result = await lifecycleTransition({
+    entityType: 'capa_record',
+    entityId: capaId,
+    actionKey: `set_${status}`,
+    companyId,
+    metadata: { requested_status: status },
+  });
+
+  if (!result.ok) { logger.error('transitionCapa rejected:', result.code, result.message); return false; }
+
+  // attribute to the actor the DATABASE resolved, not the caller's argument
+  const actorId = result.data.actor_id;
+
+  try { await recordAuditEvent({ userId: actorId ?? '', companyId, action: 'capa.status_changed', entityType: 'capa', entityId: capaId, metadata: { status, history_id: result.data.history_id }, captureEvidence: false }); } catch { /* non-blocking */ }
   return true;
 }
+
+/**
+ * @deprecated Renamed to `transitionCapa`. Retained so no caller keeps a
+ * direct-write mental model; writing `status` directly is rejected by the
+ * database.
+ */
+export const updateCapaStatus = transitionCapa;
 
 export async function addCapaAction(capaId: string, a: { action_type: string; description: string; assigned_to?: string; due_date?: string }, companyId: string, userId: string): Promise<boolean> {
   const { data, error } = await (supabase as any).from('capa_actions').insert({ capa_id: capaId, action_type: a.action_type, description: a.description, assigned_to: a.assigned_to || null, status: 'pending', due_date: a.due_date || null }).select().single();

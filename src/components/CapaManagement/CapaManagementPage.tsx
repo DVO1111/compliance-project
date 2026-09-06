@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getCapas, createCapa, updateCapaStatus, addCapaAction, completeCapaAction, CAPA_SOURCES, type CapaRecord, type CapaSource, type CapaType, type CapaStatus } from '../../lib/capaService';
+import { getCapas, createCapa, transitionCapa, addCapaAction, completeCapaAction, CAPA_SOURCES, type CapaRecord, type CapaSource, type CapaType, type CapaStatus } from '../../lib/capaService';
 import { ClipboardList, CheckCircle2, Clock, ChevronRight, X, Plus, Target, Link2 } from 'lucide-react';
 
 const STATUS_BADGE: Record<string, { bg: string; text: string }> = { open: { bg: 'bg-[var(--color-info-soft)]', text: 'text-[var(--color-info)]' }, investigating: { bg: 'bg-[var(--color-purple)]/10', text: 'text-[var(--color-purple)]' }, action_planned: { bg: 'bg-[var(--color-purple)]/10', text: 'text-[var(--color-purple)]' }, in_progress: { bg: 'bg-[var(--color-warning-soft)]', text: 'text-[var(--color-warning)]' }, verification: { bg: 'bg-cyan-100', text: 'text-cyan-700' }, closed: { bg: 'bg-[var(--color-success-soft)]', text: 'text-[var(--color-success)]' }, overdue: { bg: 'bg-[var(--color-danger-soft)]', text: 'text-[var(--color-danger)]' } };
@@ -35,7 +35,7 @@ export default function CapaManagementPage() {
         setShowCreate(false); setForm({ title: '', description: '', source: 'audit_finding', capa_type: 'corrective', priority: 'medium', due_date: '', owner_name: '', root_cause: '' }); setSaving(false); load();
     }
 
-    async function handleStatusChange(id: string, status: CapaStatus) { if (!companyId || !user) return; await updateCapaStatus(id, status, companyId, user.id); load(); setSelected(null); }
+    async function handleStatusChange(id: string, status: CapaStatus) { if (!companyId || !user) return; await transitionCapa(id, status, companyId, user.id); load(); setSelected(null); }
 
     async function handleAddAction() {
         if (!selected || !aForm.description || !companyId || !user) return;
