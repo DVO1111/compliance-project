@@ -289,25 +289,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Regulatory scope, set once here. `primary_markets` is seeded with the
     // same jurisdiction so the onboarding wizard and the profile screen agree
     // rather than each holding their own idea of the workspace's market.
-    const regulatoryFields = {
-      ...(industryType ? { industry_type: industryType } : {}),
-      ...(jurisdiction ? { default_jurisdiction: jurisdiction, primary_markets: [jurisdiction] } : {}),
+    //
+    // The profile is created by provision_profile(), never by a table
+    // INSERT. The id, role and custom_role_id are decided by the database
+    // from the session — there is no argument for any of them — so nothing
+    // this file sends can choose a privilege. See
+    // 20260916000000_secure_profile_provisioning.sql.
+    const provisionArgs = {
+      p_email: userEmail,
+      p_full_name: fullName,
+      p_organization: organization,
+      p_onboarding_completed: false,
+      p_industry_type: industryType ?? null,
+      p_default_jurisdiction: jurisdiction ?? null,
+      p_primary_markets: jurisdiction ? [jurisdiction] : null,
     };
+
     try {
       if (inviteToken) {
         // ── Invite path: skip company creation ──
         // The invite acceptance flow (accept_company_invite RPC) will
         // set company_id on the profile and create the company_members row.
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: userId,
-          email: userEmail,
-          full_name: fullName,
-          organization: organization,
-          onboarding_completed: false,
-          ...regulatoryFields,
+        const { error: profileError } = await (supabase as any).rpc('provision_profile', {
+          ...provisionArgs,
+          p_company_id: null,
         });
 
-        if (profileError && (profileError as any).code !== '23505') throw profileError;
+        // provision_profile is idempotent, so a retried signup no longer
+        // surfaces a duplicate-key error to swallow here.
+        if (profileError) throw profileError;
       } else {
         // ── Normal signup path: create the company ──
         // 3) Create the company. This deliberately does NOT join an
@@ -326,15 +336,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('Company setup failed: company id was not returned.');
         }
 
-        // 4) Create profile row (client-side insert)
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: userId,
-          email: userEmail,
-          full_name: fullName,
-          organization: organization,
-          company_id: companyId,
-          onboarding_completed: false,
-          ...regulatoryFields,
+        // 4) Create the profile row through the provisioning RPC.
+        //    Naming companyId here is safe because create_company() has
+        //    already written the caller's active owner membership; the RPC
+        //    refuses any company the caller is not an active member of.
+        const { error: profileError } = await (supabase as any).rpc('provision_profile', {
+          ...provisionArgs,
+          p_company_id: companyId,
         });
 
         if (profileError) throw profileError;
