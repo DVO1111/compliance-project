@@ -359,8 +359,16 @@ BEGIN
     PERFORM lcenf_assert('P4.1','a signature requirement fails closed', false, 'transition SUCCEEDED');
   EXCEPTION WHEN others THEN
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    -- D02 asserted LIFECYCLE_SIGNATURE_UNSUPPORTED, because no signature
+    -- subsystem existed and the engine refused outright. 20260917000000
+    -- built one, so the refusal is now LIFECYCLE_SIGNATURE_REQUIRED: the
+    -- caller must supply a signature rather than being told the feature
+    -- does not exist. The property under test is unchanged and still
+    -- holds — an unsigned attempt does not transition — so both codes
+    -- are accepted here and the suite passes before and after.
     PERFORM lcenf_assert('P4.1','a signature requirement fails closed',
-                         v_msg LIKE 'LIFECYCLE_SIGNATURE_UNSUPPORTED%', v_msg);
+                         v_msg LIKE 'LIFECYCLE_SIGNATURE_UNSUPPORTED%'
+                      OR v_msg LIKE 'LIFECYCLE_SIGNATURE_REQUIRED%', v_msg);
   END;
 
   BEGIN
@@ -386,8 +394,11 @@ BEGIN
     PERFORM lcenf_assert('P4.3','service_role cannot bypass the signature requirement', false, 'transition SUCCEEDED');
   EXCEPTION WHEN others THEN
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    -- see P4.1 on the code change; the point of this case is that the
+    -- service context gets no exemption, which is still true
     PERFORM lcenf_assert('P4.3','service_role cannot bypass the signature requirement',
-                         v_msg LIKE 'LIFECYCLE_SIGNATURE_UNSUPPORTED%', v_msg);
+                         v_msg LIKE 'LIFECYCLE_SIGNATURE_UNSUPPORTED%'
+                      OR v_msg LIKE 'LIFECYCLE_SIGNATURE_REQUIRED%', v_msg);
   END;
 
   BEGIN
@@ -426,8 +437,16 @@ BEGIN
   PERFORM lcenf_assert('P5.1','all four in_review actions are still listed', n=4, n||' action(s)');
   PERFORM lcenf_assert('P5.2','approve is marked not permitted for a content_creator',
     v_appr.is_permitted = false AND v_appr.blocked_reason='LIFECYCLE_ROLE_REQUIRED', coalesce(v_appr.blocked_reason,'NULL'));
-  PERFORM lcenf_assert('P5.3','sign_off is marked blocked by the signature gap',
-    v_sign.is_permitted = false AND v_sign.blocked_reason='LIFECYCLE_SIGNATURE_UNSUPPORTED', coalesce(v_sign.blocked_reason,'NULL'));
+  -- Before 20260917000000 this action was reported BLOCKED, because a
+  -- signature could not be produced at all. Now it is reported as
+  -- available with requires_signature set, so the UI can prompt for one
+  -- instead of hiding the action. What must not regress is that the
+  -- requirement is still surfaced rather than silently dropped.
+  PERFORM lcenf_assert('P5.3','sign_off still surfaces its signature requirement',
+    v_sign.requires_signature = true
+    AND (v_sign.is_permitted = true OR v_sign.blocked_reason='LIFECYCLE_SIGNATURE_UNSUPPORTED'),
+    'requires_signature='||coalesce(v_sign.requires_signature::text,'NULL')
+      ||' blocked='||coalesce(v_sign.blocked_reason,'none'));
   PERFORM lcenf_assert('P5.4','escalate is marked blocked by the permission gap',
     v_esc.is_permitted = false AND v_esc.blocked_reason='LIFECYCLE_PERMISSION_UNSUPPORTED', coalesce(v_esc.blocked_reason,'NULL'));
 END $p5$;
