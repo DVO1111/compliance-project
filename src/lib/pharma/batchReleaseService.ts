@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { assertBatchAllowed } from '../licenceService';
 
 export type BatchStatus = 'qc_pending' | 'qc_in_progress' | 'hold' | 'released' | 'rejected' | 'archived';
 
@@ -10,6 +11,8 @@ export interface BatchRecord {
   batch_number: string;
   product_name: string;
   product_code: string | null;
+  /** Link to the product registry (D05). Null for batches predating it. */
+  product_id: string | null;
   manufacturing_date: string;
   expiry_date: string;
   batch_size: number;
@@ -68,6 +71,11 @@ export async function createBatchRecord(
   userId: string,
   record: Omit<BatchRecord, 'id' | 'company_id' | 'status' | 'hold_reason' | 'release_notes' | 'qc_started_at' | 'qc_completed_at' | 'released_at' | 'released_by' | 'created_by' | 'created_at' | 'updated_at'>
 ): Promise<BatchRecord> {
+  //  Asked before the write purely so the operator sees which licence
+  //  expired and when. The authority is trg_batch_records_licence_gate,
+  //  which refuses the insert whatever this call returns.
+  await assertBatchAllowed(record.product_id, 'initiation');
+
   const { data, error } = await (supabase as any)
     .from('batch_records')
     .insert({ ...record, company_id: companyId, created_by: userId, status: 'qc_pending' })
@@ -98,6 +106,14 @@ export async function updateBatchStatus(
 ): Promise<void> {
   const now = new Date().toISOString();
   const updates: any = { status: newStatus };
+
+  //  Release is the point the registration has to be in force. A batch
+  //  legitimately started under a valid licence still cannot be released
+  //  once that licence has lapsed.
+  if (newStatus === 'released') {
+    const existing = await getBatchRecord(id, companyId);
+    await assertBatchAllowed(existing?.product_id, 'release');
+  }
 
   if (newStatus === 'qc_in_progress') updates.qc_started_at = now;
   if (newStatus === 'released') { updates.released_at = now; updates.released_by = userId; updates.release_notes = extra?.releaseNotes ?? null; }

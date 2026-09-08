@@ -29,16 +29,17 @@ async function logAudit(params: {
 export type ProductCategory =
   | 'food' | 'drug_pharmaceutical' | 'cosmetic'
   | 'medical_device' | 'veterinary' | 'biologic_vaccine'
-  | 'agro_chemical' | 'other';
+  | 'agro_chemical' | 'herbal_nutraceutical' | 'other';
 
 export type SubmissionType = 'local_manufacture' | 'importation' | 'export';
 
-export type RegulatoryBody = 'nafdac' | 'son' | 'nafdac_son' | 'ministry_of_health';
+export type RegulatoryBody = 'nafdac' | 'son' | 'nafdac_son' | 'ministry_of_health' | 'pcn';
 
 export type SubmissionStatus =
   | 'draft' | 'submitted' | 'division_review' | 'inspection_scheduled'
   | 'inspection_completed' | 'lab_testing' | 'fdrc_committee'
-  | 'approved' | 'rejected' | 'compliance_directive' | 'withdrawn';
+  | 'approved' | 'rejected' | 'compliance_directive'
+  | 'awaiting_applicant_response' | 'withdrawn';
 
 export type LicenceType =
   | 'nafdac_product_registration'
@@ -119,6 +120,7 @@ export const STATUS_LABELS: Record<SubmissionStatus, string> = {
   approved:             'Approved',
   rejected:             'Rejected',
   compliance_directive: 'Compliance Directive',
+  awaiting_applicant_response: 'Awaiting Applicant Response',
   withdrawn:            'Withdrawn',
 };
 
@@ -133,6 +135,7 @@ export const STATUS_COLORS: Record<SubmissionStatus, string> = {
   approved:             'text-green-700 bg-green-100',
   rejected:             'text-red-700 bg-red-100',
   compliance_directive: 'text-orange-700 bg-orange-100',
+  awaiting_applicant_response: 'text-amber-700 bg-amber-100',
   withdrawn:            'text-gray-500 bg-gray-100',
 };
 
@@ -142,6 +145,23 @@ export const STATUS_TIMELINE: SubmissionStatus[] = [
   'inspection_completed', 'lab_testing', 'fdrc_committee', 'approved',
 ];
 
+export const SUBMISSION_TYPE_LABELS: Record<SubmissionType, string> = {
+  local_manufacture: 'Locally manufactured',
+  importation:       'Imported',
+  export:            'Export',
+};
+
+export const REGULATORY_BODY_LABELS: Record<RegulatoryBody, string> = {
+  nafdac:             'NAFDAC',
+  son:                'SON',
+  nafdac_son:         'NAFDAC + SON',
+  ministry_of_health: 'Federal Ministry of Health',
+  // PCN licenses pharmaceutical premises and superintendent pharmacists;
+  // a PCN premises licence is a prerequisite for a NAFDAC manufacturing
+  // licence, so it belongs in the submission regulator list.
+  pcn:                'PCN (Pharmacists Council of Nigeria)',
+};
+
 export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
   food:               'Food Product',
   drug_pharmaceutical:'Drug / Pharmaceutical',
@@ -150,6 +170,7 @@ export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
   veterinary:         'Veterinary Product',
   biologic_vaccine:   'Biologic / Vaccine',
   agro_chemical:      'Agro-Chemical',
+  herbal_nutraceutical:'Herbal / Nutraceutical',
   other:              'Other',
 };
 
@@ -166,91 +187,135 @@ export const LICENCE_TYPE_LABELS: Record<LicenceType, string> = {
 
 /* ── Document Checklists ───────────────────────────────────────────────────── */
 
+/**
+ * `pre` items must be present before the application can be submitted.
+ * `post` items are produced by the regulator's own process after
+ * submission — an inspection report cannot exist before the inspection —
+ * so they are tracked but must never block the submit.
+ */
+export type SubmissionPhase = 'pre' | 'post';
+
 export interface ChecklistItem {
   name: string;
   required: boolean;
+  submission_phase: SubmissionPhase;
   description: string;
 }
 
 const CHECKLISTS: Record<string, ChecklistItem[]> = {
   food_local_manufacture: [
-    { name: 'NAPAMS Application Form',           required: true,  description: 'Completed and signed NAPAMS product registration form' },
-    { name: 'CAC Certificate of Incorporation',  required: true,  description: 'Current CAC registration certificate for the company' },
-    { name: 'Evidence of Payment',               required: true,  description: 'NAFDAC application fee payment receipt' },
-    { name: 'Product Label / Artwork',           required: true,  description: 'Draft label showing all mandatory NAFDAC labelling information' },
-    { name: 'Product Specification Sheet',       required: true,  description: 'Technical spec including ingredients, process, and shelf life' },
-    { name: 'Process Flow Diagram',              required: true,  description: 'Full manufacturing process from raw material to finished product' },
-    { name: 'Ingredient List with Quantities',   required: true,  description: 'All ingredients with percentage or quantity per batch' },
-    { name: 'Certificate of Analysis (CoA)',     required: true,  description: 'CoA from a NAFDAC-accredited laboratory' },
-    { name: 'GMP Inspection Request Letter',     required: true,  description: 'Formal request to NAFDAC for GMP facility inspection' },
-    { name: 'Nutritional Analysis Report',       required: false, description: 'Required for functional foods and products with nutritional claims' },
-    { name: 'HACCP Plan',                        required: false, description: 'Required for high-risk food categories (meat, dairy, etc.)' },
+    { name: 'NAPAMS Application Form',            required: true, submission_phase: 'pre', description: 'Completed and signed NAPAMS product registration form' },
+    { name: 'CAC Certificate of Incorporation',   required: true, submission_phase: 'pre', description: 'Current CAC registration certificate for the company' },
+    { name: 'Evidence of Payment',                required: true, submission_phase: 'pre', description: 'NAFDAC application fee payment receipt' },
+    { name: 'Product Label / Artwork',            required: true, submission_phase: 'pre', description: 'Draft label showing all mandatory NAFDAC labelling information' },
+    { name: 'Product Specification Sheet',        required: true, submission_phase: 'pre', description: 'Technical spec including ingredients, process, and shelf life' },
+    { name: 'Process Flow Diagram',               required: true, submission_phase: 'pre', description: 'Full manufacturing process from raw material to finished product' },
+    { name: 'Ingredient List with Quantities',    required: true, submission_phase: 'pre', description: 'All ingredients with percentage or quantity per batch' },
+    { name: 'Certificate of Analysis (CoA)',      required: true, submission_phase: 'pre', description: 'CoA from a NAFDAC-accredited laboratory' },
+    { name: 'GMP Inspection Request Letter',      required: true, submission_phase: 'pre', description: 'Formal request to NAFDAC for GMP facility inspection' },
+    { name: 'Nutritional Analysis Report',        required: false, submission_phase: 'pre', description: 'Required for functional foods and products with nutritional claims' },
+    { name: 'HACCP Plan',                         required: false, submission_phase: 'pre', description: 'Required for high-risk food categories (meat, dairy, etc.)' },
   ],
   food_importation: [
-    { name: 'NAPAMS Application Form',           required: true,  description: 'Completed NAPAMS import registration application' },
-    { name: 'CAC Certificate of Incorporation',  required: true,  description: 'CAC registration of the Nigerian importer' },
-    { name: 'Evidence of Payment',               required: true,  description: 'NAFDAC application fee payment receipt' },
-    { name: 'Power of Attorney',                 required: true,  description: 'Issued by the foreign brand owner / manufacturer to the Nigerian importer — NOT a Contract Manufacturing Agreement' },
-    { name: 'Certificate of Free Sale',          required: true,  description: 'Issued by the relevant competent authority in the country of manufacture' },
-    { name: 'GMP Invitation Letter',             required: true,  description: 'Issued by the foreign manufacturer to NAFDAC inviting overseas GMP inspection' },
-    { name: 'Product Label / Artwork',           required: true,  description: 'Label adapted for the Nigerian market with all mandatory information' },
-    { name: 'Product Specification Sheet',       required: true,  description: 'Technical specification from the foreign manufacturer' },
-    { name: 'Certificate of Analysis (CoA)',     required: true,  description: 'CoA from manufacturer and/or accredited laboratory' },
-    { name: 'Import Permit Application',         required: true,  description: 'Application for NAFDAC import permit' },
-    { name: 'Contract Manufacturing Agreement',  required: false, description: 'Required only if the Nigerian company manufactures under licence from the brand owner' },
-    { name: 'Trademark Registration Certificate',required: false, description: 'Brand trademark registration if asserting IP ownership' },
+    { name: 'NAPAMS Application Form',            required: true, submission_phase: 'pre', description: 'Completed NAPAMS import registration application' },
+    { name: 'CAC Certificate of Incorporation',   required: true, submission_phase: 'pre', description: 'CAC registration of the Nigerian importer' },
+    { name: 'Evidence of Payment',                required: true, submission_phase: 'pre', description: 'NAFDAC application fee payment receipt' },
+    { name: 'Power of Attorney',                  required: true, submission_phase: 'pre', description: 'Issued by the foreign brand owner / manufacturer to the Nigerian importer — NOT a Contract Manufacturing Agreement' },
+    { name: 'Certificate of Free Sale',           required: true, submission_phase: 'pre', description: 'Issued by the relevant competent authority in the country of manufacture' },
+    { name: 'GMP Invitation Letter',              required: true, submission_phase: 'pre', description: 'Issued by the foreign manufacturer to NAFDAC inviting overseas GMP inspection' },
+    { name: 'Product Label / Artwork',            required: true, submission_phase: 'pre', description: 'Label adapted for the Nigerian market with all mandatory information' },
+    { name: 'Product Specification Sheet',        required: true, submission_phase: 'pre', description: 'Technical specification from the foreign manufacturer' },
+    { name: 'Certificate of Analysis (CoA)',      required: true, submission_phase: 'pre', description: 'CoA from manufacturer and/or accredited laboratory' },
+    { name: 'Import Permit Application',          required: true, submission_phase: 'pre', description: 'Application for NAFDAC import permit' },
+    { name: 'Contract Manufacturing Agreement',   required: false, submission_phase: 'pre', description: 'Required only if the Nigerian company manufactures under licence from the brand owner' },
+    { name: 'Trademark Registration Certificate', required: false, submission_phase: 'pre', description: 'Brand trademark registration if asserting IP ownership' },
   ],
   drug_pharmaceutical_local_manufacture: [
-    { name: 'CTD Dossier (Modules 1–5)',         required: true,  description: 'Common Technical Document format dossier — obtain screening clearance BEFORE submitting full application' },
-    { name: 'NAPAMS Screening Clearance Letter', required: true,  description: 'NAFDAC screening clearance for the dossier — required before full application window opens' },
-    { name: 'NAPAMS Application Form',           required: true,  description: 'Completed pharmaceutical drug registration application' },
-    { name: 'CAC Certificate of Incorporation',  required: true,  description: 'Current company CAC registration' },
-    { name: 'NAFDAC Site Manufacturing Licence', required: true,  description: 'Current NAFDAC manufacturing licence for the facility' },
-    { name: 'Evidence of Payment',               required: true,  description: 'Registration fee payment receipt' },
-    { name: 'GMP Inspection Report (NAFDAC)',    required: true,  description: 'Satisfactory GMP inspection report from NAFDAC Drug Inspectorate' },
-    { name: 'Product Label & Patient Info Leaflet', required: true, description: 'Draft label and PIL meeting NAFDAC pharma labelling requirements' },
-    { name: 'Finished Product Specification',    required: true,  description: 'Specification with analytical methods and acceptance criteria' },
-    { name: 'Certificate of Analysis',           required: true,  description: 'CoA from QC laboratory for the registration batch' },
-    { name: 'Stability Study Data',              required: true,  description: 'Real-time and accelerated stability data supporting proposed shelf life' },
-    { name: 'Pharmacovigilance Plan',            required: true,  description: 'Post-market safety monitoring plan' },
-    { name: 'Manufacturing Process Validation',  required: false, description: 'Process validation report for sterile and high-risk products' },
+    { name: 'CTD Dossier (Modules 1–5)',          required: true, submission_phase: 'pre', description: 'Common Technical Document format dossier — obtain screening clearance BEFORE submitting full application' },
+    { name: 'NAPAMS Screening Clearance Letter',  required: true, submission_phase: 'pre', description: 'NAFDAC screening clearance for the dossier — required before full application window opens' },
+    { name: 'NAPAMS Application Form',            required: true, submission_phase: 'pre', description: 'Completed pharmaceutical drug registration application' },
+    { name: 'CAC Certificate of Incorporation',   required: true, submission_phase: 'pre', description: 'Current company CAC registration' },
+    { name: 'NAFDAC Site Manufacturing Licence',  required: true, submission_phase: 'pre', description: 'Current NAFDAC manufacturing licence for the facility' },
+    { name: 'Evidence of Payment',                required: true, submission_phase: 'pre', description: 'Registration fee payment receipt' },
+    { name: 'GMP Inspection Report (NAFDAC)',     required: true, submission_phase: 'post', description: 'Satisfactory GMP inspection report from NAFDAC Drug Inspectorate' },
+    { name: 'Product Label & Patient Info Leaflet',  required: true, submission_phase: 'pre', description: 'Draft label and PIL meeting NAFDAC pharma labelling requirements' },
+    { name: 'Finished Product Specification',     required: true, submission_phase: 'pre', description: 'Specification with analytical methods and acceptance criteria' },
+    { name: 'Certificate of Analysis',            required: true, submission_phase: 'pre', description: 'CoA from QC laboratory for the registration batch' },
+    { name: 'Stability Study Data',               required: true, submission_phase: 'pre', description: 'Real-time and accelerated stability data supporting proposed shelf life' },
+    { name: 'Pharmacovigilance Plan',             required: true, submission_phase: 'pre', description: 'Post-market safety monitoring plan' },
+    { name: 'Manufacturing Process Validation',   required: false, submission_phase: 'post', description: 'Process validation report for sterile and high-risk products' },
   ],
   drug_pharmaceutical_importation: [
-    { name: 'CTD Dossier (Modules 1–5)',         required: true,  description: 'CTD dossier — screening clearance required first' },
-    { name: 'NAPAMS Screening Clearance Letter', required: true,  description: 'NAFDAC screening clearance before full application' },
-    { name: 'NAPAMS Application Form',           required: true,  description: 'Import drug registration application' },
-    { name: 'CAC Certificate of Incorporation',  required: true,  description: 'Nigerian importer CAC registration' },
-    { name: 'Power of Attorney',                 required: true,  description: 'From originator / brand owner to Nigerian importer' },
-    { name: 'Certificate of Free Sale / Marketing Authorisation', required: true, description: 'From the competent regulatory authority in the country of origin' },
-    { name: 'GMP Invitation Letter',             required: true,  description: 'From the foreign manufacturer to NAFDAC for overseas GMP inspection' },
-    { name: 'SmPC (Summary of Product Characteristics)', required: true, description: 'Approved SmPC from the originating regulatory authority' },
-    { name: 'Patient Information Leaflet',       required: true,  description: 'PIL adapted for the Nigerian market' },
-    { name: 'Evidence of Payment',               required: true,  description: 'Registration fee payment receipt' },
-    { name: 'Stability Data',                    required: true,  description: 'Data supporting proposed shelf life under Nigerian climate conditions' },
+    { name: 'CTD Dossier (Modules 1–5)',          required: true, submission_phase: 'pre', description: 'CTD dossier — screening clearance required first' },
+    { name: 'NAPAMS Screening Clearance Letter',  required: true, submission_phase: 'pre', description: 'NAFDAC screening clearance before full application' },
+    { name: 'NAPAMS Application Form',            required: true, submission_phase: 'pre', description: 'Import drug registration application' },
+    { name: 'CAC Certificate of Incorporation',   required: true, submission_phase: 'pre', description: 'Nigerian importer CAC registration' },
+    { name: 'Power of Attorney',                  required: true, submission_phase: 'pre', description: 'From originator / brand owner to Nigerian importer' },
+    { name: 'Certificate of Free Sale / Marketing Authorisation',  required: true, submission_phase: 'pre', description: 'From the competent regulatory authority in the country of origin' },
+    { name: 'GMP Invitation Letter',              required: true, submission_phase: 'pre', description: 'From the foreign manufacturer to NAFDAC for overseas GMP inspection' },
+    { name: 'SmPC (Summary of Product Characteristics)',  required: true, submission_phase: 'pre', description: 'Approved SmPC from the originating regulatory authority' },
+    { name: 'Patient Information Leaflet',        required: true, submission_phase: 'pre', description: 'PIL adapted for the Nigerian market' },
+    { name: 'Evidence of Payment',                required: true, submission_phase: 'pre', description: 'Registration fee payment receipt' },
+    { name: 'Stability Data',                     required: true, submission_phase: 'pre', description: 'Data supporting proposed shelf life under Nigerian climate conditions' },
   ],
   cosmetic_local_manufacture: [
-    { name: 'NAPAMS Application Form',           required: true,  description: 'Completed cosmetics registration application' },
-    { name: 'CAC Certificate of Incorporation',  required: true,  description: 'Current company CAC registration' },
-    { name: 'NAFDAC Manufacturing Licence',      required: true,  description: 'Current NAFDAC manufacturing licence for cosmetics' },
-    { name: 'Evidence of Payment',               required: true,  description: 'Registration fee payment receipt' },
-    { name: 'GMP Inspection Report (DERD)',      required: true,  description: 'GMP inspection by NAFDAC Drug Evaluation and Research Directorate' },
-    { name: 'Product Label / Artwork',           required: true,  description: 'Label meeting NAFDAC cosmetics labelling requirements' },
-    { name: 'Product Specification (INCI list)', required: true,  description: 'Full INCI ingredient list, intended use, and preservation system' },
-    { name: 'Cosmetic Safety Assessment',        required: true,  description: 'Safety assessment report by a qualified cosmetic safety assessor' },
-    { name: 'Certificate of Analysis',           required: true,  description: 'Microbiological and physico-chemical CoA' },
-    { name: 'Preservative Efficacy / Challenge Test', required: false, description: 'Recommended for water-based and leave-on cosmetics' },
+    { name: 'NAPAMS Application Form',            required: true, submission_phase: 'pre', description: 'Completed cosmetics registration application' },
+    { name: 'CAC Certificate of Incorporation',   required: true, submission_phase: 'pre', description: 'Current company CAC registration' },
+    { name: 'NAFDAC Manufacturing Licence',       required: true, submission_phase: 'pre', description: 'Current NAFDAC manufacturing licence for cosmetics' },
+    { name: 'Evidence of Payment',                required: true, submission_phase: 'pre', description: 'Registration fee payment receipt' },
+    { name: 'GMP Inspection Report (DERD)',       required: true, submission_phase: 'post', description: 'GMP inspection by NAFDAC Drug Evaluation and Research Directorate' },
+    { name: 'Product Label / Artwork',            required: true, submission_phase: 'pre', description: 'Label meeting NAFDAC cosmetics labelling requirements' },
+    { name: 'Product Specification (INCI list)',  required: true, submission_phase: 'pre', description: 'Full INCI ingredient list, intended use, and preservation system' },
+    { name: 'Cosmetic Safety Assessment',         required: true, submission_phase: 'pre', description: 'Safety assessment report by a qualified cosmetic safety assessor' },
+    { name: 'Certificate of Analysis',            required: true, submission_phase: 'pre', description: 'Microbiological and physico-chemical CoA' },
+    { name: 'Preservative Efficacy / Challenge Test',  required: false, submission_phase: 'pre', description: 'Recommended for water-based and leave-on cosmetics' },
+  ],
+  // NAFDAC regulates herbal and nutraceutical products through the Herbal
+  // Medicines and Related Products directorate. The listing requirements
+  // differ from both food and drug: safety/efficacy evidence and a
+  // heavy-metal/microbial profile are mandatory, but a full CTD is not.
+  herbal_nutraceutical_local_manufacture: [
+    { name: 'NAPAMS Application Form',             required: true, submission_phase: 'pre', description: 'Completed NAFDAC herbal / nutraceutical product listing application' },
+    { name: 'CAC Certificate of Incorporation',    required: true, submission_phase: 'pre', description: 'Current CAC registration certificate for the company' },
+    { name: 'Evidence of Payment',                 required: true, submission_phase: 'pre', description: 'NAFDAC listing fee payment receipt' },
+    { name: 'NAFDAC Manufacturing Licence',        required: true, submission_phase: 'pre', description: 'Current NAFDAC licence for the herbal manufacturing facility' },
+    { name: 'GMP Inspection Report',               required: true, submission_phase: 'pre', description: 'Satisfactory GMP inspection of the herbal production facility' },
+    { name: 'Full Composition / Formulation',      required: true, submission_phase: 'pre', description: 'Every constituent with botanical (Latin binomial) name, plant part used, and quantity per dose' },
+    { name: 'Certificate of Analysis',             required: true, submission_phase: 'pre', description: 'CoA from a NAFDAC-accredited laboratory for the listing batch' },
+    { name: 'Heavy Metal Analysis Report',         required: true, submission_phase: 'pre', description: 'Lead, arsenic, cadmium and mercury limits — mandatory for herbal products' },
+    { name: 'Microbial Limit Test Report',         required: true, submission_phase: 'pre', description: 'Total viable count, yeast/mould, and absence of specified pathogens' },
+    { name: 'Product Label / Artwork',             required: true, submission_phase: 'pre', description: 'Label carrying the mandatory herbal advisory and NAFDAC listing number' },
+    { name: 'Safety and Efficacy Evidence',        required: true, submission_phase: 'pre', description: 'Traditional-use dossier, published literature, or study data supporting the claims made' },
+    { name: 'Stability Study Data',                required: true, submission_phase: 'pre', description: 'Data supporting the proposed shelf life under Nigerian climatic conditions' },
+    { name: 'Pesticide Residue Report',            required: false, submission_phase: 'pre', description: 'Required where raw material is cultivated rather than wild-harvested' },
+    { name: 'Aflatoxin Analysis',                  required: false, submission_phase: 'pre', description: 'Required for seed, nut and grain-derived constituents' },
+  ],
+  herbal_nutraceutical_importation: [
+    { name: 'NAPAMS Application Form',             required: true, submission_phase: 'pre', description: 'Completed import listing application for herbal / nutraceutical products' },
+    { name: 'CAC Certificate of Incorporation',    required: true, submission_phase: 'pre', description: 'CAC registration of the Nigerian importer' },
+    { name: 'Evidence of Payment',                 required: true, submission_phase: 'pre', description: 'NAFDAC listing fee payment receipt' },
+    { name: 'Power of Attorney',                   required: true, submission_phase: 'pre', description: 'Issued by the foreign manufacturer to the Nigerian importer' },
+    { name: 'Certificate of Free Sale',            required: true, submission_phase: 'pre', description: 'From the competent authority in the country of manufacture' },
+    { name: 'GMP Invitation Letter',               required: true, submission_phase: 'pre', description: 'From the foreign manufacturer to NAFDAC for overseas GMP inspection' },
+    { name: 'Full Composition / Formulation',      required: true, submission_phase: 'pre', description: 'Botanical names, plant parts and quantities from the manufacturer' },
+    { name: 'Certificate of Analysis',             required: true, submission_phase: 'pre', description: 'CoA from the manufacturer and/or an accredited laboratory' },
+    { name: 'Heavy Metal Analysis Report',         required: true, submission_phase: 'pre', description: 'Lead, arsenic, cadmium and mercury — mandatory for imported herbals' },
+    { name: 'Microbial Limit Test Report',         required: true, submission_phase: 'pre', description: 'Microbiological quality of the finished product' },
+    { name: 'Product Label / Artwork',             required: true, submission_phase: 'pre', description: 'Label adapted for the Nigerian market with the mandatory herbal advisory' },
+    { name: 'Safety and Efficacy Evidence',        required: true, submission_phase: 'pre', description: 'Evidence supporting the claims made for the product' },
+    { name: 'Stability Data',                      required: false, submission_phase: 'pre', description: 'Shelf-life data under Zone IVb conditions where available' },
   ],
   cosmetic_importation: [
-    { name: 'NAPAMS Application Form',           required: true,  description: 'Completed import cosmetics registration' },
-    { name: 'CAC Certificate of Incorporation',  required: true,  description: 'Nigerian importer CAC registration' },
-    { name: 'Power of Attorney',                 required: true,  description: 'From brand owner to Nigerian importer' },
-    { name: 'Certificate of Free Sale',          required: true,  description: 'From competent authority in country of manufacture' },
-    { name: 'GMP Invitation Letter',             required: true,  description: 'For DERD overseas GMP inspection of foreign manufacturing site' },
-    { name: 'Evidence of Payment',               required: true,  description: 'Registration fee payment receipt' },
-    { name: 'Product Label / Artwork',           required: true,  description: 'Label adapted for Nigerian market' },
-    { name: 'Product Specification (INCI list)', required: true,  description: 'Full INCI list and product details from manufacturer' },
-    { name: 'Cosmetic Safety Assessment',        required: true,  description: 'Safety assessment document' },
-    { name: 'Certificate of Analysis',           required: true,  description: 'CoA from manufacturer' },
+    { name: 'NAPAMS Application Form',            required: true, submission_phase: 'pre', description: 'Completed import cosmetics registration' },
+    { name: 'CAC Certificate of Incorporation',   required: true, submission_phase: 'pre', description: 'Nigerian importer CAC registration' },
+    { name: 'Power of Attorney',                  required: true, submission_phase: 'pre', description: 'From brand owner to Nigerian importer' },
+    { name: 'Certificate of Free Sale',           required: true, submission_phase: 'pre', description: 'From competent authority in country of manufacture' },
+    { name: 'GMP Invitation Letter',              required: true, submission_phase: 'pre', description: 'For DERD overseas GMP inspection of foreign manufacturing site' },
+    { name: 'Evidence of Payment',                required: true, submission_phase: 'pre', description: 'Registration fee payment receipt' },
+    { name: 'Product Label / Artwork',            required: true, submission_phase: 'pre', description: 'Label adapted for Nigerian market' },
+    { name: 'Product Specification (INCI list)',  required: true, submission_phase: 'pre', description: 'Full INCI list and product details from manufacturer' },
+    { name: 'Cosmetic Safety Assessment',         required: true, submission_phase: 'pre', description: 'Safety assessment document' },
+    { name: 'Certificate of Analysis',            required: true, submission_phase: 'pre', description: 'CoA from manufacturer' },
   ],
 };
 
@@ -302,6 +367,22 @@ export const LABELLING_REQUIREMENTS: Record<string, LabellingRequirement[]> = {
     { field: '"Keep out of reach of children" statement', required: true, note: 'Mandatory on all pharmaceutical products' },
     { field: 'Patient information leaflet (PIL)',       required: true,  note: 'Full PIL must be enclosed in secondary packaging' },
     { field: 'Prescription / OTC status',              required: true,  note: '"To be sold only on prescription of a medical practitioner" for Rx products' },
+  ],
+  herbal_nutraceutical: [
+    { field: 'Product name',                            required: true,  note: 'Trade name on the principal display panel' },
+    { field: 'Botanical names of all constituents',     required: true,  note: 'Latin binomial and plant part used (e.g., "Moringa oleifera, leaf")' },
+    { field: 'Quantity of each constituent per dose',   required: true,  note: 'Expressed per capsule, tablet, or measured volume' },
+    { field: 'Recommended daily dose',                  required: true,  note: 'Including any maximum daily intake' },
+    { field: 'NAFDAC listing number',                   required: true,  note: 'Herbal products carry a listing number, not a drug registration number' },
+    { field: 'Mandatory herbal advisory statement',     required: true,  note: '"This product is not intended to diagnose, treat, cure or prevent any disease" — NAFDAC requires this on herbal and nutraceutical labels' },
+    { field: 'Manufacturer name and address',           required: true,  note: 'Full legal name and physical address, plus country of manufacture' },
+    { field: 'Batch number and manufacturing date',     required: true,  note: 'For traceability and recall' },
+    { field: 'Expiry date',                             required: true,  note: 'Format: MM/YYYY minimum' },
+    { field: 'Storage conditions',                      required: true,  note: 'Temperature and humidity guidance appropriate to the dosage form' },
+    { field: 'Net content',                             required: true,  note: 'Number of units, or weight/volume in metric units' },
+    { field: '"Keep out of reach of children"',         required: true,  note: 'Mandatory on herbal and nutraceutical products' },
+    { field: 'Contraindications and interactions',       required: false, note: 'Required where constituents are known to interact with prescription medicines' },
+    { field: 'Pregnancy / lactation advisory',          required: false, note: 'Required where any constituent is contraindicated in pregnancy' },
   ],
   cosmetic: [
     { field: 'Product name / function',                 required: true,  note: 'Trade name and cosmetic function (e.g., "Moisturising Lotion")' },
@@ -369,12 +450,18 @@ export async function createSubmission(
 ): Promise<RegulatorySubmission | null> {
   const checklist = getChecklist(payload.product_category, payload.submission_type);
   const checklistInit: Record<string, DocumentCheckStatus> = {};
+  // The phase map is written alongside the checklist so the DATABASE can
+  // decide what gates a submit. Leaving that to the client would make the
+  // gate advisory.
+  const checklistPhases: Record<string, SubmissionPhase> = {};
   for (const item of checklist) {
     checklistInit[item.name] = { is_present: false, notes: '', file_url: null };
+    checklistPhases[item.name] = item.submission_phase;
   }
   const { data, error } = await (await db() as any)
     .from('regulatory_submissions')
-    .insert({ company_id: companyId, ...payload, document_checklist: checklistInit, dossier_id: payload.dossier_id ?? null })
+    .insert({ company_id: companyId, ...payload, document_checklist: checklistInit,
+              checklist_phases: checklistPhases, dossier_id: payload.dossier_id ?? null })
     .select('*')
     .single();
   if (error) { logger.error('createSubmission', error); return null; }
@@ -533,4 +620,123 @@ export async function createLicenceFromApproval(
     notes: null,
     created_by: userId,
   });
+}
+
+
+/* ── Compliance directives (Deliverable 04) ────────────────────────────────── */
+
+export interface SubmissionDirective {
+  id: string;
+  company_id: string;
+  submission_id: string;
+  /** the stage the application was at when the directive arrived */
+  originating_state_key: SubmissionStatus;
+  content: string;
+  date_received: string;
+  response_deadline: string | null;
+  responded_at: string | null;
+  response_notes: string | null;
+  resolved_to_state_key: string | null;
+  raised_by: string | null;
+  created_at: string;
+}
+
+export interface SubmissionTimeBreakdown {
+  total_days: number;
+  /** days the regulator was waiting on the applicant */
+  directive_days: number;
+  /** total minus directive time — the regulator's own turnaround */
+  active_review_days: number;
+  open_directives: number;
+  total_directives: number;
+  current_status: SubmissionStatus;
+}
+
+/**
+ * Records a directive and moves the application in one transaction. The
+ * originating stage is captured server-side BEFORE the move, because
+ * afterwards it no longer exists to read.
+ */
+export async function raiseDirective(params: {
+  submissionId: string;
+  content: string;
+  dateReceived?: string;
+  responseDeadline?: string | null;
+}): Promise<{ directiveId: string; originatingState: string }> {
+  const { data, error } = await (await db() as any).rpc('submission_raise_directive', {
+    p_submission_id: params.submissionId,
+    p_content: params.content,
+    p_date_received: params.dateReceived ?? new Date().toISOString().slice(0, 10),
+    p_response_deadline: params.responseDeadline ?? null,
+  });
+  if (error) throw error;
+  return { directiveId: data.directive_id, originatingState: data.originating_state };
+}
+
+/**
+ * Answers a directive and restores the exact stage it interrupted.
+ * There is no stage argument: passing one would be the bug this is
+ * designed to prevent.
+ */
+export async function respondToDirective(
+  directiveId: string, responseNotes?: string
+): Promise<{ restoredState: string }> {
+  const { data, error } = await (await db() as any).rpc('submission_respond_to_directive', {
+    p_directive_id: directiveId,
+    p_response_notes: responseNotes ?? null,
+  });
+  if (error) throw error;
+  return { restoredState: data.restored_state };
+}
+
+export async function listDirectives(submissionId: string): Promise<SubmissionDirective[]> {
+  const { data, error } = await (await db() as any)
+    .from('submission_directives').select('*')
+    .eq('submission_id', submissionId)
+    .order('date_received', { ascending: false });
+  if (error) { logger.error('listDirectives', error); return []; }
+  return data ?? [];
+}
+
+export async function getTimeBreakdown(submissionId: string): Promise<SubmissionTimeBreakdown | null> {
+  const { data, error } = await (await db() as any)
+    .rpc('submission_time_breakdown', { p_submission_id: submissionId });
+  if (error) { logger.error('getTimeBreakdown', error); return null; }
+  return data as SubmissionTimeBreakdown;
+}
+
+/* ── Completeness (pre-submission items only) ──────────────────────────────── */
+
+/**
+ * The names of every pre-submission document still missing. Post items
+ * are excluded deliberately: an inspection report cannot exist before
+ * the inspection, so requiring it to submit would deadlock the workflow.
+ *
+ * This mirrors the database function of the same name. The database is
+ * the one that blocks; this exists so the UI can say what is missing
+ * before the user tries.
+ */
+export function missingPreSubmissionDocuments(
+  checklist: ChecklistItem[],
+  status: Record<string, DocumentCheckStatus>
+): string[] {
+  return checklist
+    .filter((i) => i.submission_phase === 'pre' && i.required)
+    .filter((i) => !status[i.name]?.is_present)
+    .map((i) => i.name)
+    .sort();
+}
+
+export function isSubmittable(
+  checklist: ChecklistItem[], status: Record<string, DocumentCheckStatus>
+): boolean {
+  return missingPreSubmissionDocuments(checklist, status).length === 0;
+}
+
+/** Server-side truth, naming every missing document. */
+export async function getMissingDocuments(submissionId: string): Promise<string[]> {
+  const { data, error } = await (await db() as any)
+    .rpc('submission_missing_documents', { p_submission_id: submissionId });
+  if (error) { logger.error('getMissingDocuments', error); return []; }
+  return (data ?? []).map((r: any) => r.name ?? r);
 }
