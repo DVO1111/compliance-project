@@ -183,6 +183,24 @@ async function getLastHashForCompany(companyId: string): Promise<{ hash: string;
   };
 }
 
+/**
+ * Fetch rows from a tenant-scoped table, forcing an explicit company_id
+ * filter so a missing tenant scope fails loudly instead of silently
+ * relying on RLS alone.
+ */
+async function fetchTenantScoped<T = unknown>(
+  table: string,
+  companyId: string,
+  build: (query: any) => any
+): Promise<{ data: T[] | null; error: unknown }> {
+  if (!companyId) {
+    throw new Error(`fetchTenantScoped: companyId is required for table "${table}"`);
+  }
+  const base = (supabase as any).from(table).select('*').eq('company_id', companyId);
+  const { data, error } = await build(base);
+  return { data, error };
+}
+
 // ── Main Audit Recording ─────────────────────────────────────────────────
 
 /**
@@ -425,25 +443,24 @@ export async function exportSealedEvidence(
   const zip = new JSZip();
 
   // 1. Fetch audit entries for this content
-  const { data: entries, error } = await (supabase as any)
-    .from('audit_logs')
-    .select('*')
-    .eq('entity_id', contentId)
-    .eq('entity_type', 'content_submission')
-    .order('sequence_number', { ascending: true });
-
+  const { data: entries, error } = await fetchTenantScoped<AuditEntry>('audit_logs', companyId, (q: any) =>
+    q.eq('entity_id', contentId).eq('entity_type', 'content_submission').order('sequence_number', { ascending: true })
+  );
+  
   if (error || !entries || entries.length === 0) {
     alert('No audit trail found for this content.');
     return;
   }
 
+  const validEntries: AuditEntry[] = entries;
+
   // 2. Add audit trail
-  const trailJson = JSON.stringify(entries, null, 2);
+  const trailJson = JSON.stringify(validEntries, null, 2);
   zip.file('audit_trail.json', trailJson);
 
   // 3. Add evidence snapshots
   const snapshotsFolder = zip.folder('evidence_snapshots')!;
-  for (const entry of entries) {
+  for (const entry of validEntries) {
     if (entry.evidence_snapshot && Object.keys(entry.evidence_snapshot).length > 0) {
       const filename = `${entry.sequence_number || 'x'}_${entry.action}.json`;
       snapshotsFolder.file(filename, JSON.stringify(entry.evidence_snapshot, null, 2));
