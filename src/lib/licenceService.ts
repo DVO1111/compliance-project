@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import { logger } from './logger';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -17,6 +16,17 @@ import { logger } from './logger';
    a readable message before the write, rather than a raw Postgres error
    after it.
 */
+
+//  The client is imported lazily, the same way productService and
+//  regulatoryAffairsService do it. src/lib/supabase.ts throws at module
+//  load when VITE_SUPABASE_* are unset, so a top-level import would make
+//  merely importing this file for its pure helpers — expandAlertMilestones,
+//  variationMinimumClass, missingMajorVariationFields — fail anywhere
+//  without a .env, CI included.
+async function db() {
+  const { supabase } = await import('./supabase');
+  return supabase;
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -262,7 +272,7 @@ export async function licenceBlockReason(
   operation: BatchOperation,
 ): Promise<string | null> {
   if (!productId) return null;
-  const { data, error } = await (supabase as any).rpc('licence_block_reason', {
+  const { data, error } = await (await db() as any).rpc('licence_block_reason', {
     p_product_id: productId,
     p_operation: operation,
   });
@@ -285,7 +295,7 @@ export async function assertBatchAllowed(
 // ── Licences ─────────────────────────────────────────────────────────
 
 export async function listLicences(companyId: string): Promise<RegulatoryLicence[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('regulatory_licences')
     .select('*')
     .eq('company_id', companyId)
@@ -295,7 +305,7 @@ export async function listLicences(companyId: string): Promise<RegulatoryLicence
 }
 
 export async function listLicencesForProduct(productId: string): Promise<RegulatoryLicence[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('regulatory_licences')
     .select('*')
     .eq('product_id', productId)
@@ -333,7 +343,7 @@ export async function recordLicenceApproval(args: {
   issueDate?: string;
   notify?: boolean;
 }): Promise<ApprovalCascadeResult> {
-  const { data, error } = await (supabase as any).rpc('licence_record_approval', {
+  const { data, error } = await (await db() as any).rpc('licence_record_approval', {
     p_licence_id: args.licenceId,
     p_registration_number: args.registrationNumber,
     p_expiry_date: args.expiryDate,
@@ -356,7 +366,7 @@ export async function completeLicenceRenewal(args: {
   comment: string;
   newIssueDate?: string;
 }): Promise<{ previous_licence_id: string; new_licence_id: string }> {
-  const { data, error } = await (supabase as any).rpc('licence_complete_renewal', {
+  const { data, error } = await (await db() as any).rpc('licence_complete_renewal', {
     p_licence_id: args.licenceId,
     p_new_registration_number: args.newRegistrationNumber,
     p_new_expiry_date: args.newExpiryDate,
@@ -387,7 +397,7 @@ export async function generateRenewalAlerts(
   companyId: string,
   asOf?: string,
 ): Promise<AlertGenerationResult | null> {
-  const { data, error } = await (supabase as any).rpc('licence_generate_renewal_alerts', {
+  const { data, error } = await (await db() as any).rpc('licence_generate_renewal_alerts', {
     p_company_id: companyId,
     ...(asOf ? { p_as_of: asOf } : {}),
   });
@@ -396,7 +406,7 @@ export async function generateRenewalAlerts(
 }
 
 export async function listOpenAlerts(companyId: string): Promise<LicenceRenewalAlert[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('licence_renewal_alerts')
     .select('*')
     .eq('company_id', companyId)
@@ -407,7 +417,7 @@ export async function listOpenAlerts(companyId: string): Promise<LicenceRenewalA
 }
 
 export async function acknowledgeAlert(alertId: string, userId: string): Promise<void> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('licence_renewal_alerts')
     .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: userId })
     .eq('id', alertId);
@@ -415,7 +425,7 @@ export async function acknowledgeAlert(alertId: string, userId: string): Promise
 }
 
 export async function listRenewalSteps(licenceId: string): Promise<LicenceRenewalStep[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('licence_renewal_steps')
     .select('*')
     .eq('licence_id', licenceId)
@@ -429,7 +439,7 @@ export async function setRenewalStepCompleted(
   completed: boolean,
   userId: string,
 ): Promise<void> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('licence_renewal_steps')
     .update({
       is_completed: completed,
@@ -443,7 +453,7 @@ export async function setRenewalStepCompleted(
 // ── Policy ───────────────────────────────────────────────────────────
 
 export async function getRenewalPolicy(companyId: string): Promise<LicenceRenewalPolicy | null> {
-  const { data, error } = await (supabase as any).rpc('licence_renewal_policy', {
+  const { data, error } = await (await db() as any).rpc('licence_renewal_policy', {
     p_company_id: companyId,
   });
   if (error) { logger.error('getRenewalPolicy:', error); return null; }
@@ -454,7 +464,7 @@ export async function saveRenewalPolicy(
   companyId: string,
   patch: Partial<Omit<LicenceRenewalPolicy, 'company_id' | 'is_default'>>,
 ): Promise<void> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('licence_renewal_policies')
     .upsert({ company_id: companyId, ...patch, updated_at: new Date().toISOString() },
             { onConflict: 'company_id' });
@@ -463,7 +473,7 @@ export async function saveRenewalPolicy(
 
 /** Deleting the row is how a company returns to the shipped defaults. */
 export async function resetRenewalPolicy(companyId: string): Promise<void> {
-  const { error } = await (supabase as any)
+  const { error } = await (await db() as any)
     .from('licence_renewal_policies')
     .delete()
     .eq('company_id', companyId);
@@ -473,7 +483,7 @@ export async function resetRenewalPolicy(companyId: string): Promise<void> {
 // ── Variations ───────────────────────────────────────────────────────
 
 export async function listVariations(licenceId: string): Promise<LicenceVariation[]> {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('licence_variations')
     .select('*')
     .eq('licence_id', licenceId)
@@ -502,7 +512,7 @@ export async function createVariation(
       `"${VARIATION_TYPE_LABELS[v.variation_type]}" is a major variation and cannot be filed as minor.`,
     );
   }
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (await db() as any)
     .from('licence_variations')
     .insert({ ...v, company_id: companyId, created_by: userId })
     .select()
@@ -516,7 +526,7 @@ export async function approveVariation(args: {
   comment: string;
   resultingExpiryDate?: string | null;
 }): Promise<unknown> {
-  const { data, error } = await (supabase as any).rpc('licence_variation_approve', {
+  const { data, error } = await (await db() as any).rpc('licence_variation_approve', {
     p_variation_id: args.variationId,
     p_comment: args.comment,
     p_resulting_expiry_date: args.resultingExpiryDate ?? null,
@@ -526,7 +536,7 @@ export async function approveVariation(args: {
 }
 
 export async function implementVariation(variationId: string, comment: string): Promise<unknown> {
-  const { data, error } = await (supabase as any).rpc('licence_variation_implement', {
+  const { data, error } = await (await db() as any).rpc('licence_variation_implement', {
     p_variation_id: variationId,
     p_comment: comment,
   });
@@ -558,7 +568,7 @@ export interface LicenceRenewalDashboard {
 export async function getRenewalDashboard(
   companyId: string,
 ): Promise<LicenceRenewalDashboard | null> {
-  const { data, error } = await (supabase as any).rpc('licence_renewal_dashboard', {
+  const { data, error } = await (await db() as any).rpc('licence_renewal_dashboard', {
     p_company_id: companyId,
   });
   if (error) { logger.error('getRenewalDashboard:', error); return null; }

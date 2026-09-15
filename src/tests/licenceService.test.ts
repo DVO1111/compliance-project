@@ -31,7 +31,11 @@ import {
   type VariationType,
   type LicenceStatus,
 } from '../lib/licenceService';
-import { NAFDAC_2026_RENEWAL_TASKS } from '../lib/licenseService';
+// Imported from the pure data module, not from licenseService: that one
+// reaches the Supabase client through auditService, which throws at module
+// load without VITE_SUPABASE_*. licenseService re-exports this constant, so
+// the two are the same object.
+import { NAFDAC_2026_RENEWAL_TASKS } from '../lib/renewalTemplate';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATION = resolve(HERE, '../../supabase/migrations/20260921000000_licence_lifecycle.sql');
