@@ -183,24 +183,6 @@ async function getLastHashForCompany(companyId: string): Promise<{ hash: string;
   };
 }
 
-/**
- * Fetch rows from a tenant-scoped table, forcing an explicit company_id
- * filter so a missing tenant scope fails loudly instead of silently
- * relying on RLS alone.
- */
-async function fetchTenantScoped<T = unknown>(
-  table: string,
-  companyId: string,
-  build: (query: any) => any
-): Promise<{ data: T[] | null; error: unknown }> {
-  if (!companyId) {
-    throw new Error(`fetchTenantScoped: companyId is required for table "${table}"`);
-  }
-  const base = (supabase as any).from(table).select('*').eq('company_id', companyId);
-  const { data, error } = await build(base);
-  return { data, error };
-}
-
 // ── Main Audit Recording ─────────────────────────────────────────────────
 
 /**
@@ -442,25 +424,55 @@ export async function exportSealedEvidence(
 ): Promise<void> {
   const zip = new JSZip();
 
-  // 1. Fetch audit entries for this content
-  const { data: entries, error } = await fetchTenantScoped<AuditEntry>('audit_logs', companyId, (q: any) =>
-    q.eq('entity_id', contentId).eq('entity_type', 'content_submission').order('sequence_number', { ascending: true })
-  );
-  
-  if (error || !entries || entries.length === 0) {
-    alert('No audit trail found for this content.');
+  if (!companyId) {
+    alert('Cannot export evidence without a company context.');
     return;
   }
 
-  const validEntries: AuditEntry[] = entries;
+  // 1. Fetch audit entries for this content.
+  //    Scoped to the company explicitly rather than leaning on RLS alone —
+  //    the filter is stated here so a missing scope is visible in the code
+  //    rather than depending on a policy elsewhere being right.
+  const { data: entries, error } = await (supabase as any)
+    .from('audit_logs')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('entity_id', contentId)
+    .eq('entity_type', 'content_submission')
+    .order('sequence_number', { ascending: true });
+
+  if (error || !entries || entries.length === 0) {
+    //  company_id was added to audit_logs after the fact and is nullable,
+    //  so entries written before it exist with no company scope. Telling
+    //  someone "no audit trail" when one exists but predates the column
+    //  would be a lie in an evidence export, so the two cases are
+    //  distinguished.
+    const { data: unscoped } = await (supabase as any)
+      .from('audit_logs')
+      .select('id')
+      .is('company_id', null)
+      .eq('entity_id', contentId)
+      .eq('entity_type', 'content_submission')
+      .limit(1);
+
+    if (unscoped && unscoped.length > 0) {
+      alert(
+        'This content has audit entries that predate company scoping and cannot be ' +
+        'exported safely. Ask an administrator to backfill audit_logs.company_id.'
+      );
+    } else {
+      alert('No audit trail found for this content.');
+    }
+    return;
+  }
 
   // 2. Add audit trail
-  const trailJson = JSON.stringify(validEntries, null, 2);
+  const trailJson = JSON.stringify(entries, null, 2);
   zip.file('audit_trail.json', trailJson);
 
   // 3. Add evidence snapshots
   const snapshotsFolder = zip.folder('evidence_snapshots')!;
-  for (const entry of validEntries) {
+  for (const entry of entries as AuditEntry[]) {
     if (entry.evidence_snapshot && Object.keys(entry.evidence_snapshot).length > 0) {
       const filename = `${entry.sequence_number || 'x'}_${entry.action}.json`;
       snapshotsFolder.file(filename, JSON.stringify(entry.evidence_snapshot, null, 2));
