@@ -7,6 +7,7 @@ import type { Database } from '../lib/database.types';
 import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
+import { reauthenticateWithPassword, type ReauthenticationClient } from '../lib/reauthentication';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -395,25 +396,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   //  the caller's tokens and trigger a profile reload as a side effect of
   //  merely asking "is this really you". It would also move the decision
   //  into the browser, where the anon key already lives.
-  const reauthenticate = async (
-    password: string
-  ): Promise<{ success: boolean; error: Error | null }> => {
-    if (!user) {
-      return { success: false, error: new Error('No authenticated user to re-verify.') };
-    }
-    try {
-      const { data, error } = await supabase.rpc('verify_user_password', { password });
-      if (error) {
-        return { success: false, error };
-      }
-      if (data !== true) {
-        return { success: false, error: new Error('That password is not correct.') };
-      }
-      return { success: true, error: null };
-    } catch (err) {
-      return { success: false, error: err as Error };
-    }
-  };
+  const reauthenticate = (password: string) =>
+    reauthenticateWithPassword(supabase as unknown as ReauthenticationClient, user, password);
 
   const signOut = async () => {
     await supabase.auth.signOut();
