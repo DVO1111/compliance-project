@@ -7,6 +7,7 @@ import type { Database } from '../lib/database.types';
 import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
+import { reauthenticateWithPassword, type ReauthenticationClient } from '../lib/reauthentication';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -37,6 +38,16 @@ interface AuthContextType {
   verifySignupCode: (email: string, token: string) => Promise<void>;
   resendSignupCode: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  /**
+   * Re-verify the signed-in user's password without disturbing the session.
+   *
+   * NOT for electronic signatures. Those go through
+   * electronicSignatureService.signRecord(), whose RPC records every
+   * attempt in electronic_signature_attempts and throttles repeated
+   * failures. This helper does neither, so use it only to re-confirm
+   * identity before an ordinary sensitive action.
+   */
+  reauthenticate: (password: string) => Promise<{ success: boolean; error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   switchBrand: (brandId: string | null) => void;
@@ -377,6 +388,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  //  Verified server-side by verify_user_password(), which hashes the
+  //  candidate against auth.users for auth.uid() and returns a boolean.
+  //
+  //  Deliberately NOT supabase.auth.signInWithPassword(): that mints a
+  //  fresh session and fires SIGNED_IN, so a re-auth prompt would rotate
+  //  the caller's tokens and trigger a profile reload as a side effect of
+  //  merely asking "is this really you". It would also move the decision
+  //  into the browser, where the anon key already lives.
+  const reauthenticate = (password: string) =>
+    reauthenticateWithPassword(supabase as unknown as ReauthenticationClient, user, password);
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -392,7 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, refreshProfile, switchBrand }}
+      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, reauthenticate, signOut, refreshProfile, switchBrand }}
     >
       {children}
     </AuthContext.Provider>
