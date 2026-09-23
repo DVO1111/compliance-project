@@ -83,6 +83,20 @@ type ModuleMetrics = {
   licences_expired: number;
 };
 
+/**
+ * The fetch each metric depends on. A metric whose fetch failed must be
+ * reported as unknown, never as zero: on a compliance dashboard a silent
+ * zero reads as good news, which is the worst possible way to fail.
+ */
+type MetricSource =
+  | "risks"
+  | "obligations"
+  | "policies"
+  | "vendors"
+  | "grc_tests"
+  | "capas"
+  | "reg_licences";
+
 type IconType = ComponentType<{ className?: string }>;
 
 type KpiCard = {
@@ -170,6 +184,7 @@ export default function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [exec, setExec] = useState<ExecMetrics | null>(null);
   const [moduleMetrics, setModuleMetrics] = useState<ModuleMetrics | null>(null);
+  const [failedSources, setFailedSources] = useState<Set<MetricSource>>(new Set());
   const [logisticsMetrics, setLogisticsMetrics] = useState<{ rejections_this_month: number; active_flags: number } | null>(null);
   const [activityLoading, setActivityLoading] = useState(true);
   const [moduleActivity, setModuleActivity] = useState<ModuleActivity | null>(null);
@@ -222,7 +237,18 @@ export default function DashboardPage({
       };
       permitted.forEach((c, i) => {
         const res = results[i];
-        activity[c.key] = res.status === 'fulfilled' && ((res.value as any).count ?? 0) > 0;
+        //  A failed count here hides an entire module from the dashboard, so
+        //  it is logged rather than treated as "no data". Same trap as the
+        //  metric fetches: supabase-js resolves with { error } instead of
+        //  rejecting, so `.error` has to be inspected explicitly.
+        if (res.status === 'rejected') {
+          logger.error(`Dashboard activity check "${c.table}" threw:`, res.reason);
+        } else if ((res.value as any)?.error) {
+          logger.error(`Dashboard activity check "${c.table}" failed:`, (res.value as any).error);
+        }
+        activity[c.key] = res.status === 'fulfilled'
+          && !(res.value as any)?.error
+          && ((res.value as any).count ?? 0) > 0;
       });
       setModuleActivity(activity);
       setActivityLoading(false);
@@ -273,18 +299,29 @@ export default function DashboardPage({
           key: 'risks',
           promise: (supabase as any)
             .from('risks')
-            .select('level, status')
+            //  `risk_level`, not `level`. Selecting a column that does not
+            //  exist makes PostgREST reject the whole request, so this card
+            //  read 0 for every company.
+            .select('risk_level, status')
             .eq('company_id', companyId)
-            .neq('status', 'closed')
-            .neq('status', 'resolved'),
+            //  risks.status is identified | mitigating | monitored | closed.
+            //  There is no 'resolved', so the old extra filter was a no-op.
+            .neq('status', 'closed'),
         });
         fetches.push({
           key: 'obligations',
           promise: (supabase as any)
-            .from('obligations')
+            //  The table is `regulatory_obligations`. `obligations` does not
+            //  exist, so this card read 0 — and rendered green, "All on
+            //  track" — for every company.
+            .from('regulatory_obligations')
             .select('status, due_date')
             .eq('company_id', companyId)
-            .neq('status', 'completed')
+            //  status is identified | implemented | monitored — there is no
+            //  'completed', so the old filter was a no-op and this counted
+            //  obligations that had already been satisfied. `identified` is
+            //  the only state that is not yet dealt with.
+            .eq('status', 'identified')
             .lt('due_date', now),
         });
       }
@@ -331,13 +368,23 @@ export default function DashboardPage({
             .eq('company_id', companyId)
             .neq('status', 'closed'),
         });
-        // Regulatory licences: expiry_date for alert calc
+        //  Regulatory licences: expiry_date for the alert calc, but only for
+        //  certificates that are actually in force.
+        //
+        //  `status` arrived with the licence lifecycle (20260921000000) and
+        //  changes what a past expiry_date means. Completing a renewal leaves
+        //  the superseded certificate with its ORIGINAL past expiry — by
+        //  design, so a historical batch release stays explicable — and marks
+        //  it 'renewed'. Counting rows by date alone therefore added 1 to
+        //  "expired" for every renewal, permanently. Draft certificates have
+        //  not been granted at all, and discontinued ones are not renewable.
         fetches.push({
           key: 'reg_licences',
           promise: (supabase as any)
             .from('regulatory_licences')
-            .select('expiry_date')
-            .eq('company_id', companyId),
+            .select('expiry_date, status')
+            .eq('company_id', companyId)
+            .not('status', 'in', '(draft,renewed,discontinued)'),
         });
       }
 
@@ -348,13 +395,37 @@ export default function DashboardPage({
         fetches.map((f, i) => [f.key, settled[i]])
       ) as Record<string, PromiseSettledResult<any>>;
 
-      const riskRows = resultMap.risks?.status === 'fulfilled' ? (resultMap.risks.value.data ?? []) : [];
-      const obligationRows = resultMap.obligations?.status === 'fulfilled' ? (resultMap.obligations.value.data ?? []) : [];
-      const policyRows = resultMap.policies?.status === 'fulfilled' ? (resultMap.policies.value.data ?? []) : [];
-      const vendorRows = resultMap.vendors?.status === 'fulfilled' ? (resultMap.vendors.value.data ?? []) : [];
+      //  Read one fetch, and be loud when it did not work.
+      //
+      //  supabase-js does NOT reject on a failed query — it RESOLVES with
+      //  { data: null, error }. So `status === 'fulfilled'` is true even for a
+      //  400, and `?? []` then turns the failure into an empty result. That is
+      //  how three broken queries sat here unnoticed: nothing inspected
+      //  `.error`. This does, records the source as failed, and logs it.
+      const failed = new Set<MetricSource>();
+      const read = <T,>(key: MetricSource): T[] => {
+        const res = resultMap[key];
+        if (!res) return [];                       // not fetched: no permission
+        if (res.status === 'rejected') {
+          logger.error(`Dashboard metric "${key}" threw:`, res.reason);
+          failed.add(key);
+          return [];
+        }
+        if (res.value?.error) {
+          logger.error(`Dashboard metric "${key}" failed:`, res.value.error);
+          failed.add(key);
+          return [];
+        }
+        return (res.value?.data ?? []) as T[];
+      };
+
+      const riskRows = read<{ risk_level: string; status: string }>('risks');
+      const obligationRows = read<{ status: string; due_date: string }>('obligations');
+      const policyRows = read<{ status: string }>('policies');
+      const vendorRows = read<{ id: string }>('vendors');
 
       // GRC: latest test per control_id — first occurrence = most recent (ordered desc)
-      const testRows: { control_id: string; status: string }[] = resultMap.grc_tests?.status === 'fulfilled' ? (resultMap.grc_tests.value.data ?? []) : [];
+      const testRows = read<{ control_id: string; status: string }>('grc_tests');
       const latestByControl = new Map<string, string>();
       for (const t of testRows) {
         if (!latestByControl.has(t.control_id)) latestByControl.set(t.control_id, t.status);
@@ -362,20 +433,22 @@ export default function DashboardPage({
       const grc_failing_controls = [...latestByControl.values()].filter(s => s === 'fail').length;
 
       // CAPA
-      const capaRows: { status: string; due_date: string | null }[] = resultMap.capas?.status === 'fulfilled' ? (resultMap.capas.value.data ?? []) : [];
+      const capaRows = read<{ status: string; due_date: string | null }>('capas');
       const today = new Date();
       const capa_open = capaRows.length;
       const capa_overdue = capaRows.filter(c => c.due_date && new Date(c.due_date) < today).length;
 
-      // Licences
-      const licRows: { expiry_date: string | null }[] = resultMap.reg_licences?.status === 'fulfilled' ? (resultMap.reg_licences.value.data ?? []) : [];
+      //  Licences. Already narrowed server-side to certificates in force, so
+      //  a past expiry_date here genuinely means lapsed.
+      const licRows = read<{ expiry_date: string | null; status: string }>('reg_licences');
       const ninetyDaysOut = new Date(today.getTime() + 90 * 86_400_000);
       const licences_expired = licRows.filter(l => l.expiry_date && new Date(l.expiry_date) < today).length;
       const licences_expiring = licRows.filter(l => l.expiry_date && new Date(l.expiry_date) >= today && new Date(l.expiry_date) <= ninetyDaysOut).length;
 
+      setFailedSources(failed);
       setModuleMetrics({
         open_risks: riskRows.length,
-        critical_risks: riskRows.filter((r: any) => r.level === 'critical' || r.level === 'high').length,
+        critical_risks: riskRows.filter(r => r.risk_level === 'critical' || r.risk_level === 'high').length,
         overdue_obligations: obligationRows.length,
         draft_policies: policyRows.length,
         active_vendors: vendorRows.length,
@@ -439,38 +512,63 @@ export default function DashboardPage({
   const kpiCards: KpiCard[] = useMemo(() => {
     if (!moduleActivity) return [];
 
+    //  Read a metric for display. A source that failed shows an em dash and
+    //  says so, rather than the 0 it would otherwise compute — "0 overdue
+    //  obligations · All on track" because a query 404'd is the most
+    //  dangerous thing this dashboard could say.
+    const metric = (source: MetricSource, pick: (m: ModuleMetrics) => number) => {
+      if (failedSources.has(source)) return { text: "—", failed: true };
+      if (!moduleMetrics) return { text: "…", failed: false };
+      return { text: String(pick(moduleMetrics)), failed: false };
+    };
+    const UNAVAILABLE = "Could not be loaded";
+
+    const mRisks       = metric("risks",        m => m.open_risks);
+    const mObligations = metric("obligations",  m => m.overdue_obligations);
+    const mControls    = metric("grc_tests",    m => m.grc_failing_controls);
+    const mPolicies    = metric("policies",     m => m.draft_policies);
+    const mCapas       = metric("capas",        m => m.capa_open);
+    const mVendors     = metric("vendors",      m => m.active_vendors);
+    const mLicences    = metric("reg_licences", m => m.licences_expired + m.licences_expiring);
+
     // Build a ranked pool of compliance infrastructure candidates.
     // The first 4 non-null entries win — content data never enters this pool.
     const pool: (KpiCard | null)[] = [
       // Slot 1 — Risk posture
       canGrc ? {
         title: "Open Risks",
-        value: moduleMetrics ? String(moduleMetrics.open_risks) : "…",
+        value: mRisks.text,
         icon: ShieldAlert,
-        subtext: moduleMetrics?.critical_risks
-          ? `${moduleMetrics.critical_risks} critical / high`
-          : "No critical risks",
-        variant: moduleMetrics && moduleMetrics.critical_risks > 0 ? "red" : "purple",
+        subtext: mRisks.failed
+          ? UNAVAILABLE
+          : moduleMetrics?.critical_risks
+            ? `${moduleMetrics.critical_risks} critical / high`
+            : "No critical risks",
+        variant: mRisks.failed ? "yellow" : moduleMetrics && moduleMetrics.critical_risks > 0 ? "red" : "purple",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'risk-register' } })),
       } : null,
 
       // Slot 2 — Regulatory obligations
       canGrc ? {
         title: "Overdue Obligations",
-        value: moduleMetrics ? String(moduleMetrics.overdue_obligations) : "…",
+        value: mObligations.text,
         icon: ClipboardList,
-        subtext: moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
-        variant: moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
+        subtext: mObligations.failed
+          ? UNAVAILABLE
+          : moduleMetrics?.overdue_obligations === 0 ? "All on track" : "Action required",
+        variant: mObligations.failed ? "yellow" : moduleMetrics && moduleMetrics.overdue_obligations > 0 ? "red" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'obligations' } })),
       } : null,
 
       // Slot 3 — Control health (GRC failing controls, or CAPA, or logistics security)
       canGrc && moduleActivity.grc ? {
         title: "Failing Controls",
-        value: moduleMetrics ? String(moduleMetrics.grc_failing_controls) : "…",
+        value: mControls.text,
         icon: Activity,
-        subtext: moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
-        variant: moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
+        subtext: mControls.failed
+          ? UNAVAILABLE
+          : moduleMetrics?.grc_failing_controls === 0 ? "All controls passing" : "Corrective action needed",
+        variant: mControls.failed ? "yellow" : moduleMetrics && moduleMetrics.grc_failing_controls > 0 ? "red" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'control-monitoring' } })),
       } : moduleActivity.contraband ? {
         title: "Contraband Rejections",
@@ -481,9 +579,9 @@ export default function DashboardPage({
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
       } : canPolicies ? {
         title: "Draft Policies",
-        value: moduleMetrics ? String(moduleMetrics.draft_policies) : "…",
+        value: mPolicies.text,
         icon: FileText,
-        subtext: "awaiting publication",
+        subtext: mPolicies.failed ? UNAVAILABLE : "awaiting publication",
         variant: (moduleMetrics && moduleMetrics.draft_policies > 0 ? "yellow" : "green") as "yellow" | "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'policies' } })),
       } : null,
@@ -491,23 +589,27 @@ export default function DashboardPage({
       // Slot 4 — CAPAs, licences, flagged senders, vendors, or policies (first match wins)
       canGrc && moduleActivity.capas ? {
         title: "Open CAPAs",
-        value: moduleMetrics ? String(moduleMetrics.capa_open) : "…",
+        value: mCapas.text,
         icon: ClipboardCheck,
-        subtext: moduleMetrics
-          ? moduleMetrics.capa_overdue > 0
-            ? `${moduleMetrics.capa_overdue} overdue`
-            : "None overdue"
-          : undefined,
-        variant: moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
+        subtext: mCapas.failed
+          ? UNAVAILABLE
+          : moduleMetrics
+            ? moduleMetrics.capa_overdue > 0
+              ? `${moduleMetrics.capa_overdue} overdue`
+              : "None overdue"
+            : undefined,
+        variant: mCapas.failed ? "yellow" : moduleMetrics && moduleMetrics.capa_overdue > 0 ? "red" : moduleMetrics && moduleMetrics.capa_open > 0 ? "yellow" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'capa-management' } })),
       } : canGrc && moduleActivity.licences ? {
         title: "Licence Alerts",
-        value: moduleMetrics ? String(moduleMetrics.licences_expired + moduleMetrics.licences_expiring) : "…",
+        value: mLicences.text,
         icon: Key,
-        subtext: moduleMetrics
-          ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
-          : undefined,
-        variant: moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
+        subtext: mLicences.failed
+          ? UNAVAILABLE
+          : moduleMetrics
+            ? `${moduleMetrics.licences_expired} expired · ${moduleMetrics.licences_expiring} expiring`
+            : undefined,
+        variant: mLicences.failed ? "yellow" : moduleMetrics && moduleMetrics.licences_expired > 0 ? "red" : moduleMetrics && moduleMetrics.licences_expiring > 0 ? "yellow" : "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: isLogisticsProfile ? 'license-vault' : 'regulatory-affairs' } })),
       } : moduleActivity.customerFlags ? {
         title: "Flagged Senders",
@@ -518,23 +620,23 @@ export default function DashboardPage({
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'contraband-rejection' } })),
       } : canVendors && moduleActivity.vendors ? {
         title: "Active Vendors",
-        value: moduleMetrics ? String(moduleMetrics.active_vendors) : "…",
+        value: mVendors.text,
         icon: Building2,
-        subtext: "under monitoring",
+        subtext: mVendors.failed ? UNAVAILABLE : "under monitoring",
         variant: "purple",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'vendors' } })),
       } : canPolicies && moduleActivity.policies ? {
         title: "Draft Policies",
-        value: moduleMetrics ? String(moduleMetrics.draft_policies) : "…",
+        value: mPolicies.text,
         icon: FileText,
-        subtext: "awaiting publication",
+        subtext: mPolicies.failed ? UNAVAILABLE : "awaiting publication",
         variant: (moduleMetrics && moduleMetrics.draft_policies > 0 ? "yellow" : "green") as "yellow" | "green",
         onClick: () => window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'policies' } })),
       } : null,
     ];
 
     return pool.filter((c): c is KpiCard => c !== null).slice(0, 4);
-  }, [moduleActivity, moduleMetrics, logisticsMetrics, isLogisticsProfile, canGrc, canPolicies, canVendors]);
+  }, [moduleActivity, moduleMetrics, failedSources, logisticsMetrics, isLogisticsProfile, canGrc, canPolicies, canVendors]);
 
   /* ─────────────────────────── Render ─────────────────────────── */
   return (
