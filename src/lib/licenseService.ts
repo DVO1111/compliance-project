@@ -43,9 +43,12 @@ export type LicenseStatus = 'active' | 'expiring' | 'expired';
 
 // ── 2026 NAFDAC Renewal Guidelines Template ──────────────────
 //  Moved to ./renewalTemplate so it can be imported without pulling in
-//  the Supabase client. Re-exported here so existing callers are
-//  unaffected.
-export { NAFDAC_2026_RENEWAL_TASKS } from './renewalTemplate';
+//  the Supabase client. Imported AND re-exported: `export { X } from '...'`
+//  alone forwards the name without creating a local binding, so
+//  generateRenewalTaskDates() below would fail to resolve it — a
+//  ReferenceError at runtime, not just a type error.
+import { NAFDAC_2026_RENEWAL_TASKS } from './renewalTemplate';
+export { NAFDAC_2026_RENEWAL_TASKS };
 export type { RenewalTaskTemplate } from './renewalTemplate';
 
 // ── Status helpers ───────────────────────────────────────────
