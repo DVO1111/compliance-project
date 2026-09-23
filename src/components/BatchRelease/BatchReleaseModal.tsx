@@ -41,6 +41,12 @@ export default function BatchReleaseModal({ companyId, userId, onClose, onSucces
         expiry_date: form.expiry_date,
         batch_size: parseFloat(form.batch_size),
         unit: form.unit,
+        //  This modal does not yet offer a product picker, so batches
+        //  created here are unlinked and the licence gate has nothing to
+        //  check against — the same position as every batch that predates
+        //  the product registry. Stated explicitly rather than left
+        //  undefined so the omission is visible.
+        product_id: null,
       });
       onSuccess();
     } catch (e: any) {
