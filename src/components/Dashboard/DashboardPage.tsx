@@ -660,7 +660,7 @@ export default function DashboardPage({
       <div className="sticky top-0 z-30 pt-2 pb-0">
         <div className={`border rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap max-w-[1600px] mx-auto transition-all duration-300 ${
           isScrolled
-            ? 'bg-[var(--color-surface)]/70 backdrop-blur-xl border-transparent shadow-[0_8px_30px_rgb(0,0,0,0.12)]'
+            ? 'bg-[color-mix(in_srgb,var(--color-surface)_70%,transparent)] backdrop-blur-xl border-transparent shadow-[0_8px_30px_rgb(0,0,0,0.12)]'
             : 'dash-card dash-border shadow-sm'
         }`}>
           <div>

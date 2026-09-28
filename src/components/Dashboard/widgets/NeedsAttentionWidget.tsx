@@ -34,20 +34,25 @@ interface ActionItem {
 }
 
 const SEVERITY_STYLES: Record<Severity, { dot: string; badge: string; badgeText: string }> = {
+  //  A severity scale, so all three rows are built the same way from the status
+  //  tokens. Previously only `critical` used tokens at all, and even its border
+  //  was written `dash-edge-danger` — a class Tailwind cannot
+  //  emit, so the critical badge had no border colour of its own. `high` and
+  //  `medium` used fixed Tailwind shades that stayed pale in the dark themes.
   critical: {
     dot: 'bg-[var(--color-danger)]',
-    badge: 'bg-[var(--color-danger-soft)] border-[var(--color-danger)]/30',
+    badge: 'bg-[var(--color-danger-soft)] dash-edge-danger',
     badgeText: 'text-[var(--color-danger)]',
   },
   high: {
-    dot: 'bg-amber-500',
-    badge: 'bg-amber-50 border-amber-200',
-    badgeText: 'text-amber-700',
+    dot: 'bg-[var(--color-warning)]',
+    badge: 'bg-[var(--color-warning-soft)] dash-edge-warning',
+    badgeText: 'text-[var(--color-warning)]',
   },
   medium: {
-    dot: 'bg-blue-400',
-    badge: 'bg-blue-50 border-blue-200',
-    badgeText: 'text-blue-700',
+    dot: 'bg-[var(--color-info)]',
+    badge: 'bg-[var(--color-info-soft)] dash-edge-info',
+    badgeText: 'text-[var(--color-info)]',
   },
 };
 
@@ -264,14 +269,14 @@ export default function NeedsAttentionWidget({
             criticalCount > 0
               ? 'bg-[var(--color-danger-soft)]'
               : items.length > 0
-              ? 'bg-amber-50'
+              ? 'bg-[var(--color-warning-soft)]'
               : 'bg-[var(--color-success-soft)]'
           }`}>
             <AlertTriangle className={`w-4 h-4 ${
               criticalCount > 0
                 ? 'text-[var(--color-danger)]'
                 : items.length > 0
-                ? 'text-amber-600'
+                ? 'text-[var(--color-warning)]'
                 : 'text-[var(--color-success)]'
             }`} />
           </div>
@@ -285,7 +290,7 @@ export default function NeedsAttentionWidget({
           </div>
         </div>
         {criticalCount > 0 && (
-          <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] border border-[var(--color-danger)]/30">
+          <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] border dash-edge-danger">
             {criticalCount} critical
           </span>
         )}

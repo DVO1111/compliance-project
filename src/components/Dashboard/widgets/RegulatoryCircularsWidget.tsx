@@ -34,7 +34,7 @@ const SEVERITY_STYLES: Record<string, string> = {
 const DOC_TYPE_STYLES: Record<string, string> = {
   circular: "bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)]",
   guideline: "bg-[var(--color-info-soft)] text-[var(--color-info)]",
-  advisory: "bg-[var(--color-purple)]/10 text-[var(--color-purple)]",
+  advisory: "bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)] text-[var(--color-purple)]",
   enforcement: "bg-[var(--color-danger-soft)] text-[var(--color-danger)]",
   news: "bg-[var(--color-warning-soft)] text-[var(--color-warning)]",
   policy_update: "bg-[var(--color-success-soft)] text-[var(--color-success)]",
@@ -116,7 +116,7 @@ export default function RegulatoryCircularsWidget() {
       onViewChange={setCurrentView}
     >
       <div className="flex items-center gap-2 mb-4 shrink-0">
-        <Bell className="w-4 h-4 text-behance-pink" />
+        <Bell className="w-4 h-4 text-[var(--color-warning)]" />
         <div>
           <h3 className="text-sm font-semibold dash-text">Regulatory Alerts</h3>
           <p className="text-xs dash-text-secondary">

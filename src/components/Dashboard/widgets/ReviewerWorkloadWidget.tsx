@@ -76,7 +76,7 @@ export default function ReviewerWorkloadWidget({
             onViewChange={setCurrentView}
         >
             <div className="flex items-center gap-2 mb-4 shrink-0">
-                <div className="p-1.5 rounded-lg bg-[var(--color-purple)]/10">
+                <div className="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)]">
                     <Users className="w-4 h-4 text-[var(--color-purple)]" />
                 </div>
                 <div>

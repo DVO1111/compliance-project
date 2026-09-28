@@ -52,7 +52,7 @@ export default function EarlyWarningSystemWidget({ companyId }: { companyId: str
                     </div>
                 ) : (
                     alerts.map((alert: RiskVelocityAlert, idx: number) => (
-                        <div key={idx} className="group relative p-4 rounded-2xl border-2 border-transparent bg-[var(--color-surface-alt)]/50 hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-danger-soft)] transition-all cursor-pointer">
+                        <div key={idx} className="group relative p-4 rounded-2xl border-2 border-transparent bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)] hover:bg-[var(--color-surface-alt)] hover:border-[var(--color-danger-soft)] transition-all cursor-pointer">
                             <div className="flex items-start gap-3">
                                 <div className="p-2 rounded-xl bg-[var(--color-danger-soft)] text-[var(--color-danger)] shrink-0">
                                     <AlertTriangle className="w-4 h-4" />

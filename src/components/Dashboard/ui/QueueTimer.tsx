@@ -53,18 +53,22 @@ export default function QueueTimer({ submittedAt }: QueueTimerProps) {
     const twoHours = 2 * 60 * 60 * 1000;
     const sixHours = 6 * 60 * 60 * 1000;
 
-    let colorClass = "text-behance-green";
-    let bgClass = "bg-behance-green/10";
-    let borderClass = "border-behance-green/20";
+    //  This is a status scale, not decoration, so it reads from the semantic
+    //  status tokens rather than the old behance palette — which put "healthy"
+    //  on a brand green and "breached" on a brand pink, neither of which
+    //  followed the theme or meant anything.
+    let colorClass = "text-[var(--color-success)]";
+    let bgClass = "bg-[var(--color-success-soft)]";
+    let borderClass = "dash-edge-success";
 
     if (isBreached || timeLeft < twoHours) {
-        colorClass = "text-behance-pink";
-        bgClass = "bg-behance-pink/10";
-        borderClass = "border-behance-pink/20";
+        colorClass = "text-[var(--color-danger)]";
+        bgClass = "bg-[var(--color-danger-soft)]";
+        borderClass = "dash-edge-danger";
     } else if (timeLeft < sixHours) {
-        colorClass = "text-orange-400";
-        bgClass = "bg-orange-500/10";
-        borderClass = "border-orange-500/20";
+        colorClass = "text-[var(--color-warning)]";
+        bgClass = "bg-[var(--color-warning-soft)]";
+        borderClass = "dash-edge-warning";
     }
 
     return (

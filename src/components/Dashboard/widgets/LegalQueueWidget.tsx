@@ -37,7 +37,7 @@ function canRequestChanges(status: string) {
 }
 
 const selectClass =
-  "dash-surface dash-text text-xs border dash-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/20 transition-colors";
+  "dash-surface dash-text text-xs border dash-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] transition-colors";
 
 export default function LegalQueueWidget({
   companyId,
@@ -315,13 +315,18 @@ export default function LegalQueueWidget({
                       <td className="px-3 py-2.5">
                         {r.risk ? (
                           <span
+                            //  Four risk levels, four distinct tokens. Before this they were
+                            //  behance-pink / orange / amber / behance-green, and orange and
+                            //  amber are close enough that high and medium were told apart
+                            //  only by a border shade. medium now takes info, which also makes
+                            //  this scale match NeedsAttentionWidget's critical/high/medium.
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${r.risk === "critical"
-                              ? "bg-behance-pink/20 text-behance-pink border border-behance-pink/30"
+                              ? "bg-[var(--color-danger-soft)] text-[var(--color-danger)] border dash-edge-danger"
                               : r.risk === "high"
-                                ? "bg-[var(--color-warning)]/20 text-[var(--color-warning)] border border-orange-500/30"
+                                ? "bg-[var(--color-warning-soft)] text-[var(--color-warning)] border dash-edge-warning"
                                 : r.risk === "medium"
-                                  ? "bg-[var(--color-warning)]/20 text-[var(--color-warning)] border border-amber-500/30"
-                                  : "bg-behance-green/20 text-behance-green border border-behance-green/30"
+                                  ? "bg-[var(--color-info-soft)] text-[var(--color-info)] border dash-edge-info"
+                                  : "bg-[var(--color-success-soft)] text-[var(--color-success)] border dash-edge-success"
                               }`}
                           >
                             {r.risk}
@@ -350,21 +355,21 @@ export default function LegalQueueWidget({
                           <button
                             disabled={disableInReview}
                             onClick={() => quickAction(r, "in_review")}
-                            className={`${btnBase} bg-behance-blue/10 hover:bg-behance-blue/20 text-[var(--color-info)] border border-behance-blue/20 hover:border-behance-blue/50 hover:-translate-y-0.5`}
+                            className={`${btnBase} bg-[var(--color-info-soft)] hover:bg-[color-mix(in_srgb,var(--color-info)_22%,transparent)] text-[var(--color-info)] border dash-edge-info hover:-translate-y-0.5`}
                           >
                             Review
                           </button>
                           <button
                             disabled={disableApprove}
                             onClick={() => quickAction(r, "approve")}
-                            className={`${btnBase} bg-behance-green/10 hover:bg-behance-green/20 text-[var(--color-success)] border border-behance-green/20 hover:border-behance-green/50 hover:-translate-y-0.5`}
+                            className={`${btnBase} bg-[var(--color-success-soft)] hover:bg-[color-mix(in_srgb,var(--color-success)_22%,transparent)] text-[var(--color-success)] border dash-edge-success hover:-translate-y-0.5`}
                           >
                             Approve
                           </button>
                           <button
                             disabled={disableChanges}
                             onClick={() => quickAction(r, "changes")}
-                            className={`${btnBase} bg-[var(--color-warning)]/10 hover:bg-[var(--color-warning)]/20 text-orange-300 border border-orange-500/20 hover:border-orange-500/50 hover:-translate-y-0.5`}
+                            className={`${btnBase} bg-[var(--color-warning-soft)] hover:bg-[color-mix(in_srgb,var(--color-warning)_22%,transparent)] text-[var(--color-warning)] border dash-edge-warning hover:-translate-y-0.5`}
                           >
                             Changes
                           </button>
@@ -392,7 +397,7 @@ export default function LegalQueueWidget({
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="Explain what needs to be fixed…"
               rows={4}
-              className="mt-3 w-full dash-surface border dash-border rounded-lg px-3 py-2 text-sm dash-text focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/20 resize-none"
+              className="mt-3 w-full dash-surface border dash-border rounded-lg px-3 py-2 text-sm dash-text focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] resize-none"
               autoFocus
             />
             <div className="flex justify-end gap-2 mt-4">
@@ -426,7 +431,7 @@ export default function LegalQueueWidget({
                     setCommentBusy(false);
                   }
                 }}
-                className="px-3 py-1.5 rounded-lg text-sm bg-[var(--color-warning)] text-white font-medium hover:bg-[var(--color-warning)] disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg text-sm bg-[var(--color-warning)] text-white font-medium hover:bg-[color-mix(in_srgb,var(--color-warning)_85%,black)] disabled:opacity-50"
               >
                 {commentBusy ? "Sending…" : "Submit Feedback"}
               </button>

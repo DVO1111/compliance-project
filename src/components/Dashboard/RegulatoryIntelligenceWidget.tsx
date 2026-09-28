@@ -34,31 +34,31 @@ const CATEGORY_ICONS: Record<ProductCategory, typeof Pill> = {
 };
 
 const SOURCE_COLORS: Record<string, string> = {
-  NAFDAC: 'bg-[var(--color-success-soft)] text-[var(--color-success)] border-[var(--color-success)]/20',
-  FDA: 'bg-[var(--color-info-soft)] text-[var(--color-info)] border-[var(--color-info)]/20',
-  WHO: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)] border-[var(--color-warning)]/20',
-  MDCN: 'bg-[var(--color-success-soft)] text-[var(--color-success)] border-[var(--color-success)]/20',
-  PCN: 'bg-[var(--color-success-soft)] text-[var(--color-success)] border-[var(--color-success)]/20',
-  NMCN: 'bg-[var(--color-success-soft)] text-[var(--color-success)] border-[var(--color-success)]/20',
-  FTC: 'bg-[var(--color-info-soft)] text-[var(--color-info)] border-[var(--color-info)]/20',
-  EMA: 'bg-[var(--color-purple)]/10 text-[var(--color-purple)] border-[var(--color-purple)]/20',
-  MHRA: 'bg-[var(--color-purple)]/10 text-[var(--color-purple)] border-[var(--color-purple)]/20',
-  AMA: 'bg-slate-100 text-[var(--color-text-primary)] border-[var(--color-border)]',
+  NAFDAC: 'bg-[var(--color-success-soft)] text-[var(--color-success)] dash-edge-success',
+  FDA: 'bg-[var(--color-info-soft)] text-[var(--color-info)] dash-edge-info',
+  WHO: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)] dash-edge-warning',
+  MDCN: 'bg-[var(--color-success-soft)] text-[var(--color-success)] dash-edge-success',
+  PCN: 'bg-[var(--color-success-soft)] text-[var(--color-success)] dash-edge-success',
+  NMCN: 'bg-[var(--color-success-soft)] text-[var(--color-success)] dash-edge-success',
+  FTC: 'bg-[var(--color-info-soft)] text-[var(--color-info)] dash-edge-info',
+  EMA: 'bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)] text-[var(--color-purple)] dash-edge-purple',
+  MHRA: 'bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)] text-[var(--color-purple)] dash-edge-purple',
+  AMA: 'dash-surface-alt text-[var(--color-text-primary)] border-[var(--color-border)]',
 };
 
 const SEVERITY_STYLES: Record<string, string> = {
-  high: 'bg-[var(--color-danger-soft)] border-[var(--color-danger)]/20 text-[var(--color-danger)]',
-  medium: 'bg-[var(--color-warning-soft)] border-[var(--color-warning)]/20 text-[var(--color-warning)]',
-  low: 'bg-[var(--color-success-soft)] border-[var(--color-success)]/20 text-[var(--color-success)]',
+  high: 'bg-[var(--color-danger-soft)] dash-edge-danger text-[var(--color-danger)]',
+  medium: 'bg-[var(--color-warning-soft)] dash-edge-warning text-[var(--color-warning)]',
+  low: 'bg-[var(--color-success-soft)] dash-edge-success text-[var(--color-success)]',
 };
 
 const DOC_TYPE_STYLES: Record<string, string> = {
   circular: 'dash-surface-alt dash-text border-[var(--color-border)]',
-  guideline: 'bg-[var(--color-info)]/10 text-[var(--color-info)] border-blue-500/20',
-  advisory: 'bg-[var(--color-purple)]/10 text-[var(--color-purple)] border-indigo-500/20',
-  enforcement: 'bg-[var(--color-danger)]/10 text-[var(--color-danger)] border-red-500/20',
-  news: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)] border-amber-500/20',
-  policy_update: 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-emerald-500/20',
+  guideline: 'bg-[var(--color-info-soft)] text-[var(--color-info)] dash-edge-info',
+  advisory: 'bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)] text-[var(--color-purple)] dash-edge-purple',
+  enforcement: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)] dash-edge-danger',
+  news: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)] dash-edge-warning',
+  policy_update: 'bg-[var(--color-success-soft)] text-[var(--color-success)] dash-edge-success',
 };
 
 interface RegulatoryIntelligenceWidgetProps {
@@ -132,8 +132,8 @@ export default function RegulatoryIntelligenceWidget({ onNavigateToArchive }: Re
       <div className="p-6 border-b dash-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-behance-blue/10 rounded-xl flex items-center justify-center">
-              <Radio className="w-5 h-5 text-behance-blue" />
+            <div className="w-10 h-10 bg-[var(--color-accent-soft)] rounded-xl flex items-center justify-center">
+              <Radio className="w-5 h-5 dash-accent" />
             </div>
             <div>
               <h3 className="text-lg font-semibold dash-text">Regulatory Intelligence</h3>
@@ -142,7 +142,7 @@ export default function RegulatoryIntelligenceWidget({ onNavigateToArchive }: Re
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-behance-blue/10 text-behance-blue">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-accent-soft)] dash-accent">
             <span className="w-1.5 h-1.5 bg-[var(--color-success)] rounded-full animate-pulse" />
             Live Feed
           </span>
@@ -176,12 +176,12 @@ export default function RegulatoryIntelligenceWidget({ onNavigateToArchive }: Re
                       key={category}
                       onClick={() => toggleCategory(category)}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isSelected
-                          ? 'bg-behance-blue/10 text-behance-blue'
+                          ? 'bg-[var(--color-accent-soft)] dash-accent'
                           : 'dash-text-secondary hover:dash-surface-alt hover:text-white'
                         }`}
                     >
                       <div
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-behance-blue border-behance-blue' : 'dash-border'
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'dash-border'
                           }`}
                       >
                         {isSelected && (
@@ -210,7 +210,7 @@ export default function RegulatoryIntelligenceWidget({ onNavigateToArchive }: Re
       <div className="divide-y divide-[var(--color-border)] max-h-[520px] overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-behance-blue" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-accent)]" />
           </div>
         ) : filteredCirculars.length === 0 ? (
           <div className="text-center py-16 px-6">
@@ -275,7 +275,7 @@ function CircularCard({
           </div>
 
           <button onClick={() => setExpanded(!expanded)} className="text-left w-full group">
-            <h4 className="text-sm font-semibold dash-text group-hover:text-behance-blue transition-colors leading-snug">
+            <h4 className="text-sm font-semibold dash-text group-hover:dash-accent transition-colors leading-snug">
               {circular.title}
             </h4>
           </button>
@@ -289,7 +289,7 @@ function CircularCard({
                   {circular.topics.slice(0, 6).map((t: string) => (
                     <span
                       key={t}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 text-slate-700 border border-[var(--color-border)] rounded text-xs font-medium"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 dash-surface-alt dash-text border border-[var(--color-border)] rounded text-xs font-medium"
                     >
                       {t}
                     </span>
@@ -314,7 +314,7 @@ function CircularCard({
                     e.stopPropagation();
                     onCheckArchive?.();
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-behance-blue text-white text-xs font-medium rounded-lg hover:opacity-90 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-accent-dark)] text-white text-xs font-medium rounded-lg hover:opacity-90 transition-colors"
                 >
                   <Archive className="w-3.5 h-3.5" />
                   Check My Archive

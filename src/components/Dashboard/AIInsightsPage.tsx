@@ -42,9 +42,9 @@ function alertIcon(severity: SmartAlert['severity']) {
 }
 
 function alertBg(severity: SmartAlert['severity']) {
-    if (severity === 'critical') return 'bg-[var(--color-danger-soft)]  border-[var(--color-danger)]/30';
-    if (severity === 'warning')  return 'bg-[var(--color-warning-soft)] border-[var(--color-warning)]/30';
-    return 'bg-[var(--color-info-soft)] border-[var(--color-info)]/30';
+    if (severity === 'critical') return 'bg-[var(--color-danger-soft)] dash-edge-danger';
+    if (severity === 'warning')  return 'bg-[var(--color-warning-soft)] dash-edge-warning';
+    return 'bg-[var(--color-info-soft)] dash-edge-info';
 }
 
 function gradeColor(grade: string) {
@@ -169,8 +169,10 @@ export default function AIInsightsPage() {
             <div className="dash-card border dash-border rounded-2xl p-6 shadow-sm">
                 <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-900/30">
-                            <Brain size={18} className="text-purple-600" />
+                        {/*  The token already carries its own per-theme value, so this no
+                             longer needs a dark: variant to compensate. */}
+                        <div className="p-2 rounded-xl bg-[color-mix(in_srgb,var(--color-purple)_12%,transparent)]">
+                            <Brain size={18} className="text-[var(--color-purple)]" />
                         </div>
                         <div>
                             <h3 className="font-bold dash-text">Compliance Intelligence Summary</h3>
@@ -191,17 +193,17 @@ export default function AIInsightsPage() {
                 {/* Alert summary pills */}
                 <div className="flex gap-3 mt-4 flex-wrap">
                     {criticalCount > 0 && (
-                        <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] border border-[var(--color-danger)]/30">
+                        <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] border dash-edge-danger">
                             <AlertTriangle size={11} /> {criticalCount} Critical
                         </span>
                     )}
                     {warningCount > 0 && (
-                        <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-warning-soft)] text-[var(--color-warning)] border border-[var(--color-warning)]/30">
+                        <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-warning-soft)] text-[var(--color-warning)] border dash-edge-warning">
                             <AlertCircle size={11} /> {warningCount} Warning
                         </span>
                     )}
                     {criticalCount === 0 && warningCount === 0 && (
-                        <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-success-soft)] text-[var(--color-success)] border border-[var(--color-success)]/30">
+                        <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-success-soft)] text-[var(--color-success)] border dash-edge-success">
                             <CheckCircle2 size={11} /> All Clear
                         </span>
                     )}
@@ -259,7 +261,7 @@ export default function AIInsightsPage() {
                         <>
                             <div className="flex flex-wrap gap-2 mb-5">
                                 {userActivity.modules.map(m => (
-                                    <span key={m.name} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/20">
+                                    <span key={m.name} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] border dash-edge-accent">
                                         {m.name} <span className="opacity-50">·</span> {m.count}
                                     </span>
                                 ))}

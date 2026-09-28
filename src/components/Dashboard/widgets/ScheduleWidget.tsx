@@ -184,7 +184,7 @@ export default function ScheduleWidget({
                     overdue.map((item) => (
                       <div
                         key={item.id}
-                        className="border border-[var(--color-warning)]/20 bg-[var(--color-warning-soft)] rounded-md p-2"
+                        className="border dash-edge-warning bg-[var(--color-warning-soft)] rounded-md p-2"
                       >
                         <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">
                           {item.title}
