@@ -143,10 +143,17 @@ company scoping" rather than reporting the two identically.
 ```
 supabase/tests/tenant_isolation_test.sql     31 assertions, 0 failures
 full SQL suite (16 suites)                  650 assertions, 0 failures, 0 errors
-vitest                                      135/135
-tsc --noEmit                                clean
-production build                            succeeds
+npm run typecheck                           clean
+npm test                                    148/148, with no VITE_SUPABASE_* set
+npm run build                               succeeds
 ```
+
+Run against a Postgres 16 instance rebuilt from scratch with all 155 migrations
+applied in order.
+
+`npm run typecheck` rather than `npx tsc --noEmit`: `tsconfig.json` is a
+solution-style config (`"files": []` plus `"references"`), so without `--build`
+that command typechecks zero files and exits 0. Only the former checks anything.
 
 The isolation suite uses a real signed-in admin of another company, not an
 anonymous caller: "anon is refused" proves far less than "a legitimate user of
