@@ -39,10 +39,14 @@ export default function ActiveWorkflowsWidget({ companyId, onNavigate }: Props) 
         r.status === 'fulfilled' ? (r.value.count ?? 0) : 0;
 
       setCounts([
-        { label: 'Batches in QC', count: get(batches), icon: FlaskConical, color: 'text-blue-600', page: 'batch-release' },
-        { label: 'Open CAPAs', count: get(capas), icon: ClipboardList, color: 'text-orange-600', page: 'capa-management' },
-        { label: 'Change Controls', count: get(changes), icon: GitMerge, color: 'text-purple-600', page: 'change-control' },
-        { label: 'SOPs in Review', count: get(sops), icon: BookMarked, color: 'text-teal-600', page: 'sop-library' },
+        //  These four tints are categorical — they distinguish one workflow
+        //  from another and carry no judgement about its state. They were fixed
+        //  Tailwind shades, so they stayed the same in every theme; the tokens
+        //  below keep them equally distinct while following the theme.
+        { label: 'Batches in QC', count: get(batches), icon: FlaskConical, color: 'text-[var(--color-info)]', page: 'batch-release' },
+        { label: 'Open CAPAs', count: get(capas), icon: ClipboardList, color: 'text-[var(--color-warning)]', page: 'capa-management' },
+        { label: 'Change Controls', count: get(changes), icon: GitMerge, color: 'text-[var(--color-purple)]', page: 'change-control' },
+        { label: 'SOPs in Review', count: get(sops), icon: BookMarked, color: 'dash-accent', page: 'sop-library' },
       ]);
       setLoading(false);
     })();

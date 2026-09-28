@@ -56,8 +56,11 @@ export default function DashboardCard({
                                     onViewChange(v.id);
                                 }}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${currentView === v.id
-                                    ? "bg-[var(--color-surface)] shadow-sm text-behance-blue border border-[var(--color-border)]"
-                                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-white/50 border border-transparent"
+                                    ? "bg-[var(--color-surface)] shadow-sm dash-accent border border-[var(--color-border)]"
+                                    //  hover was bg-white/50, which is a white wash on a dark
+                                    //  surface in both dark themes. The hover token is the
+                                    //  themed equivalent.
+                                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover-bg)] border border-transparent"
                                     }`}
                             >
                                 {v.label}

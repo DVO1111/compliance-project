@@ -69,14 +69,26 @@ export default function UpcomingDeadlinesWidget({
         }).sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
     }, [events, selectedDate]);
 
+    //  Was five fixed Tailwind shades, identical in every theme. Each state now
+    //  takes the status token that matches what it means:
+    //
+    //    no status  accent    scheduled, nothing has happened to it yet
+    //    rejected   danger    was red
+    //    signed_off success   was emerald
+    //    amend_requested
+    //               warning   was orange
+    //    published  info      was yellow. The one deliberate hue change: a
+    //                         published item is not a warning, and yellow left
+    //                         it looking like one.
     const getEventStyle = (status: string | null | undefined) => {
-        if (!status) return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500';
+        const accent = 'bg-[var(--color-accent-soft)] dash-edge-accent dash-accent';
+        if (!status) return accent;
         switch (status) {
-            case 'rejected': return 'bg-red-500/10 border-red-500/20 text-red-500';
-            case 'published': return 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500';
-            case 'signed_off': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500';
-            case 'amend_requested': return 'bg-orange-500/10 border-orange-500/20 text-orange-500';
-            default: return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500';
+            case 'rejected': return 'bg-[var(--color-danger-soft)] dash-edge-danger text-[var(--color-danger)]';
+            case 'published': return 'bg-[var(--color-info-soft)] dash-edge-info text-[var(--color-info)]';
+            case 'signed_off': return 'bg-[var(--color-success-soft)] dash-edge-success text-[var(--color-success)]';
+            case 'amend_requested': return 'bg-[var(--color-warning-soft)] dash-edge-warning text-[var(--color-warning)]';
+            default: return accent;
         }
     };
 
@@ -89,8 +101,8 @@ export default function UpcomingDeadlinesWidget({
             <div className="pt-4 px-4 shrink-0">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-indigo-500/10">
-                            <Calendar className="w-4 h-4 text-indigo-500" />
+                        <div className="p-1.5 rounded-lg bg-[var(--color-accent-soft)]">
+                            <Calendar className="w-4 h-4 dash-accent" />
                         </div>
                         <h3 className="text-sm font-bold dash-text">Upcoming Deadlines</h3>
                     </div>
@@ -105,7 +117,7 @@ export default function UpcomingDeadlinesWidget({
                                 key={idx}
                                 onClick={() => setSelectedDate(d)}
                                 className={`flex-1 flex flex-col items-center py-1.5 rounded-lg transition-all duration-200 ${isSelected
-                                    ? 'bg-[var(--color-surface)] shadow-sm scale-[1.02] border dash-border text-indigo-500'
+                                    ? 'bg-[var(--color-surface)] shadow-sm scale-[1.02] border dash-border dash-accent'
                                     : 'hover:bg-white/5 dash-text-tertiary'
                                     }`}
                             >
@@ -134,8 +146,8 @@ export default function UpcomingDeadlinesWidget({
                                 {/* Current Time Indicator (if selectedDate is Today) */}
                                 {selectedDate.toDateString() === new Date().toDateString() && new Date().getHours() === h && (
                                     <div className="absolute -top-[1px] left-0 w-full flex items-center gap-2">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 ring-2 ring-indigo-500/20" />
-                                        <div className="flex-1 h-[1px] bg-indigo-500" />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] ring-2 ring-[color-mix(in_srgb,var(--color-accent)_25%,transparent)]" />
+                                        <div className="flex-1 h-[1px] bg-[var(--color-accent)]" />
                                     </div>
                                 )}
                             </div>
@@ -165,7 +177,10 @@ export default function UpcomingDeadlinesWidget({
                                             {profile?.avatar_url ? (
                                                 <img src={profile.avatar_url} className="w-full h-full rounded-lg object-cover" alt="" />
                                             ) : (
-                                                <div className="w-full h-full rounded-lg bg-indigo-500 flex items-center justify-center text-[10px] text-white">
+                                                //  accent-dark, not accent: the label is white, and on the dark
+                                                //  themes the plain accent is the light ramp step, which carries
+                                                //  white at only 3.05:1. accent-dark holds 5.58:1 there.
+                                                <div className="w-full h-full rounded-lg bg-[var(--color-accent-dark)] flex items-center justify-center text-[10px] text-white">
                                                     {profile?.full_name?.charAt(0) || '?'}
                                                 </div>
                                             )}

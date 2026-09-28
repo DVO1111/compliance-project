@@ -116,7 +116,7 @@ export default function DailyQuizWidget() {
         return (
             <DashboardCard className="h-full min-h-[400px] max-h-[400px] flex flex-col">
                 <div className="p-6 flex-1 flex items-center justify-center text-[var(--color-text-secondary)] min-h-0">
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent mr-3" />
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-[var(--color-accent)] border-t-transparent mr-3" />
                     Loading today's quiz…
                 </div>
             </DashboardCard>
@@ -193,7 +193,7 @@ export default function DailyQuizWidget() {
                                             {new Date(h.answered_at).toLocaleDateString()}
                                         </span>
                                     </div>
-                                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${h.is_correct ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-danger)]/10 text-[var(--color-danger)]'}`}>
+                                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${h.is_correct ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
                                         {h.is_correct ? 'Correct' : 'Incorrect'}
                                     </span>
                                 </div>
@@ -223,7 +223,7 @@ export default function DailyQuizWidget() {
                         {/* Compliance Tip */}
                         <button
                             onClick={() => setTipExpanded(!tipExpanded)}
-                            className="w-full flex items-center justify-between p-3 rounded-lg bg-[var(--color-warning)]/10 border border-amber-500/20 mb-4 text-left hover:bg-[var(--color-warning)]/20 transition-colors"
+                            className="w-full flex items-center justify-between p-3 rounded-lg bg-[var(--color-warning-soft)] border dash-edge-warning mb-4 text-left hover:bg-[color-mix(in_srgb,var(--color-warning)_22%,transparent)] transition-colors"
                         >
                             <div className="flex items-center gap-2">
                                 <Lightbulb className="w-4 h-4 text-[var(--color-warning)] shrink-0" />
@@ -236,8 +236,8 @@ export default function DailyQuizWidget() {
                             )}
                         </button>
                         {tipExpanded && (
-                            <div className="mb-4 px-3 py-2.5 rounded-lg bg-[var(--color-warning)]/5 border border-amber-500/10">
-                                <p className="text-sm text-amber-200 leading-relaxed">{question.tip}</p>
+                            <div className="mb-4 px-3 py-2.5 rounded-lg bg-[var(--color-warning-soft)] border dash-edge-warning">
+                                <p className="text-sm text-[var(--color-warning)] leading-relaxed">{question.tip}</p>
                             </div>
                         )}
 
@@ -253,17 +253,17 @@ export default function DailyQuizWidget() {
                                 const isSelected = selectedOption === i;
                                 const isCorrectOption = i === question.correctIndex;
 
-                                let optionClasses = 'border-[var(--color-border)] hover:border-[var(--color-info)]/30 hover:bg-[var(--color-info-soft)]/30';
+                                let optionClasses = 'border-[var(--color-border)] hover:border-[color-mix(in_srgb,var(--color-info)_30%,transparent)] hover:bg-[var(--color-info-soft)]';
                                 if (answered) {
                                     if (isCorrectOption) {
-                                        optionClasses = 'border-emerald-400 bg-[var(--color-success-soft)]';
+                                        optionClasses = 'dash-edge-success bg-[var(--color-success-soft)]';
                                     } else if (isSelected && !isCorrectOption) {
-                                        optionClasses = 'border-red-400 bg-[var(--color-danger-soft)]';
+                                        optionClasses = 'dash-edge-danger bg-[var(--color-danger-soft)]';
                                     } else {
                                         optionClasses = 'border-[var(--color-border)] opacity-50';
                                     }
                                 } else if (isSelected) {
-                                    optionClasses = 'border-blue-500 bg-[var(--color-info-soft)] ring-1 ring-blue-200';
+                                    optionClasses = 'dash-edge-info bg-[var(--color-info-soft)] ring-1 ring-[color-mix(in_srgb,var(--color-info)_25%,transparent)]';
                                 }
 
                                 return (
@@ -274,11 +274,11 @@ export default function DailyQuizWidget() {
                                         className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${optionClasses}`}
                                     >
                                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${answered && isCorrectOption
-                                            ? 'border-emerald-500 bg-[var(--color-success)]'
+                                            ? 'dash-edge-success bg-[var(--color-success)]'
                                             : answered && isSelected && !isCorrectOption
-                                                ? 'border-red-500 bg-[var(--color-danger)]'
+                                                ? 'dash-edge-danger bg-[var(--color-danger)]'
                                                 : isSelected
-                                                    ? 'border-blue-500 bg-[var(--color-info)]'
+                                                    ? 'dash-edge-info bg-[var(--color-info)]'
                                                     : 'border-[var(--color-border)]'
                                             }`}>
                                             {answered && isCorrectOption && <CheckCircle2 className="w-3 h-3 text-white" />}
@@ -299,7 +299,7 @@ export default function DailyQuizWidget() {
                                 onClick={handleSubmit}
                                 disabled={selectedOption === null}
                                 className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${selectedOption !== null
-                                    ? 'bg-behance-blue text-white hover:opacity-90 shadow-lg shadow-behance-blue/20'
+                                    ? 'bg-[var(--color-accent-dark)] text-white hover:opacity-90 shadow-lg shadow-[color-mix(in_srgb,var(--color-accent)_25%,transparent)]'
                                     : 'dash-surface border dash-border dash-text-tertiary cursor-not-allowed'
                                     }`}
                             >
@@ -307,8 +307,8 @@ export default function DailyQuizWidget() {
                             </button>
                         ) : (
                             <div className={`p-3 rounded-lg text-sm ${isCorrect
-                                ? 'bg-[var(--color-success-soft)] border border-[var(--color-success)]/20 text-[var(--color-success)]'
-                                : 'bg-[var(--color-danger-soft)] border border-[var(--color-danger)]/20 text-[var(--color-danger)]'
+                                ? 'bg-[var(--color-success-soft)] border dash-edge-success text-[var(--color-success)]'
+                                : 'bg-[var(--color-danger-soft)] border dash-edge-danger text-[var(--color-danger)]'
                                 }`}>
                                 <div className="flex items-center gap-2 mb-1">
                                     {isCorrect ? (

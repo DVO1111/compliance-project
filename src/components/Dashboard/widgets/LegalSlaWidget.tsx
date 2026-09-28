@@ -200,7 +200,7 @@ export default function LegalSlaWidget({
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[var(--color-purple)]/10 border border-[var(--color-purple)]/20 rounded-lg p-3 text-center">
+            <div className="bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)] border dash-edge-purple rounded-lg p-3 text-center">
               <p className="text-2xl font-bold text-[var(--color-purple)] tabular-nums">
                 {decisions?.today_total || 0}
               </p>
@@ -211,7 +211,7 @@ export default function LegalSlaWidget({
                 <p className="text-[9px] text-[var(--color-purple)] opacity-50 font-medium">No activity yet today</p>
               )}
             </div>
-            <div className="bg-[var(--color-success-soft)] border border-[var(--color-success)]/20 rounded-lg p-3 text-center">
+            <div className="bg-[var(--color-success-soft)] border dash-edge-success rounded-lg p-3 text-center">
               <p className="text-2xl font-bold text-[var(--color-success)] tabular-nums">
                 {decisions?.today_approved || 0}
               </p>
@@ -222,7 +222,7 @@ export default function LegalSlaWidget({
                 <p className="text-[9px] text-[var(--color-success)] opacity-50 font-medium whitespace-nowrap">No approvals today</p>
               )}
             </div>
-            <div className="bg-[var(--color-danger-soft)] border border-[var(--color-danger)]/20 rounded-lg p-3 text-center">
+            <div className="bg-[var(--color-danger-soft)] border dash-edge-danger rounded-lg p-3 text-center">
               <p className="text-2xl font-bold text-[var(--color-danger)] tabular-nums">
                 {decisions?.today_rejected || 0}
               </p>

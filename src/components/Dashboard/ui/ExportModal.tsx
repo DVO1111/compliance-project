@@ -151,7 +151,7 @@ export default function ExportModal({
                                                 key={f}
                                                 onClick={() => setFormat(f)}
                                                 className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${format === f
-                                                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5 text-[var(--color-accent)] shadow-[0_0_15px_rgba(var(--color-accent-rgb),0.1)]"
+                                                        ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)] shadow-[0_0_15px_rgba(var(--color-accent-rgb),0.1)]"
                                                         : "border-[var(--color-border)] hover:border-[var(--color-text-tertiary)] dash-text-secondary"
                                                     }`}
                                             >
@@ -178,7 +178,7 @@ export default function ExportModal({
                                                 type="date"
                                                 value={dateRange.start}
                                                 onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                                                className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] dash-text text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20 focus:border-[var(--color-accent)] outline-none transition-all"
+                                                className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] dash-text text-sm focus:ring-2 focus:ring-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] focus:border-[var(--color-accent)] outline-none transition-all"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
@@ -187,7 +187,7 @@ export default function ExportModal({
                                                 type="date"
                                                 value={dateRange.end}
                                                 onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                                                className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] dash-text text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20 focus:border-[var(--color-accent)] outline-none transition-all"
+                                                className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] dash-text text-sm focus:ring-2 focus:ring-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] focus:border-[var(--color-accent)] outline-none transition-all"
                                             />
                                         </div>
                                     </div>
@@ -205,7 +205,7 @@ export default function ExportModal({
                                                 key={s.id}
                                                 onClick={() => toggleSection(s.id)}
                                                 className={`flex items-center justify-between p-3 rounded-xl border transition-all ${selectedSections.includes(s.id)
-                                                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5 text-[var(--color-accent)]"
+                                                        ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
                                                         : "border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] dash-text-secondary"
                                                     }`}
                                             >
@@ -220,11 +220,11 @@ export default function ExportModal({
                             </div>
 
                             {/* Footer */}
-                            <div className="p-6 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)]/50">
+                            <div className="p-6 border-t border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]">
                                 <button
                                     onClick={handleExport}
                                     disabled={isExporting || selectedSections.length === 0}
-                                    className="w-full h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-white shadow-xl shadow-[var(--color-accent)]/20 hover:shadow-[var(--color-accent)]/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none"
+                                    className="w-full h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-white shadow-xl shadow-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] hover:shadow-[color-mix(in_srgb,var(--color-accent)_30%,transparent)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none"
                                     style={{
                                         background: "linear-gradient(135deg, var(--color-accent), var(--color-accent-dark, var(--color-accent)))",
                                     }}

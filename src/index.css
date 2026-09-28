@@ -59,13 +59,20 @@
   --color-warning-soft: rgba(217, 119, 6, 0.1);
   --color-danger: var(--red-100);
   --color-danger-soft: rgba(251, 55, 72, 0.1);
-  --color-info: var(--primary-500);
-  --color-info-soft: var(--primary-alpha-10);
-  /* The Button sheet draws hover as a paler blue, but a paler fill puts a
-     white label at ~3.6:1. Using the darker ramp step keeps the hover
-     legible (8.7:1) — a deliberate deviation, worth reconciling in Figma. */
+  /* Info is deliberately NOT var(--primary-500) any more. It used to follow
+     the ramp, which was fine while the ramp was blue — but with a green brand
+     it would have made info the third green on screen, indistinguishable from
+     both the accent and --color-success. This is the old primary-500, so info
+     renders exactly as it did before; it is now simply its own colour. */
+  --color-info: #2563eb;
+  --color-info-soft: rgba(37, 99, 235, 0.1);
+  /* Hover goes darker, not paler: a paler fill puts a white label at ~3.6:1.
+     The 700 step keeps a white label at 14.24:1. */
   --color-accent-hover: var(--primary-700);
   --color-accent-active: var(--primary-700);
+  /* Referenced by the Dashboard but never defined until now, so every rule
+     using it was invalid at computed-value time and silently did nothing. */
+  --color-accent-dark: var(--primary-700);
   --color-purple: #7c3aed;
   --color-behance-blue: var(--primary-500);
   --color-behance-purple: #8145CD;
@@ -76,11 +83,16 @@
   --color-badge-bg: var(--bg-neutral);
   --color-hover-bg: rgba(0, 0, 0, 0.04);
   --color-overlay: rgba(0, 0, 0, 0.5);
+  /* Also referenced by the Dashboard without ever being defined. */
+  --color-surface-hover: var(--color-hover-bg);
 
-  /* Calendar Variables */
-  --color-cal-marketing: var(--primary-400);
-  --color-cal-marketing-soft: var(--primary-alpha-10);
-  --color-cal-marketing-hover: var(--primary-500);
+  /* Calendar Variables
+     The lanes are categorical — they only work if they stay distinct from one
+     another. Marketing followed the primary ramp, so a green brand would have
+     collided it with --color-cal-success below. Pinned to the old blue. */
+  --color-cal-marketing: #5182ef;
+  --color-cal-marketing-soft: rgba(81, 130, 239, 0.1);
+  --color-cal-marketing-hover: #2563eb;
 
   --color-cal-legal: #a855f7;
   --color-cal-legal-soft: rgba(168, 85, 247, 0.1);
@@ -102,8 +114,12 @@
   --color-cal-lane-4: #f59e0b;
   --color-cal-lane-5: #10b981;
 
-  /* Metric Card Variants - Light */
-  --metric-blue-bg: linear-gradient(135deg, var(--primary-400) 0%, var(--primary-500) 100%);
+  /* Metric Card Variants - Light
+     The variants are named after their colour, so the blue one must stay blue:
+     it was built on the primary ramp, which would now render a card called
+     "blue" in brand green and put it next to the green variant below. Pinned
+     to the old ramp values. */
+  --metric-blue-bg: linear-gradient(135deg, #5182ef 0%, #2563eb 100%);
   --metric-blue-text: #ffffff;
   --metric-blue-secondary: rgba(255, 255, 255, 0.7);
   --metric-blue-accent: #ffffff;
@@ -148,8 +164,13 @@
   --color-text-primary: #f8fafc;
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #71717a;
-  --color-accent: #2943d6;
-  --color-accent-soft: rgba(41, 67, 214, 0.15);
+  /* The brand green at its 500 step is 1.94:1 on this background — present but
+     unreadable. The dark themes therefore accent with the 300 step, which is
+     the same green a few stops lighter and reads at 6.14:1. That is also a
+     repair: the blue this replaced, #2943d6, sat at 2.56:1 and had been
+     failing contrast here all along. */
+  --color-accent: var(--primary-300);
+  --color-accent-soft: rgba(70, 164, 128, 0.15);
   --color-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --color-card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
   --color-skeleton: #2d2d2d;
@@ -166,9 +187,19 @@
   --color-danger-soft: rgba(248, 113, 113, 0.15);
   --color-info: #60a5fa;
   --color-info-soft: rgba(96, 165, 250, 0.15);
-  --color-accent-hover: #1e36b8;
+  /* Hover brightens here rather than darkening: on a dark ground the 700 step
+     would recede into the background instead of reading as a response. */
+  --color-accent-hover: var(--primary-200);
+  --color-accent-active: var(--primary-200);
+  /* On dark, the accent is light, so "accent-dark" is the step that carries a
+     white label (5.58:1) — the 300 step manages only 3.05:1. */
+  --color-accent-dark: var(--primary-400);
+  --color-surface-hover: var(--color-hover-bg);
   --color-purple: #a78bfa;
-  --color-behance-blue: var(--primary-500);
+  /* Legacy name: this is the brand fill used by Onboarding and Profile, not a
+     blue. It follows the accent so it stays visible on a dark ground — as
+     var(--primary-500) it would have been 1.94:1. Worth renaming out. */
+  --color-behance-blue: var(--color-accent);
   --color-behance-purple: #8145CD;
 
   /* Form & Input */
@@ -268,6 +299,17 @@
   --color-info: #60a5fa;
   --color-info-soft: rgba(96, 165, 250, 0.15);
   --color-accent-hover: #00b870;
+  --color-accent-active: #00b870;
+  /* This theme's accent, #00D084, is already the brand hue — hsl(158, …) against
+     the ramp's 157 — just far brighter and more saturated. It reads at 9.36:1 on
+     this navy ground, so it is left alone rather than dimmed to match a ramp it
+     is already in agreement with. Only the tokens that were missing are added:
+     the Dashboard referenced all four of these, and here they resolved to
+     nothing at all. */
+  --color-accent-dark: #00a86b;
+  --color-surface-hover: var(--color-hover-bg);
+  --color-behance-blue: var(--color-accent);
+  --color-behance-purple: #8145CD;
   --color-purple: #c084fc;
 
   /* Form & Input */
@@ -445,6 +487,37 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .dash-accent {
     color: var(--color-accent);
   }
+
+  /* Semantic tinted edges.
+     ----------------------
+     A border at partial alpha cannot be written as
+     `border-[var(--color-danger)]/30`. Tailwind has no way to inject an alpha
+     into a var() colour, so it emits NO RULE AT ALL for that class — verified
+     against the built stylesheet, which contains 150 working var() utilities
+     and not one combining a var() with a slash-opacity. The app currently has
+     499 such classes, 65 of them in the Dashboard, and every one is dead: the
+     borders and tinted fills they describe have never rendered.
+
+     color-mix() expresses the same thing, compiles, and still follows the
+     theme. Fills mostly do not need this — the --color-*-soft tokens already
+     exist and are real rgba values — so these cover the edges.
+
+     Matching the cal-* convention above: <scope>-<property>-<semantic>. */
+  .dash-edge-accent  { border-color: color-mix(in srgb, var(--color-accent)  30%, transparent); }
+  .dash-edge-success { border-color: color-mix(in srgb, var(--color-success) 30%, transparent); }
+  .dash-edge-danger  { border-color: color-mix(in srgb, var(--color-danger)  30%, transparent); }
+  .dash-edge-warning { border-color: color-mix(in srgb, var(--color-warning) 30%, transparent); }
+  .dash-edge-info    { border-color: color-mix(in srgb, var(--color-info)    30%, transparent); }
+  .dash-edge-purple  { border-color: color-mix(in srgb, var(--color-purple)  30%, transparent); }
+  /* Hover strengthens the same colour rather than switching to another. Defined
+     here rather than as a `hover:dash-edge-*` class in the markup, so a tinted
+     edge gets its hover for free and the two can never drift apart. */
+  .dash-edge-accent:hover  { border-color: color-mix(in srgb, var(--color-accent)  55%, transparent); }
+  .dash-edge-success:hover { border-color: color-mix(in srgb, var(--color-success) 55%, transparent); }
+  .dash-edge-danger:hover  { border-color: color-mix(in srgb, var(--color-danger)  55%, transparent); }
+  .dash-edge-warning:hover { border-color: color-mix(in srgb, var(--color-warning) 55%, transparent); }
+  .dash-edge-info:hover    { border-color: color-mix(in srgb, var(--color-info)    55%, transparent); }
+  .dash-edge-purple:hover  { border-color: color-mix(in srgb, var(--color-purple)  55%, transparent); }
 
   /* Calendar Utility Classes */
   .cal-bg-marketing {

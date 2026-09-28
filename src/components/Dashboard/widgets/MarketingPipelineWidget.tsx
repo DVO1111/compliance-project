@@ -80,7 +80,7 @@ function Column({
                   <button
                     disabled={disableSendToLegal}
                     onClick={() => onAction(item, "send_legal")}
-                    className={`${btnBase} bg-[var(--color-warning-soft)] text-[var(--color-warning)] border border-[var(--color-warning)]/20`}
+                    className={`${btnBase} bg-[var(--color-warning-soft)] text-[var(--color-warning)] border dash-edge-warning`}
                   >
                     Send to legal
                   </button>
@@ -88,7 +88,7 @@ function Column({
                   <button
                     disabled={disableOpenCorrection}
                     onClick={() => onAction(item, "open_correction")}
-                    className={`${btnBase} bg-[var(--color-warning-soft)] text-[var(--color-warning)] border border-[var(--color-warning)]/20`}
+                    className={`${btnBase} bg-[var(--color-warning-soft)] text-[var(--color-warning)] border dash-edge-warning`}
                   >
                     Open correction
                   </button>
@@ -96,7 +96,7 @@ function Column({
                   <button
                     disabled={disablePublish}
                     onClick={() => onAction(item, "publish")}
-                    className={`${btnBase} bg-[var(--color-success-soft)] text-[var(--color-success)] border border-[var(--color-success)]/20`}
+                    className={`${btnBase} bg-[var(--color-success-soft)] text-[var(--color-success)] border dash-edge-success`}
                   >
                     Publish
                   </button>
@@ -104,7 +104,7 @@ function Column({
                   <button
                     disabled={disableReschedule}
                     onClick={() => onAction(item, "reschedule")}
-                    className={`${btnBase} bg-[var(--color-info-soft)] text-[var(--color-info)] border border-[var(--color-info)]/20`}
+                    className={`${btnBase} bg-[var(--color-info-soft)] text-[var(--color-info)] border dash-edge-info`}
                   >
                     Reschedule
                   </button>

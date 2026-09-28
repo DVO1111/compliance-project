@@ -5,14 +5,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Primary ramp from the Figma style guide (Colors/Primary).
+        // Brand green ramp. These are static hexes rather than var(--primary-N)
+        // because Tailwind's slash-opacity syntax (bg-primary-500/20) cannot
+        // apply an alpha to a var() colour, and the behance-* entries below are
+        // used that way ~70 times. They therefore duplicate the ramp in
+        // src/styles/tokens.css and MUST be changed together with it.
         primary: {
-          100: '#d3e0fb',
-          200: '#a8c1f7',
-          300: '#7ca1f3',
-          400: '#5182ef',
-          500: '#2563eb',
-          700: '#1041ae',
+          100: '#d7efe6',
+          200: '#9ad6bf',
+          300: '#46a480',
+          400: '#2f745a',
+          500: '#1e4d3b',
+          700: '#123025',
         },
         danger: {
           DEFAULT: '#fb3748',
@@ -53,9 +57,20 @@ export default {
           800: '#00573a',
           900: '#002e1f',
         },
-        // Legacy palette from the starter template. `blue` now points at the
-        // Figma primary so existing `bg-behance-blue` usages theme correctly —
-        // new code should use `primary-500`, and these should be migrated out.
+        // Legacy palette from the starter template, being migrated out one tab
+        // at a time. The Dashboard no longer uses any of it.
+        //
+        // The previous comment here claimed `blue` pointed at the Figma primary
+        // "so existing bg-behance-blue usages theme correctly". It did not:
+        // these are literal hexes, so the class never responded to the theme at
+        // all, and it only looked right because the value happened to equal the
+        // old primary-500. Now that the brand is green, that coincidence is
+        // gone and the name is accurate again — this really is a blue.
+        //
+        // `behance-amber-*` is referenced 187 times across the app but has
+        // never been defined here, so every one of those classes is dead and
+        // renders no colour. Left alone deliberately: none are in the Dashboard,
+        // and fixing them means deciding what colour they should have been.
         behance: {
           blue: '#2563eb',
           purple: '#8145CD',

@@ -135,7 +135,7 @@ export default function MyStatsWidget({
                                 label="This Month"
                                 value={String(stats.total_this_month)}
                                 icon={Send}
-                                color="bg-[var(--color-purple)]/10 text-[var(--color-purple)]"
+                                color="bg-[color-mix(in_srgb,var(--color-purple)_10%,transparent)] text-[var(--color-purple)]"
                             />
                             <Stat
                                 label="Published"

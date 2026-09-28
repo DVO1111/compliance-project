@@ -121,7 +121,7 @@ export default function RegulationsFeedWidget() {
     >
       <div className="flex items-center gap-2 mb-4 shrink-0">
         <div className="flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-behance-blue" />
+          <BookOpen className="w-4 h-4 dash-accent" />
           <div>
             <h3 className="text-sm font-semibold dash-text">Regulations Live Feed</h3>
             <p className="text-xs dash-text-secondary mt-0.5">Latest active updates (by updated_at)</p>
@@ -155,7 +155,7 @@ export default function RegulationsFeedWidget() {
                         {CATEGORY_LABELS[r.category]}
                       </span>
 
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-behance-blue/10 text-behance-blue border border-behance-blue/20">
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-info-soft)] dash-accent border dash-edge-info">
                         v{r.version}
                       </span>
                     </div>
@@ -181,7 +181,7 @@ export default function RegulationsFeedWidget() {
                         href={r.source_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-behance-blue hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-medium dash-accent hover:underline"
                         title="Open source"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -191,7 +191,7 @@ export default function RegulationsFeedWidget() {
 
                     <button
                       onClick={() => setExpandedId(isOpen ? null : r.id)}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border dash-border hover:border-behance-blue hover:text-behance-blue transition-colors dash-text"
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border dash-border dash-edge-accent hover:dash-accent transition-colors dash-text"
                     >
                       {isOpen ? "Hide" : "Read"}
                     </button>

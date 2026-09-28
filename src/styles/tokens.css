@@ -19,6 +19,13 @@
  *     matching Colors/Primary/500, so that is what is encoded below. The other
  *     two look like leftovers from earlier explorations and are worth deleting
  *     in Figma so the variables stop disagreeing with the artboards.
+ *
+ * DEPARTURE FROM FIGMA — the primary ramp is no longer the Figma blue.
+ * It is now the brand green anchored on #1E4D3B, so this file and the Figma
+ * style guide disagree on colour until the guide is updated. Type, spacing
+ * and control sizing are still transcribed as above. The previous blue ramp
+ * was #d3e0fb / #a8c1f7 / #7ca1f3 / #5182ef / #2563eb / #1041ae, kept here
+ * so the old values are recoverable without digging through git history.
  */
 
 :root {
@@ -82,15 +89,41 @@
   --type-helper-text-01-size: 0.75rem; /* 12/16 */
   --type-helper-text-01-lh: 1rem;
 
-  /* ── Colour: primary ramp ─────────────────────────────────── */
-  --primary-100: #d3e0fb;
-  --primary-200: #a8c1f7;
-  --primary-300: #7ca1f3;
-  --primary-400: #5182ef;
-  --primary-500: #2563eb;
-  --primary-700: #1041ae;
-  --primary-alpha-10: #2563eb1a;
-  --primary-alpha-50: #2563eb80;
+  /* ── Colour: primary ramp ───────────────────────────────────
+     Brand green, anchored on #1E4D3B at the 500 step. The ramp is
+     that colour's own hue and saturation — hsl(157, 44%, 21%) — walked
+     up and down in lightness, so every step is the same green rather
+     than a set of near-misses.
+
+     Measured contrast, because the steps are not interchangeable:
+
+       step  hex       on #f7f7f8   on #121212   white on it
+       100   #d7efe6      1.13         15.50        1.21
+       200   #9ad6bf      1.54         11.37        1.65
+       300   #46a480      2.85          6.14        3.05
+       400   #2f745a      5.21          3.36        5.58
+       500   #1e4d3b      9.00          1.94        9.63
+       700   #123025     13.30          1.32       14.24
+
+     Two consequences worth stating, since they decide where each step
+     may be used:
+
+       500 is a light-theme colour. At 9.00:1 on the light ground and
+       9.63:1 under a white label it is excellent there — and at 1.94:1
+       on the dark ground it is effectively invisible. The dark themes
+       therefore take 300 as their accent, not 500. See src/index.css.
+
+       300 reads well ON dark (6.14:1) but carries white poorly (3.05:1).
+       On dark themes it belongs in text, icons and borders; a filled
+       button with a white label wants 400 (5.58:1) instead. */
+  --primary-100: #d7efe6;
+  --primary-200: #9ad6bf;
+  --primary-300: #46a480;
+  --primary-400: #2f745a;
+  --primary-500: #1e4d3b;
+  --primary-700: #123025;
+  --primary-alpha-10: #1e4d3b1a;
+  --primary-alpha-50: #1e4d3b80;
 
   /* ── Colour: neutrals ─────────────────────────────────────── */
   --neutral-100: #ffffff;

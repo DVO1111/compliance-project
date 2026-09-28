@@ -145,7 +145,7 @@ export default function TopRiskCausesWidget({
         >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
                 <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-[var(--color-warning)]/20">
+                    <div className="p-1.5 rounded-lg bg-[var(--color-warning-soft)]">
                         <AlertTriangle className="w-5 h-5 text-[var(--color-warning)]" />
                     </div>
                     <div>
