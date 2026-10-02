@@ -480,7 +480,20 @@ RESET ROLE;
 DO $i2$
 DECLARE n int;
 BEGIN
-  SELECT count(*) INTO n FROM public.electronic_signature_consumptions;
+  --  Scoped to this suite's own fixture company.
+  --
+  --  This counted every row in electronic_signature_consumptions and
+  --  asserted exactly 1, which is only true while nothing else in the
+  --  platform ever consumes a signature. Week 3 item 06 made material
+  --  release the first feature that does, so the assertion started
+  --  failing with "3 row(s)" — correctly counting its own consumption
+  --  plus two material releases. Batch release in Week 5 would have done
+  --  the same. The table carries no company_id, so the scope comes
+  --  through the signature.
+  SELECT count(*) INTO n
+    FROM public.electronic_signature_consumptions c
+    JOIN public.electronic_signatures s ON s.id = c.signature_id
+   WHERE s.company_id = '00000000-0000-7200-a000-00000000000a';
   PERFORM esig_assert('I5','the consumption was recorded', n=1, n||' row(s)');
 END $i2$;
 
