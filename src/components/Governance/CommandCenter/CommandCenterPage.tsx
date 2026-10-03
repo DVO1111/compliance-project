@@ -81,36 +81,60 @@ export default function CommandCenterPage() {
     const [topRisks, setTopRisks] = useState<Risk[]>([]);
     const [regulatoryExposure, setRegulatoryExposure] = useState<{ total: number; implemented: number; pending: number; highRisk: number; rate: number } | null>(null);
     const [insights, setInsights] = useState<any[]>([]);
+    //  Keyed by panel, holding why it could not load. Empty is the healthy
+    //  case, so a panel with no entry renders exactly as it did before.
+    const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
 
     const loadData = useCallback(async () => {
         if (!companyId) return;
         setLoading(true);
-        try {
-            const [m, h, v, p, a, v2, tr, re, ins] = await Promise.all([
-                getDashboardMetrics(companyId),
-                getRiskHeatmap(companyId),
-                getVendorPulse(companyId),
-                getPolicyCompliance(companyId),
-                getAutomationHealth(companyId),
-                getAuditVelocity(companyId),
-                getTopRisks(companyId),
-                getRegulatoryExposure(companyId),
-                getCorrelationEvents(companyId),
-            ]);
-            setMetrics(m);
-            setHeatmap(h);
-            setVendorPulse(v);
-            setPolicyRate(p);
-            setAutomationData(a);
-            setAuditVelocity(v2);
-            setTopRisks(tr);
-            setRegulatoryExposure(re);
-            setInsights(ins);
-        } catch (err) {
-            logger.error('Failed to load dashboard:', err);
-        } finally {
-            setLoading(false);
-        }
+
+        //  allSettled, not all: these nine panels are independent, and one
+        //  failing query used to blank the whole dashboard. The four
+        //  view-backed panels throw PanelUnavailableError now rather than
+        //  returning an empty result, so a missing view has to degrade to
+        //  one panel saying so instead of eight panels showing nothing —
+        //  or, worse, a convincing zero.
+        const results = await Promise.allSettled([
+            getDashboardMetrics(companyId),
+            getRiskHeatmap(companyId),
+            getVendorPulse(companyId),
+            getPolicyCompliance(companyId),
+            getAutomationHealth(companyId),
+            getAuditVelocity(companyId),
+            getTopRisks(companyId),
+            getRegulatoryExposure(companyId),
+            getCorrelationEvents(companyId),
+        ]);
+
+        const [m, h, v, p, a, v2, tr, re, ins] = results;
+        const failed: Record<string, string> = {};
+        const note = (key: string, r: PromiseSettledResult<unknown>) => {
+            if (r.status === 'rejected') {
+                failed[key] = r.reason instanceof Error ? r.reason.message : String(r.reason);
+                logger.error(`Command centre panel "${key}" failed to load:`, r.reason);
+            }
+        };
+
+        if (m.status === 'fulfilled') setMetrics(m.value); else note('metrics', m);
+        if (h.status === 'fulfilled') setHeatmap(h.value); else note('heatmap', h);
+        if (v.status === 'fulfilled') setVendorPulse(v.value); else note('vendorPulse', v);
+        if (p.status === 'fulfilled') setPolicyRate(p.value); else note('policyRate', p);
+        if (a.status === 'fulfilled') setAutomationData(a.value); else note('automation', a);
+        if (v2.status === 'fulfilled') setAuditVelocity(v2.value); else note('auditVelocity', v2);
+        if (tr.status === 'fulfilled') setTopRisks(tr.value); else note('topRisks', tr);
+        if (re.status === 'fulfilled') setRegulatoryExposure(re.value); else note('regulatory', re);
+        if (ins.status === 'fulfilled') setInsights(ins.value); else note('insights', ins);
+
+        //  A panel that failed must not keep whatever the previous refresh
+        //  put there, or a working-then-broken view reads as live data.
+        if (failed.vendorPulse) setVendorPulse([]);
+        if (failed.policyRate) setPolicyRate(null);
+        if (failed.automation) setAutomationData([]);
+        if (failed.auditVelocity) setAuditVelocity([]);
+
+        setPanelErrors(failed);
+        setLoading(false);
     }, [companyId]);
 
     const handleRunCorrelation = async () => {
@@ -234,7 +258,8 @@ export default function CommandCenterPage() {
                 {/* Vendor Risk Pulse */}
                 <DashboardCard className="min-h-[400px]">
                     <h3 className="text-xs font-bold uppercase tracking-widest dash-text-tertiary mb-6">Vendor Risk Exposure</h3>
-                    {loading ? <div className="h-64 animate-pulse bg-[var(--color-surface-alt)] rounded-xl" /> : (
+                    {loading ? <div className="h-64 animate-pulse bg-[var(--color-surface-alt)] rounded-xl" />
+                     : panelErrors.vendorPulse ? <PanelUnavailable detail={panelErrors.vendorPulse} /> : (
                         <div className="h-64 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={vendorPulse}>
@@ -378,6 +403,7 @@ export default function CommandCenterPage() {
                 {/* Policy Compliance */}
                 <DashboardCard>
                     <h3 className="text-xs font-bold uppercase tracking-widest dash-text-tertiary mb-6">Policy Compliance</h3>
+                    {panelErrors.policyRate ? <PanelUnavailable detail={panelErrors.policyRate} /> : (
                     <div className="h-48 flex flex-col items-center justify-center">
                         <div className="relative">
                             <ResponsiveContainer width={160} height={160}>
@@ -399,19 +425,22 @@ export default function CommandCenterPage() {
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-2xl font-black dash-text">{policyRate?.rate}%</span>
+                                <span className="text-2xl font-black dash-text">{policyRate?.rate ?? 0}%</span>
                                 <span className="text-[9px] font-bold uppercase dash-text-tertiary">Global Rate</span>
                             </div>
                         </div>
                         <p className="text-xs dash-text-secondary mt-4">
-                            {policyRate?.acknowledged} of {policyRate?.total} acknowledgements complete
+                            {policyRate?.acknowledged ?? 0} of {policyRate?.total ?? 0} acknowledgements complete
                         </p>
                     </div>
+                    )}
                 </DashboardCard>
 
                 {/* Automation Health */}
                 <DashboardCard className="lg:col-span-2">
                     <h3 className="text-xs font-bold uppercase tracking-widest dash-text-tertiary mb-6">Automation Health (30d)</h3>
+                    {panelErrors.automation ? <PanelUnavailable detail={panelErrors.automation} /> : (
+                    <>
                     <div className="h-48 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={automationData}>
@@ -442,6 +471,8 @@ export default function CommandCenterPage() {
                             <span className="text-[10px] font-bold dash-text-secondary uppercase">Tests Failed</span>
                         </div>
                     </div>
+                    </>
+                    )}
                 </DashboardCard>
             </div>
 
@@ -518,6 +549,7 @@ export default function CommandCenterPage() {
                 {/* Audit Velocity */}
                 <DashboardCard>
                     <h3 className="text-xs font-bold uppercase tracking-widest dash-text-tertiary mb-6">Audit Response Velocity</h3>
+                    {panelErrors.auditVelocity ? <PanelUnavailable detail={panelErrors.auditVelocity} /> : (
                     <div className="h-48 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={auditVelocity} layout="vertical">
@@ -533,6 +565,7 @@ export default function CommandCenterPage() {
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
+                    )}
                     <div className="mt-8">
                         <h3 className="text-xs font-bold uppercase tracking-widest dash-text-tertiary mb-6">Priority Hazard Map</h3>
                         <div className="space-y-3">
@@ -625,6 +658,33 @@ function RegMiniCard({ label, value, icon, color }: any) {
                 <span className="text-lg font-black">{value}</span>
             </div>
             <p className="text-[9px] font-bold uppercase tracking-tight opacity-70 leading-none">{label}</p>
+        </div>
+    );
+}
+
+/**
+ * Shown in place of a chart whose query failed.
+ *
+ * The point is that it is visibly not data. Every one of these panels
+ * previously drew itself from an empty array when its view was missing or
+ * unreadable — an empty radar, a flat line, a 0% ring — which is
+ * indistinguishable from a company that genuinely has nothing to report.
+ * A compliance dashboard that cannot tell those apart is worse than one
+ * that admits it does not know.
+ */
+function PanelUnavailable({ detail }: { detail: string }) {
+    return (
+        <div className="h-64 flex flex-col items-center justify-center text-center gap-2 px-6">
+            <AlertTriangle size={20} className="text-amber-500" />
+            <p className="text-xs font-bold dash-text uppercase tracking-wide">
+                Data unavailable
+            </p>
+            <p className="text-[11px] dash-text-tertiary leading-relaxed max-w-xs break-words">
+                {detail}
+            </p>
+            <p className="text-[10px] dash-text-tertiary italic opacity-70">
+                This is not a zero — the figure could not be read.
+            </p>
         </div>
     );
 }

@@ -112,11 +112,48 @@ export async function getRiskHeatmap(companyId: string): Promise<RiskHeatmapData
   return results;
 }
 
+/**
+ * Thrown when a panel's underlying query fails, rather than returning an
+ * empty result.
+ *
+ * supabase-js RESOLVES a failed query with `{ data: null, error }` instead
+ * of rejecting, so `const { data } = await ...` cannot tell a real empty
+ * result from a missing relation or a permission denial. Every one of the
+ * four view-backed panels below used to do exactly that, which is why a
+ * view that does not exist rendered as a confident `0%` rather than as a
+ * problem. See PanelUnavailableError's one use in CommandCenterPage: the
+ * panel says it could not load, and the other eight still render.
+ *
+ * `relation` is carried so a caller can tell which view is missing without
+ * parsing the message.
+ */
+export class PanelUnavailableError extends Error {
+  readonly relation: string;
+  readonly cause?: unknown;
+
+  constructor(relation: string, cause?: unknown) {
+    const detail =
+      cause && typeof cause === 'object' && 'message' in (cause as any)
+        ? String((cause as any).message)
+        : undefined;
+    super(
+      detail
+        ? `Could not read ${relation}: ${detail}`
+        : `Could not read ${relation}.`
+    );
+    this.name = 'PanelUnavailableError';
+    this.relation = relation;
+    this.cause = cause;
+  }
+}
+
 export async function getVendorPulse(companyId: string): Promise<VendorPulseData[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('v_vendor_risk_exposure' as any)
     .select('category, avg_risk_score, vendor_count')
     .eq('company_id', companyId);
+
+  if (error) throw new PanelUnavailableError('v_vendor_risk_exposure', error);
 
   return (data || []).map((v: any) => ({
     category: v.category,
@@ -126,19 +163,31 @@ export async function getVendorPulse(companyId: string): Promise<VendorPulseData
 }
 
 export async function getPolicyCompliance(companyId: string): Promise<{ acknowledged: number; total: number; rate: number }> {
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('v_policy_compliance_stats' as any)
         .select('acknowledged_users, total_users, compliance_rate')
         .eq('company_id', companyId);
-    
+
+    if (error) throw new PanelUnavailableError('v_policy_compliance_stats', error);
+
     if (!data || data.length === 0) return { acknowledged: 0, total: 0, rate: 0 };
-    
-    // Sum across all policies for the high-level dashboard stat
+
+    //  Summed across policies deliberately: the denominator is every
+    //  acknowledgement the company owes (headcount x active policies), so
+    //  the ratio answers "of everything that had to be acknowledged, how
+    //  much was". total_users is the company headcount repeated per
+    //  policy, which is correct for that reading and would be wrong if
+    //  read as a headcount on its own.
+    //
+    //  The counts are bigint in Postgres and arrive as JS numbers. That is
+    //  safe here — headcount x policies stays far below 2^53 — but Number()
+    //  is explicit so a string from a driver change cannot turn this into
+    //  string concatenation and a nonsense rate.
     const stats = (data as any[]).reduce((acc, curr) => ({
-        acknowledged: acc.acknowledged + curr.acknowledged_users,
-        total: acc.total + curr.total_users
+        acknowledged: acc.acknowledged + Number(curr.acknowledged_users ?? 0),
+        total: acc.total + Number(curr.total_users ?? 0)
     }), { acknowledged: 0, total: 0 });
-    
+
     return {
         acknowledged: stats.acknowledged,
         total: stats.total,
@@ -147,33 +196,42 @@ export async function getPolicyCompliance(companyId: string): Promise<{ acknowle
 }
 
 export async function getAutomationHealth(companyId: string): Promise<AutomationHealthData[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('v_automation_health_summary' as any)
     .select('run_date, passed_count, failed_count')
     .eq('company_id', companyId)
     .order('run_date', { ascending: true });
 
+  //  This one is expected to fail on every deployment today: the view
+  //  reads public.grc_automation_runs and nothing in the migration tree
+  //  creates that table. It is still thrown rather than swallowed, so the
+  //  panel reports itself unavailable instead of drawing an empty chart
+  //  that looks like "no automation runs this month".
+  if (error) throw new PanelUnavailableError('v_automation_health_summary', error);
+
   if (!data) return [];
 
   return data.map((item: any) => ({
     date: item.run_date,
-    passed: item.passed_count,
-    failed: item.failed_count
+    passed: Number(item.passed_count ?? 0),
+    failed: Number(item.failed_count ?? 0)
   }));
 }
 
 export async function getAuditVelocity(companyId: string): Promise<any[]> {
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('v_audit_velocity' as any)
         .select('session_name, total_requests, fulfilled_requests')
         .eq('company_id', companyId);
-    
+
+    if (error) throw new PanelUnavailableError('v_audit_velocity', error);
+
     if (!data) return [];
 
     return data.map((item: any) => ({
         name: item.session_name,
-        created: item.total_requests,
-        fulfilled: item.fulfilled_requests
+        created: Number(item.total_requests ?? 0),
+        fulfilled: Number(item.fulfilled_requests ?? 0)
     }));
 }
 
