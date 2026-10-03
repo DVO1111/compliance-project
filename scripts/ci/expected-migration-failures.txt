@@ -1,0 +1,63 @@
+# Migrations that do NOT apply to a from-scratch Postgres, and why.
+#
+# This file is a PINNED BASELINE, not a permission slip. run-sql-tests.sh
+# compares the actual failure set against it and fails the build when they
+# differ in EITHER direction:
+#
+#   * a migration fails that is not listed  -> new breakage, fix it
+#   * a listed migration now succeeds       -> remove the line
+#
+# So the list can only shrink without someone noticing, and a genuine new
+# failure cannot hide behind the existing mess.
+#
+# ---------------------------------------------------------------------
+# GROUP 1 — needs a Supabase service that a plain Postgres does not have.
+# Not fixable here, and not a defect. The affected features are inert in
+# the test database, which the suites that care about them account for:
+# materials_security_test.sql scaffolds storage itself.
+# ---------------------------------------------------------------------
+20260228700000_team_chat_attachments.sql
+20260228800000_create_avatars_bucket.sql
+20260301000000_calendar_deadline_reminders.sql
+20260702000100_scheduled_governance_jobs.sql
+
+# ---------------------------------------------------------------------
+# GROUP 2 — seeds that require a company to already exist. Each does
+# `SELECT id FROM companies LIMIT 1` and raises when the table is empty,
+# so they cannot run against a fresh database by construction. Week 3
+# item 11 deliberately does not work this way; see
+# 20261006000000_demo_seed_pharma_manufacturer.sql.
+# ---------------------------------------------------------------------
+20260601100000_seed_hygeia_demo_providers.sql
+20260603400000_seed_iso22000_grc_framework.sql
+20260603600000_seed_nasco_demo_data.sql
+
+# ---------------------------------------------------------------------
+# GROUP 3 — the repository's migration history genuinely does not apply
+# in filename order. These are pre-existing and predate Week 3; they are
+# recorded here rather than fixed because repairing migration history
+# that has already been applied to production is its own change with its
+# own review, and the right fix differs per case.
+#
+# The root cause of several is that four migrations carry no timestamp —
+# backfill_automation_platform.sql, integration_infrastructure_migration.sql,
+# license_vault_migration.sql, profile_system_migration.sql — so they sort
+# AFTER every timestamped file, while earlier migrations depend on tables
+# they create.
+# ---------------------------------------------------------------------
+# needs integration_connections, created by integration_infrastructure_migration.sql
+20260226200000_team_chat.sql
+# same
+20260305213000_grc_automation_schema.sql
+# needs grc_automation_runs, from the migration above
+20260306150000_performance_views.sql
+# CREATE OR REPLACE cannot change a function's return type; needs a DROP first
+20260227100000_fix_dash_rpcs.sql
+# references public.regulatory_feed_items, which nothing creates
+20260304092000_fix_regulatory_feed_items_rls.sql
+# ALTERs a policy "adverse_events_insert" that does not exist at this point
+20260304100000_fix_mutable_search_paths.sql
+# references public.policy_versions before it exists
+20260305100000_policy_attestation_enhancements.sql
+# FK on a created_by column that does not exist on the target table yet
+20260401000000_fix_fk_constraints_for_user_deletion.sql
