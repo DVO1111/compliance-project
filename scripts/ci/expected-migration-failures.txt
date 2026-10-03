@@ -49,7 +49,16 @@
 20260226200000_team_chat.sql
 # same
 20260305213000_grc_automation_schema.sql
-# needs grc_automation_runs, from the migration above
+# NOT an ordering problem. Reads public.grc_automation_runs, which
+# NOTHING in the tree creates — the name appears exactly once, in this
+# file's own view definition. The grc migration above creates
+# grc_control_tests, grc_test_runs and grc_test_run_evidence, none of
+# them this. Reordering cannot fix it; someone has to decide what
+# "automation health" counts. Because psql aborts on that second
+# statement, a database that ran this file holds v_policy_compliance_stats
+# and none of the three views after it. See
+# 20261008000000_view_security_invoker.sql, which closes the RLS bypass
+# on whichever of them exist without touching this file.
 20260306150000_performance_views.sql
 # CREATE OR REPLACE cannot change a function's return type; needs a DROP first
 20260227100000_fix_dash_rpcs.sql

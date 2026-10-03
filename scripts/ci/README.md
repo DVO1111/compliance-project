@@ -61,12 +61,14 @@ Two details in it are load-bearing and easy to get wrong:
 
 ## The baseline, and what it says about the repository
 
-15 of 162 migrations do not apply to a from-scratch database. Four need a
+15 of 163 migrations do not apply to a from-scratch database. Four need a
 Supabase service a plain Postgres lacks (storage, `pg_net`, `pg_cron`),
-three are seeds that require a company to already exist, and **eight are
+three are seeds that require a company to already exist, **seven are
 genuine ordering problems in the repository's own history** — several
 because four migrations carry no timestamp and therefore sort after every
-timestamped one, while earlier migrations depend on tables they create.
+timestamped one, while earlier migrations depend on tables they create —
+and one, `20260306150000_performance_views.sql`, reads a table that
+nothing anywhere creates, so no ordering fixes it.
 
 Those eight are pre-existing and are recorded rather than fixed: repairing
 migration history that has already been applied to production is its own
