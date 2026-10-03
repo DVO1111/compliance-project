@@ -29,6 +29,52 @@ jobs:
       - name: Run tests
         run: npm test
 
+  # The SQL suites assert what the database enforces: row-level security,
+  # the lifecycle engine, electronic signatures, and the materials gates
+  # from Week 3. None of that is reachable from `npm test`, so until this
+  # job existed a pull request could go green without exercising a single
+  # one of them.
+  #
+  # It runs in parallel with `quality` rather than after it: a broken
+  # trigger and a type error are independent problems and there is no
+  # reason to learn about them one at a time.
+  sql:
+    name: SQL suites
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # Without a health check the first psql can land before the
+        # server is accepting connections, which fails as a migration
+        # error and reads like a real one.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Build the database and run every SQL suite
+        run: scripts/ci/run-sql-tests.sh
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
   build:
     name: Build
     runs-on: ubuntu-latest
