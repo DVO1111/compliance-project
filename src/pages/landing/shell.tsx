@@ -352,6 +352,9 @@ export function MarketingStyles() {
         --lp-surface-hi: rgba(255, 255, 255, 0.06);
         --lp-line: rgba(207, 222, 255, 0.14);
         --lp-line-strong: rgba(207, 222, 255, 0.16);
+        /* The faintest rule in the set — the auth split's column divider and
+           its grid overlay. From the login design's own --line-soft. */
+        --lp-line-soft: rgba(207, 222, 255, 0.09);
 
         /* ── Accent ───────────────────────────────
            Green carries the brand now. Two steps, as the dark ground needs:
@@ -681,6 +684,21 @@ export function MarketingStyles() {
         background: rgba(255,255,255,.07);
       }
       .lp-field[aria-invalid="true"] { border-color: var(--lp-coral); }
+      /* The auth screens' fields are recessed rather than raised: the login
+         design puts them on the deep ground with a hairline, so the form
+         reads as cut into the panel instead of floating on it. Same tokens,
+         one modifier, so the field used everywhere else is untouched. */
+      .lp-field--sunken {
+        background: rgba(8, 19, 26, 0.6);
+        border-color: var(--lp-line);
+        border-radius: 8px;
+        padding: 13px 15px;
+      }
+      .lp-field--sunken:focus {
+        background: rgba(8, 19, 26, 0.6);
+        border-color: var(--lp-accent);
+        box-shadow: 0 0 0 3px var(--lp-accent-soft);
+      }
       /* Native dropdowns ignore inherited colour in most browsers. The
          popup is painted by the OS with no page behind it, so this has to
          be an opaque colour — the translucent surface token rendered as

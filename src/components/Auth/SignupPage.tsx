@@ -97,12 +97,17 @@ export default function SignupPage({ onToggleLogin, onBackToLanding }: SignupPag
 
   return (
     <AuthShell
-      tagline={
+      //  AuthShell now takes the login design's three slots — a mono
+      //  kicker, a display heading and a line of body copy — in place of
+      //  the old tagline/formTitle pair, so sign-up wears the same split
+      //  layout as sign-in rather than a centred card.
+      kicker={step === 'details' ? 'Create account' : 'Step 2 of 2'}
+      heading={step === 'details' ? 'Set up your facility.' : 'Confirm your email.'}
+      description={
         step === 'details'
           ? 'Create your account to get started.'
           : 'Enter the code we emailed you to confirm your identity.'
       }
-      formTitle={step === 'details' ? 'Create your account' : 'Verify your email'}
       onBackToLanding={onBackToLanding}
       footer={
         step === 'details' ? (
