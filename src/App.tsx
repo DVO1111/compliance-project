@@ -16,6 +16,7 @@ import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import type { MarketingPage } from './pages/landing/shell';
 import LoginPage from './components/Auth/LoginPage';
+import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import SignupPage from './components/Auth/SignupPage';
 import OnboardingWizard from './components/Onboarding/OnboardingWizard';
 import CompanySetupChecklist from './components/Onboarding/CompanySetupChecklist';
@@ -226,7 +227,7 @@ function isValidPageId(value: any): value is PageId {
 }
 
 function AppContent() {
-  const { user, profile, loading, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isRecoveringPassword, refreshProfile, signOut } = useAuth();
 
   const inviteTokenFromUrl = (() => {
     try {
@@ -364,6 +365,14 @@ function AppContent() {
         <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
       </div>
     );
+  }
+
+  //  A recovery link signs the user in before they have proved they know a
+  //  password, so this gate sits ABOVE every other branch — including the
+  //  invite flow and the authenticated app. Anything lower would render the
+  //  product to whoever opened the mailbox.
+  if (isRecoveringPassword) {
+    return <ResetPasswordPage />;
   }
 
   if (inviteTokenFromUrl !== null) {

@@ -7,6 +7,7 @@ import type { Database } from '../lib/database.types';
 import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
+import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -38,6 +39,25 @@ interface AuthContextType {
   resendSignupCode: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  /**
+   * Sends the reset email for the login design's "Forgot password?" state.
+   *
+   * Resolves without an error even when the address has no account:
+   * reporting "no such user" here would turn the form into an account
+   * enumerator, and the screen's copy is written for that — "If that email
+   * has a Criateur account, a reset link is on its way." A genuine
+   * transport failure still comes back as an error.
+   */
+  requestPasswordReset: (email: string) => Promise<{ error: Error | null }>;
+  /** Sets the new password once the emailed link has opened a recovery session. */
+  completePasswordReset: (password: string) => Promise<{ error: Error | null }>;
+  /**
+   * True between the emailed link opening a recovery session and the new
+   * password being saved. App.tsx shows the reset screen while it holds, so
+   * the link does not drop someone into the product with a session they got
+   * without a password.
+   */
+  isRecoveringPassword: boolean;
   refreshProfile: () => Promise<void>;
   switchBrand: (brandId: string | null) => void;
 }
@@ -50,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
   // Track whether the initial profile load has completed. After that,
   // background refreshes (token refresh, window focus) must NEVER set
   // loading=true — that unmounts the entire app and loses all page state.
@@ -75,6 +96,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
 
+        //  A recovery link signs the user in before they have proved they
+        //  know a password, so the flag goes up BEFORE the profile loads.
+        //  App.tsx keys the reset screen off it; without this the link would
+        //  land straight in the product.
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveringPassword(true);
+          if (session?.user) {
+            await loadProfile(session.user.id);
+          }
+          setLoading(false);
+          return;
+        }
+
         if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
           // Genuine sign-in or profile change — reload profile
           if (session?.user) {
@@ -82,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } else if (event === 'SIGNED_OUT') {
           setProfile(null);
+          setIsRecoveringPassword(false);
           setLoading(false);
         }
         // TOKEN_REFRESHED and INITIAL_SESSION: silently update session/user
@@ -382,6 +417,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setSession(null);
+    setIsRecoveringPassword(false);
+  };
+
+  /**
+   * Requests the reset email.
+   *
+   * `redirectTo` is the app's own origin: Supabase appends the recovery
+   * token, the SDK exchanges it on load and fires PASSWORD_RECOVERY, which
+   * the listener above turns into the reset screen. The redirect has to be
+   * on Supabase's allow-list for the project or the link will refuse to
+   * open — an operator setting, noted here because it is the one part of
+   * this flow that cannot be fixed in the codebase.
+   */
+  const requestPasswordReset = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: passwordResetRedirectTo(window.location.origin),
+      });
+      //  A rejected address must not be distinguishable from an accepted
+      //  one, so an error that only means "no such user" is swallowed and
+      //  anything else is surfaced. The predicate is in
+      //  lib/auth/passwordReset.ts with its own tests, because getting it
+      //  wrong in either direction is a real fault: too broad and a failed
+      //  send is reported as success, too narrow and the form enumerates
+      //  accounts.
+      if (error && !isAccountEnumerationError(error.message)) {
+        throw error;
+      }
+      return { error: null };
+    } catch (error) {
+      logger.error('Password reset request failed:', error);
+      return { error: error as Error };
+    }
+  };
+
+  /**
+   * Saves the new password, then clears the recovery flag so the app
+   * proceeds normally with the session the link already established.
+   */
+  const completePasswordReset = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setIsRecoveringPassword(false);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const refreshProfile = async () => {
@@ -392,7 +475,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, refreshProfile, switchBrand }}
+      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, refreshProfile, switchBrand }}
     >
       {children}
     </AuthContext.Provider>
