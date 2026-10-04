@@ -32,6 +32,12 @@ CREATE OR REPLACE FUNCTION _sk(p_section text, p_name text, p_ok boolean, p_deta
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN INSERT INTO _s VALUES (p_section,p_name,coalesce(p_ok,false),p_detail); END $$;
 
+--  Sections E, F and G record their results while running AS the role
+--  under test, so every role that the suite switches into has to be able
+--  to write here. This is the scoreboard, not a thing being tested.
+GRANT ALL ON _s TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION _sk(text,text,boolean,text) TO anon, authenticated, service_role;
+
 --  Minimal storage stand-in, if the real one is absent.
 DO $scaffold$
 BEGIN
@@ -55,6 +61,21 @@ BEGIN
   GRANT USAGE ON SCHEMA storage TO authenticated;
   GRANT SELECT ON storage.buckets TO authenticated;
   GRANT SELECT, INSERT ON storage.objects TO authenticated;
+
+  --  anon gets the same grants a real Supabase project gives it.
+  --
+  --  This looks like weakening the harness and is the opposite. A real
+  --  project DOES grant anon SELECT on storage.objects — that is how a
+  --  public bucket serves a file to a logged-out browser — and relies on
+  --  RLS plus the bucket's public flag to decide what comes back. Without
+  --  these grants anon is refused for lack of privilege, so section G's
+  --  direct-URL assertions would pass without RLS being involved at all,
+  --  and would keep passing if someone later added a permissive anon
+  --  policy. Granting here makes the policies do the work, which is what
+  --  production depends on.
+  GRANT USAGE ON SCHEMA storage TO anon;
+  GRANT SELECT ON storage.buckets TO anon;
+  GRANT SELECT ON storage.objects TO anon;
 
   --  The two buckets this repository already creates are public. Seeded
   --  so section D's contrast is against something real.
@@ -658,6 +679,82 @@ BEGIN
     AND NOT has_table_privilege('anon','public.materials_security_posture','SELECT'));
 END
 $g$;
+
+-- ─────────────────────────────────────────────────────────────────────
+--  G (continued) — the certificate itself, fetched without a session.
+--
+--  G1 and G2 cover the functions and the views. They do NOT cover the
+--  one thing a leaked link actually reaches: the stored object. These do.
+--
+--  The caller below holds the grants a real project gives anon (see the
+--  scaffold), so a row coming back would mean a policy admitted it, not
+--  that the harness forgot a GRANT.
+--
+--  WHAT THIS CANNOT TEST
+--  ---------------------
+--  A direct URL in production is an HTTP GET to the storage service, and
+--  the first thing that answers it is the API layer's check of the
+--  bucket's public flag — before any SQL runs. That is asserted as
+--  configuration in D2 and cannot be exercised from here. What these
+--  assertions prove is the layer underneath: that even reaching the
+--  object table with no identity returns nothing.
+-- ─────────────────────────────────────────────────────────────────────
+--  The key is captured HERE, before the role switch, and parked in a temp
+--  table. Reading it as anon would return NULL — anon cannot see the row —
+--  and G4 would then be asking "does the object named NULL exist?", which
+--  is trivially no. That is precisely the vacuous pass G5 exists to catch,
+--  and it caught it: the first version of this block looked the key up on
+--  the wrong side of the switch.
+RESET ROLE;
+DROP TABLE IF EXISTS _leaked_key;
+CREATE TEMP TABLE _leaked_key AS
+  SELECT name AS key FROM storage.objects
+   WHERE bucket_id = 'material-documents'
+   ORDER BY created_at LIMIT 1;
+GRANT SELECT ON _leaked_key TO anon, authenticated;
+
+SELECT set_config('request.jwt.claims', '', false);
+SET ROLE anon;
+
+DO $g2$
+DECLARE
+  n           bigint;
+  v_key       text;
+  v_denied    boolean := false;
+BEGIN
+  --  The exact key of company A's certificate — the string a leaked link
+  --  would carry. Known to the attacker, by assumption.
+  SELECT key INTO v_key FROM _leaked_key;
+
+  BEGIN
+    SELECT count(*) INTO n FROM storage.objects
+     WHERE bucket_id = 'material-documents';
+  EXCEPTION WHEN insufficient_privilege THEN v_denied := true; n := -1;
+  END;
+  PERFORM _sk('G','G3 anon listing the bucket gets nothing',
+    v_denied OR n = 0, format('denied=%s rows=%s', v_denied, n));
+
+  v_denied := false;
+  BEGIN
+    SELECT count(*) INTO n FROM storage.objects
+     WHERE bucket_id = 'material-documents' AND name = v_key;
+  EXCEPTION WHEN insufficient_privilege THEN v_denied := true; n := -1;
+  END;
+  --  This is the direct-URL case: the full key, named exactly, with no
+  --  session. Knowing the path must not be enough.
+  PERFORM _sk('G','G4 anon naming the exact object key gets nothing',
+    v_denied OR n = 0,
+    format('key=%s denied=%s rows=%s', coalesce(v_key,'<none>'), v_denied, n));
+
+  --  And the negative control: the key really does exist, so G4 is not
+  --  passing because there was nothing there to find.
+  PERFORM _sk('G','G5 the object G4 asked for does exist',
+    v_key IS NOT NULL, coalesce(v_key,'<none>'));
+END
+$g2$;
+
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
 
 -- =====================================================================
 --  H. The "NOT DONE IF" clauses
