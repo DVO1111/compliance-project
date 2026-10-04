@@ -21,11 +21,35 @@
  *     in Figma so the variables stop disagreeing with the artboards.
  *
  * DEPARTURE FROM FIGMA — the primary ramp is no longer the Figma blue.
- * It is now the brand green anchored on #1E4D3B, so this file and the Figma
- * style guide disagree on colour until the guide is updated. Type, spacing
- * and control sizing are still transcribed as above. The previous blue ramp
- * was #d3e0fb / #a8c1f7 / #7ca1f3 / #5182ef / #2563eb / #1041ae, kept here
- * so the old values are recoverable without digging through git history.
+ * It is the brand green, so this file and the Figma style guide disagree on
+ * colour until the guide is updated. Type, spacing and control sizing are
+ * still transcribed as above. The previous blue ramp was #d3e0fb / #a8c1f7 /
+ * #7ca1f3 / #5182ef / #2563eb / #1041ae, kept here so the old values are
+ * recoverable without digging through git history.
+ *
+ * WHICH GREEN, AND WHY IT MOVED
+ * -----------------------------
+ * The ramp was first anchored on #1E4D3B. Measured against the brand asset
+ * afterwards, that was the wrong hue: the mark is drawn in a gradient from
+ * #255F27 to #3D7F40, and public/criateur-logo-ondark.svg is filled with
+ * #478D4B — all of them hue 122–123°. #1E4D3B is hue 157°, a teal-leaning
+ * emerald 34° around the wheel from the mark. Not a shade apart, a different
+ * colour: the logo visibly disagreed with the surface it sat on, and the
+ * marketing site and the product were running two different greens.
+ *
+ * The ramp now sits on hue 123°. The LIGHTNESS LADDER IS UNCHANGED — only
+ * the hue moved — so no surface changes weight and every contrast figure in
+ * the table below is within 0.2 of what it replaced.
+ *
+ * #478D4B is deliberately NOT step 500. White on it is 4.05:1, which fails
+ * AA, so using the logo's own fill as the action fill would have put every
+ * primary button below the threshold. It lands near step 300 instead
+ * (#46a44b), which is where a brand colour belongs on a ramp: tints, text
+ * and borders. Fills that carry a white label take 400 or 500.
+ *
+ * The one thing still unreconciled: the brand asset's ground is navy
+ * #0D1933 (hue 221°) while the landing and auth screens use #08131A (hue
+ * 203°, and much darker). That is a separate call from the green.
  */
 
 :root {
@@ -90,40 +114,41 @@
   --type-helper-text-01-lh: 1rem;
 
   /* ── Colour: primary ramp ───────────────────────────────────
-     Brand green, anchored on #1E4D3B at the 500 step. The ramp is
-     that colour's own hue and saturation — hsl(157, 44%, 21%) — walked
-     up and down in lightness, so every step is the same green rather
-     than a set of near-misses.
+     The brand green, hue 123° — the hue the mark itself is drawn in.
+     The ramp is that one hue walked up and down in lightness, so every
+     step is the same green rather than a set of near-misses. See the
+     file header for why the hue moved and why the logo's own #478D4B is
+     not the 500 step.
 
      Measured contrast, because the steps are not interchangeable:
 
        step  hex       on #f7f7f8   on #121212   white on it
-       100   #d7efe6      1.13         15.50        1.21
-       200   #9ad6bf      1.54         11.37        1.65
-       300   #46a480      2.85          6.14        3.05
-       400   #2f745a      5.21          3.36        5.58
-       500   #1e4d3b      9.00          1.94        9.63
-       700   #123025     13.30          1.32       14.24
+       100   #d7efd8      1.14         15.37        1.22
+       200   #9ad69d      1.57         11.13        1.68
+       300   #46a44b      2.94          5.95        3.15
+       400   #2f7432      5.35          3.27        5.73
+       500   #1e4d20      9.18          1.91        9.82
+       700   #123014     13.45          1.30       14.40
 
      Two consequences worth stating, since they decide where each step
      may be used:
 
-       500 is a light-theme colour. At 9.00:1 on the light ground and
-       9.63:1 under a white label it is excellent there — and at 1.94:1
+       500 is a light-theme colour. At 9.18:1 on the light ground and
+       9.82:1 under a white label it is excellent there — and at 1.91:1
        on the dark ground it is effectively invisible. The dark themes
        therefore take 300 as their accent, not 500. See src/index.css.
 
-       300 reads well ON dark (6.14:1) but carries white poorly (3.05:1).
+       300 reads well ON dark (5.95:1) but carries white poorly (3.15:1).
        On dark themes it belongs in text, icons and borders; a filled
-       button with a white label wants 400 (5.58:1) instead. */
-  --primary-100: #d7efe6;
-  --primary-200: #9ad6bf;
-  --primary-300: #46a480;
-  --primary-400: #2f745a;
-  --primary-500: #1e4d3b;
-  --primary-700: #123025;
-  --primary-alpha-10: #1e4d3b1a;
-  --primary-alpha-50: #1e4d3b80;
+       button with a white label wants 400 (5.73:1) instead. */
+  --primary-100: #d7efd8;
+  --primary-200: #9ad69d;
+  --primary-300: #46a44b;
+  --primary-400: #2f7432;
+  --primary-500: #1e4d20;
+  --primary-700: #123014;
+  --primary-alpha-10: #1e4d201a;
+  --primary-alpha-50: #1e4d2080;
 
   /* ── Colour: neutrals ─────────────────────────────────────── */
   --neutral-100: #ffffff;
