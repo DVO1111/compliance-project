@@ -170,7 +170,11 @@
      repair: the blue this replaced, #2943d6, sat at 2.56:1 and had been
      failing contrast here all along. */
   --color-accent: var(--primary-300);
-  --color-accent-soft: rgba(70, 164, 128, 0.15);
+  /*  Derived rather than hardcoded. This was rgba(70, 164, 128, 0.15) —
+      the old #46a480 at 15% — so when the ramp moved onto the brand hue
+      the accent and its own tint became two different greens. A literal
+      here cannot follow the token it is meant to be a tint of. */
+  --color-accent-soft: color-mix(in srgb, var(--primary-300) 15%, transparent);
   --color-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --color-card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
   --color-skeleton: #2d2d2d;
