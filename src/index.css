@@ -155,12 +155,30 @@
   --metric-purple-delta-text: #ffffff;
 }
 
+/*  The dark theme is the product's half of one continuous dark surface:
+    the marketing site, the auth screens and the dashboard now share a
+    ground. #08131A is the same value as --lp-bg in pages/landing/shell.tsx
+    and the --abyss the Criateur Dashboard and Admin designs are drawn on,
+    so someone signing in no longer crosses a seam into a different-coloured
+    product.
+
+    The surfaces below are the design's translucent panels resolved over
+    that ground — rgba(255,255,255,0.025) and 0.06 — flattened to opaque
+    because the app nests surfaces and stacked translucency compounds
+    unpredictably.
+
+    Measured rather than assumed: every pairing got BETTER than it was on
+    #121212 / #1e1e1e, none worse.
+
+      on the ground   text-primary 17.95  secondary 7.33  tertiary 3.89  accent 5.97
+      on the card     text-primary 17.03  secondary 6.95  tertiary 3.69  accent 5.66
+      previously      text-primary 15.93  secondary 6.50  tertiary 3.45  accent 5.30  */
 [data-theme="dark"] {
-  --color-bg: #121212;
-  --color-surface: #1e1e1e;
-  --color-surface-alt: #2d2d2d;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-hover: rgba(255, 255, 255, 0.15);
+  --color-bg: #08131a;
+  --color-surface: #0e1920;
+  --color-surface-alt: #172128;
+  --color-border: rgba(207, 222, 255, 0.13);
+  --color-border-hover: rgba(207, 222, 255, 0.22);
   --color-text-primary: #f8fafc;
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #71717a;
