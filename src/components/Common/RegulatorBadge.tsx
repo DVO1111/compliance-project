@@ -19,16 +19,61 @@ import { Landmark } from 'lucide-react';
 interface RegulatorBadgeProps {
   /** Compact drops the jurisdiction name and keeps the short regulator code. */
   compact?: boolean;
+  /**
+   * 'mono' is the Criateur Dashboard design's treatment: a hairline pill in
+   * the mono face, a small accent dot in place of the icon, and the
+   * regulator and jurisdiction together as "NAFDAC · Nigeria".
+   *
+   * A separate variant rather than a change to `compact`, which UploadPage
+   * also uses and which means something different — compact DROPS the
+   * jurisdiction, where this one deliberately shows it.
+   */
+  variant?: 'default' | 'mono';
   className?: string;
 }
 
-export default function RegulatorBadge({ compact = false, className = '' }: RegulatorBadgeProps) {
+export default function RegulatorBadge({
+  compact = false,
+  variant = 'default',
+  className = '',
+}: RegulatorBadgeProps) {
   const { profile } = useAuth();
   const selectedJurisdiction = useJurisdictionStore((s) => s.selectedJurisdiction);
 
   const industryType = (profile as any)?.industry_type as string | null | undefined;
   const jurisdiction = toJurisdictionId(selectedJurisdiction) ?? 'nigeria';
   const regulator = getRegulatorInfo(industryType, jurisdiction);
+
+  if (variant === 'mono') {
+    return (
+      <span
+        className={`inline-flex items-center gap-2 border whitespace-nowrap ${className}`}
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10.5px',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'var(--color-text-secondary)',
+          borderColor: 'var(--color-border)',
+          borderRadius: 8,
+          padding: '9px 12px',
+        }}
+        title={regulator.description}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: 'var(--color-accent)',
+            flexShrink: 0,
+          }}
+        />
+        {regulator.short} · {JURISDICTION_LABELS[jurisdiction]}
+      </span>
+    );
+  }
 
   return (
     <span
