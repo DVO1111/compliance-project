@@ -227,7 +227,7 @@ function isValidPageId(value: any): value is PageId {
 }
 
 function AppContent() {
-  const { user, profile, loading, isRecoveringPassword, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isRecoveringPassword, profileError, refreshProfile, signOut } = useAuth();
 
   const inviteTokenFromUrl = (() => {
     try {
@@ -361,8 +361,17 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
+      //  The Criateur Dashboard design's page ground. Was a navy-to-emerald
+      //  gradient (#002D62 -> #00A86B) that belonged to neither the brand
+      //  mark nor the designs, and was the first thing anyone signing in saw.
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'linear-gradient(160deg, #0B1D1B 0%, #0A1727 46%, #08131A 100%)' }}
+      >
+        <div
+          className="animate-spin rounded-full h-16 w-16 border-b-4"
+          style={{ borderColor: 'var(--primary-300)' }}
+        ></div>
       </div>
     );
   }
@@ -486,22 +495,97 @@ function AppContent() {
   }
 
   if (user && !profile) {
-    // Signed in but no profile row yet. This is normally a brief provisioning
-    // window, but if a session gets stuck without a profile (e.g. signup that
-    // never completed verification), give the user a way out instead of an
-    // endless spinner.
+    //  Signed in, but no profile.
+    //
+    //  This screen used to spin for ever. It renders once and then waits for
+    //  `profile` to become non-null, and nothing re-ran the query — so a
+    //  transient failure on the first load became a permanent dead end, and
+    //  the only way out was to sign out.
+    //
+    //  It also told everyone the same thing: "your sign-up may not have been
+    //  verified". That is one of two causes and often the wrong one. The read
+    //  returning no row means the profile was never provisioned. The read
+    //  FAILING — RLS, a network drop, the database asleep — means the profile
+    //  may well exist and we simply could not see it. Those need opposite
+    //  responses, so they now say different things and the recoverable one
+    //  offers a retry.
+    const readFailed = profileError !== null;
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex flex-col items-center justify-center gap-6 px-4 text-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
-        <p className="text-white/90 text-sm max-w-sm">
-          Setting up your account… If this doesn’t finish, your sign-up may not have been verified.
-        </p>
-        <button
-          onClick={() => signOut()}
-          className="text-white/80 hover:text-white underline text-sm"
-        >
-          Sign out and try again
-        </button>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-5 px-4 text-center"
+        style={{
+          background: 'linear-gradient(160deg, #0B1D1B 0%, #0A1727 46%, #08131A 100%)',
+          color: 'var(--lp-paper, #FBF9F5)',
+        }}
+      >
+        {!readFailed && (
+          <div
+            className="animate-spin rounded-full h-14 w-14 border-b-4"
+            style={{ borderColor: 'var(--primary-300)' }}
+          />
+        )}
+
+        <div style={{ maxWidth: '32rem' }}>
+          <h1
+            style={{
+              //  Fallback inline: --font-display lands with the dashboard header
+            //  work, and this screen must not wait on it to look right.
+            fontFamily: "var(--font-display, 'Bricolage Grotesque Variable', 'Bricolage Grotesque', var(--font-sans))",
+              fontSize: 'clamp(20px, 2.2vw, 26px)',
+              fontWeight: 600,
+              fontStretch: '92%',
+              margin: '0 0 8px',
+            }}
+          >
+            {readFailed ? 'We could not load your account.' : 'Setting up your account…'}
+          </h1>
+          <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0, opacity: 0.78 }}>
+            {readFailed
+              ? 'Your sign-in worked, so this is not your password. Reading your profile failed, which is usually temporary.'
+              : 'If this does not finish, your sign-up may not have been verified.'}
+          </p>
+          {readFailed && (
+            //  The server's own words. Without them this is unreportable:
+            //  "it did not work" tells whoever is helping nothing.
+            <p
+              style={{
+                fontFamily: "var(--font-mono, 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace)",
+                fontSize: 11.5,
+                lineHeight: 1.5,
+                marginTop: 12,
+                opacity: 0.6,
+                wordBreak: 'break-word',
+              }}
+            >
+              {profileError}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap justify-center">
+          <button
+            onClick={() => void refreshProfile()}
+            className="inline-flex items-center gap-2 px-4 border transition-colors"
+            style={{
+              minHeight: 38,
+              borderRadius: 8,
+              borderColor: 'var(--primary-300)',
+              background: 'color-mix(in srgb, var(--primary-300) 12%, transparent)',
+              color: 'var(--primary-300)',
+              fontSize: 13.5,
+              fontWeight: 600,
+            }}
+          >
+            Try again
+          </button>
+          <button
+            onClick={() => signOut()}
+            className="underline text-sm"
+            style={{ opacity: 0.75 }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     );
   }

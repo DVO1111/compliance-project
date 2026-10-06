@@ -58,6 +58,18 @@ interface AuthContextType {
    * without a password.
    */
   isRecoveringPassword: boolean;
+  /**
+   * Why the profile could not be loaded, when that is the reason `profile`
+   * is null.
+   *
+   * `profile === null` has two very different causes — the row does not
+   * exist yet, or reading it failed — and the boot screen used to show the
+   * same sentence for both with no way to tell them apart. A read that
+   * fails is recoverable and worth retrying; a missing row is not, and
+   * needs provisioning. Null here means "no row", a string means "the read
+   * itself failed, and this is what the server said".
+   */
+  profileError: string | null;
   refreshProfile: () => Promise<void>;
   switchBrand: (brandId: string | null) => void;
 }
@@ -71,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   // Track whether the initial profile load has completed. After that,
   // background refreshes (token refresh, window focus) must NEVER set
   // loading=true — that unmounts the entire app and loses all page state.
@@ -142,6 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       logger.error('loadProfile error:', error);
       setProfile(null);
+      //  Kept so the boot screen can say what actually went wrong instead
+      //  of blaming the user's sign-up for what may be an RLS denial or a
+      //  network failure.
+      setProfileError(error.message || 'The profile request failed.');
       setLoading(false);
       initialLoadDone.current = true;
       return;
@@ -152,6 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If no profile row exists, stop
     if (!baseProfile) {
       setProfile(null);
+      //  Null, not a message: the read SUCCEEDED and returned nothing, so
+      //  there is genuinely no row rather than something to retry.
+      setProfileError(null);
       setLoading(false);
       initialLoadDone.current = true;
       return;
@@ -475,7 +495,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, refreshProfile, switchBrand }}
+      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, profileError, refreshProfile, switchBrand }}
     >
       {children}
     </AuthContext.Provider>
