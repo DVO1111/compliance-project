@@ -553,6 +553,101 @@ $h3$;
 -- =====================================================================
 \echo ''
 \echo '════════════════════════════════════════════════════════════════'
+
+-- =====================================================================
+--  Z. Week 4 item 05 — allergen attributes on the material record
+--
+--  "Allergen attributes on the material record: contains, may contain,
+--   processing aid, and a hidden flag. Attributes only, no allergen
+--   module."
+--
+--  And its NOT DONE IF: "Allergen attributes built as a register with
+--  workflow. That is deferred." Z6 asserts that absence, because the way
+--  this clause gets failed is by over-building it rather than by
+--  omitting it.
+-- =====================================================================
+DO $z$
+DECLARE
+  c_a uuid := '00000000-0000-4000-a000-0000000000a1';
+  m   uuid;
+  ok  boolean; msg text;
+BEGIN
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  INSERT INTO public.materials(company_id, code, name, material_type,
+                               allergen_contains, allergen_may_contain,
+                               allergen_processing_aid, allergen_hidden)
+  VALUES (c_a, 'ALG-001', 'Lactose monohydrate BP', 'excipient',
+          ARRAY['milk'], ARRAY['cereals_containing_gluten'],
+          ARRAY['soybeans'], true)
+  ON CONFLICT (company_id, code) DO UPDATE
+     SET allergen_contains       = EXCLUDED.allergen_contains,
+         allergen_may_contain    = EXCLUDED.allergen_may_contain,
+         allergen_processing_aid = EXCLUDED.allergen_processing_aid,
+         allergen_hidden         = EXCLUDED.allergen_hidden
+  RETURNING id INTO m;
+
+  PERFORM _ck('Z','Z1 the four attributes round-trip',
+    (SELECT allergen_contains = ARRAY['milk']
+        AND allergen_may_contain = ARRAY['cereals_containing_gluten']
+        AND allergen_processing_aid = ARRAY['soybeans']
+        AND allergen_hidden
+       FROM public.materials WHERE id = m));
+
+  --  The three lists are separate because labelling treats them
+  --  differently. Collapsing them is the commonest way this gets built
+  --  wrong, so prove they are not the same column.
+  PERFORM _ck('Z','Z2 contains, may-contain and processing aid are distinct',
+    (SELECT allergen_contains <> allergen_may_contain
+        AND allergen_contains <> allergen_processing_aid
+       FROM public.materials WHERE id = m));
+
+  --  An unconstrained text[] makes "which materials contain milk"
+  --  unanswerable the first time somebody types 'Milk'.
+  ok := false; msg := NULL;
+  BEGIN
+    UPDATE public.materials SET allergen_contains = ARRAY['Milk'] WHERE id = m;
+  EXCEPTION WHEN check_violation THEN ok := true; msg := SQLERRM; END;
+  PERFORM _ck('Z','Z3 a value outside the Codex list is refused', ok, msg);
+
+  ok := false; msg := NULL;
+  BEGIN
+    UPDATE public.materials SET allergen_may_contain = ARRAY['dairy'] WHERE id = m;
+  EXCEPTION WHEN check_violation THEN ok := true; msg := SQLERRM; END;
+  PERFORM _ck('Z','Z4 and so is a plausible synonym', ok, msg);
+
+  --  A hidden flag with nothing recorded is a warning nobody can act on.
+  --  msg is reset before every probe: without it a failing assertion
+  --  reports the PREVIOUS probe's error, which sends whoever reads the
+  --  log after the wrong constraint. Found by mutation-testing this
+  --  section — Z5 failed and blamed Z4's may-contain check.
+  ok := false; msg := NULL;
+  BEGIN
+    INSERT INTO public.materials(company_id, code, name, material_type, allergen_hidden)
+    VALUES (c_a, 'ALG-002', 'Empty hidden flag', 'excipient', true);
+  EXCEPTION WHEN check_violation THEN ok := true; msg := SQLERRM; END;
+  PERFORM _ck('Z','Z5 hidden cannot be set with no allergen recorded', ok, msg);
+
+  --  "Attributes only, no allergen module."
+  PERFORM _ck('Z','Z6 no allergen register table was built',
+    NOT EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema = 'public'
+                   AND table_name LIKE '%allergen%'),
+    (SELECT string_agg(table_name, ', ') FROM information_schema.tables
+      WHERE table_schema='public' AND table_name LIKE '%allergen%'));
+
+  --  The default is an empty list, not null: "no allergens recorded" and
+  --  "nobody has looked" are the same state here, and a null array would
+  --  silently drop the row out of every containment query.
+  PERFORM _ck('Z','Z7 the columns default to empty, never null',
+    (SELECT allergen_contains = '{}' AND allergen_may_contain = '{}'
+        AND allergen_processing_aid = '{}' AND allergen_hidden = false
+       FROM public.materials WHERE company_id = c_a AND code = 'PARA'));
+
+  DELETE FROM public.materials WHERE company_id = c_a AND code IN ('ALG-001','ALG-002');
+END
+$z$;
+
 \echo '  ITEM 03 — MATERIAL MASTER, LOTS AND LIFECYCLE'
 \echo '════════════════════════════════════════════════════════════════'
 SELECT section,

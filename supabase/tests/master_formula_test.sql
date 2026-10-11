@@ -513,7 +513,13 @@ DO $d$
 DECLARE
   f_tab uuid := current_setting('test.f_tab')::uuid;
   f_new uuid; ok boolean; msg text;
+  --  Derived from the formula under test rather than a session setting,
+  --  so section D needs nothing section A did not already establish.
+  v_company uuid; v_actor uuid;
 BEGIN
+  SELECT company_id, created_by INTO v_company, v_actor
+    FROM public.master_formulas WHERE id = f_tab;
+
   --  An approved formula is frozen.
   ok := false; msg := NULL;
   BEGIN UPDATE public.master_formulas SET batch_size=600000 WHERE id=f_tab;
@@ -589,8 +595,59 @@ BEGIN
   PERFORM _fk('D','D14 the new draft IS editable',
     (SELECT batch_size=600000 FROM public.master_formulas WHERE id=f_new));
 
+  --  ── Week 4 item 06: formula changes routed through change control ──
+  --
+  --  This version supersedes an approved one, so it is a CHANGE and the
+  --  gate added in 20261010000000 refuses to let it take effect without
+  --  an approved change control. These three assertions were added when
+  --  that gate landed: the suite used to approve straight through here,
+  --  and the gate caught it, which is the gate working.
+  ok := false;
+  BEGIN
+    PERFORM public.master_formula_approve(f_new);
+  EXCEPTION WHEN others THEN
+    ok := SQLERRM LIKE 'MASTER_FORMULA_CHANGE_CONTROL_REQUIRED%';
+    msg := SQLERRM;
+  END;
+  PERFORM _fk('D','D14a a revision cannot be approved with no change control', ok, msg);
+
+  --  A change control of the right type, but still in draft, is not
+  --  authorisation. Impact assessment is the whole point of raising one.
+  INSERT INTO public.change_controls(
+    id, company_id, change_number, title, description,
+    change_type, change_category, status, created_by)
+  VALUES (
+    '00000000-0000-7a00-cc00-000000000001',
+    v_company,
+    'CC-MF-0001', 'Granulation batch size increase',
+    'Increase the tablet formula batch size from 500,000 to 600,000 units.',
+    'formulation', 'minor', 'draft', v_actor)
+  ON CONFLICT (id) DO NOTHING;
+
+  UPDATE public.master_formulas
+     SET change_control_id='00000000-0000-7a00-cc00-000000000001'
+   WHERE id=f_new;
+
+  ok := false;
+  BEGIN
+    PERFORM public.master_formula_approve(f_new);
+  EXCEPTION WHEN others THEN
+    ok := SQLERRM LIKE 'MASTER_FORMULA_CHANGE_CONTROL_NOT_APPROVED%';
+    msg := SQLERRM;
+  END;
+  PERFORM _fk('D','D14b a change control still in draft is not authorisation', ok, msg);
+
+  --  Approved. Through the engine, not by writing status — change_controls
+  --  carries the same guarded status mirror the materials tables do, and
+  --  a direct UPDATE is refused. Which is the point of the mirror.
+  PERFORM public.lifecycle_transition(
+    'change_control', '00000000-0000-7a00-cc00-000000000001'::uuid,
+    'set_approved', v_company, v_actor);
+
   --  Approving it supersedes the old one, in one transaction.
   PERFORM public.master_formula_approve(f_new);
+  PERFORM _fk('D','D14c and with it approved, the revision goes through',
+    (SELECT status='approved' FROM public.master_formulas WHERE id=f_new));
   PERFORM _fk('D','D15 approving the new version supersedes the old',
     (SELECT status='superseded' AND superseded_at IS NOT NULL
        FROM public.master_formulas WHERE id=f_tab));
