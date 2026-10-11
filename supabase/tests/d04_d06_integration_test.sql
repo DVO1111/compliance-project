@@ -377,12 +377,23 @@ END $h4$;
 -- =====================================================================
 DO $h5$
 DECLARE v_ok boolean := false; v_msg text;
+  c uuid := '00000000-0000-7600-a000-00000000000a';
+  u uuid := '00000000-0000-7600-b000-000000000001';
+  b uuid := '00000000-0000-7600-f000-000000000001';
 BEGIN
+  --  Since item 07 the batch's state lives in the lifecycle engine and
+  --  `status` is a mirror the database refuses to let anyone write, so
+  --  the batch is walked to the point of release through the engine
+  --  rather than nudged with an UPDATE. The gate under test is unchanged
+  --  — it still fires on the status write the mirror performs.
+  PERFORM public.lifecycle_transition('batch_record', b, 'close_execution', c, u);
+  PERFORM public.lifecycle_transition('batch_record', b, 'submit_for_qc',   c, u);
+  PERFORM public.lifecycle_transition('batch_record', b, 'start_qc',        c, u);
+
   --  The batch was legitimately started while the licence was valid.
   --  It still must not be released now that it is not.
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7600-f000-000000000001';
+    PERFORM public.lifecycle_transition('batch_record', b, 'release', c, u);
     v_msg := 'RELEASED AGAINST A LAPSED REGISTRATION';
   EXCEPTION WHEN others THEN
     v_ok := SQLERRM LIKE 'LICENCE_EXPIRED%'; v_msg := SQLERRM;
@@ -396,8 +407,7 @@ BEGIN
   ALTER TABLE public.batch_records DISABLE TRIGGER trg_batch_records_licence_gate;
   v_ok := false;
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7600-f000-000000000001';
+    PERFORM public.lifecycle_transition('batch_record', b, 'release', c, u);
     v_msg := 'ONLY ONE CONTROL — THE PRODUCT GATE DID NOT FIRE';
   EXCEPTION WHEN others THEN
     v_ok := SQLERRM LIKE 'BATCH_PRODUCT_NOT_ELIGIBLE%'; v_msg := SQLERRM;
@@ -464,12 +474,17 @@ END $h6$;
 RESET ROLE;
 DO $h6b$
 DECLARE v_ok boolean := false; v_msg text;
+  c uuid := '00000000-0000-7600-a000-00000000000a';
+  u uuid := '00000000-0000-7600-b000-000000000001';
+  b uuid := '00000000-0000-7600-f000-000000000001';
 BEGIN
   --  The batch held back in section 5 can now be released, and it is the
-  --  same batch — not a new one created to make the test pass.
+  --  same batch — not a new one created to make the test pass. It is
+  --  still sitting in qc_in_progress where section 5 left it, so one
+  --  transition is all it takes.
   BEGIN
-    UPDATE public.batch_records SET status='released', released_at=now()
-     WHERE id='00000000-0000-7600-f000-000000000001';
+    PERFORM public.lifecycle_transition('batch_record', b, 'release', c, u);
+    UPDATE public.batch_records SET released_at = now() WHERE id = b;
     v_ok := true; v_msg := 'released';
   EXCEPTION WHEN others THEN v_msg := SQLERRM;
   END;

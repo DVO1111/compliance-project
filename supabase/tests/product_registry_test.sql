@@ -34,6 +34,23 @@ BEGIN
   VALUES (p_id,p_name,CASE WHEN p_cond THEN 'PASS' ELSE 'FAIL' END,p_detail);
 END $$;
 
+--  Since item 07 a batch record starts in `in_progress` and its status
+--  column is a mirror the database refuses to let anyone write, so the
+--  section H and L probes below — which are about the PRODUCT gate on
+--  release, not about manufacturing — walk the batch to the point of
+--  release through the engine first. Kept as a helper because four
+--  probes need the same three transitions, and a sequence repeated four
+--  times is a sequence that drifts.
+CREATE OR REPLACE FUNCTION prod_batch_to_qc(p_batch uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE c uuid; u uuid := '00000000-0000-7300-b000-000000000001';
+BEGIN
+  SELECT company_id INTO c FROM public.batch_records WHERE id = p_batch;
+  PERFORM public.lifecycle_transition('batch_record', p_batch, 'close_execution', c, u);
+  PERFORM public.lifecycle_transition('batch_record', p_batch, 'submit_for_qc',   c, u);
+  PERFORM public.lifecycle_transition('batch_record', p_batch, 'start_qc',        c, u);
+END $$;
+
 -- ── fixtures ─────────────────────────────────────────────────────────
 DO $fx$
 DECLARE
@@ -397,14 +414,19 @@ BEGIN
   SELECT public.product_is_release_eligible('00000000-0000-7300-c000-000000000002') INTO v_elig;
   PERFORM prod_assert('H1','a development product is not release-eligible', v_elig = false, v_elig::text);
 
+  --  Since item 07 `status` is a mirror of the lifecycle engine and no
+  --  caller may write it, so the insert leaves it alone and the batch is
+  --  walked to the point of release through the engine. The gate under
+  --  test is unchanged: it fires on the status write the mirror makes.
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,product_id,status,manufacturing_date,expiry_date,batch_size)
+    (id,company_id,batch_number,product_name,product_id,manufacturing_date,expiry_date,batch_size)
   VALUES ('00000000-0000-7300-9000-000000000001','00000000-0000-7300-a000-00000000000a',
-          'BATCH-001','Moringa Capsules','00000000-0000-7300-c000-000000000002','qc_pending',current_date,current_date + 365,100);
+          'BATCH-001','Moringa Capsules','00000000-0000-7300-c000-000000000002',current_date,current_date + 365,100);
+  PERFORM prod_batch_to_qc('00000000-0000-7300-9000-000000000001');
 
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7300-9000-000000000001';
+    PERFORM public.lifecycle_transition('batch_record','00000000-0000-7300-9000-000000000001',
+      'release','00000000-0000-7300-a000-00000000000a','00000000-0000-7300-b000-000000000001');
     v_msg := 'RELEASE OF INELIGIBLE PRODUCT ACCEPTED';
   EXCEPTION WHEN others THEN
     v_ok := SQLERRM LIKE 'BATCH_PRODUCT_NOT_ELIGIBLE%'; v_msg := SQLERRM;
@@ -434,8 +456,8 @@ BEGIN
   PERFORM prod_assert('H3','the product is now registered', v_status='registered', coalesce(v_status,'NULL'));
 
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7300-9000-000000000001';
+    PERFORM public.lifecycle_transition('batch_record','00000000-0000-7300-9000-000000000001',
+      'release','00000000-0000-7300-a000-00000000000a','00000000-0000-7300-b000-000000000001');
     v_ok := true; v_msg := 'released';
   EXCEPTION WHEN others THEN v_msg := SQLERRM;
   END;
@@ -456,12 +478,13 @@ DO $h5$
 DECLARE v_ok boolean := false; v_msg text;
 BEGIN
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,product_id,status,manufacturing_date,expiry_date,batch_size)
+    (id,company_id,batch_number,product_name,product_id,manufacturing_date,expiry_date,batch_size)
   VALUES ('00000000-0000-7300-9000-000000000002','00000000-0000-7300-a000-00000000000a',
-          'BATCH-002','Moringa Capsules','00000000-0000-7300-c000-000000000002','qc_pending',current_date,current_date + 365,100);
+          'BATCH-002','Moringa Capsules','00000000-0000-7300-c000-000000000002',current_date,current_date + 365,100);
+  PERFORM prod_batch_to_qc('00000000-0000-7300-9000-000000000002');
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7300-9000-000000000002';
+    PERFORM public.lifecycle_transition('batch_record','00000000-0000-7300-9000-000000000002',
+      'release','00000000-0000-7300-a000-00000000000a','00000000-0000-7300-b000-000000000001');
     v_msg := 'RELEASE OF SUSPENDED PRODUCT ACCEPTED';
   EXCEPTION WHEN others THEN
     v_ok := SQLERRM LIKE 'BATCH_PRODUCT_NOT_ELIGIBLE%'; v_msg := SQLERRM;
@@ -480,12 +503,13 @@ DO $h6$
 DECLARE v_ok boolean := false; v_msg text;
 BEGIN
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,status,manufacturing_date,expiry_date,batch_size)
+    (id,company_id,batch_number,product_name,manufacturing_date,expiry_date,batch_size)
   VALUES ('00000000-0000-7300-9000-000000000003','00000000-0000-7300-a000-00000000000a',
-          'BATCH-LEGACY','Unlinked legacy product','qc_pending',current_date,current_date + 365,100);
+          'BATCH-LEGACY','Unlinked legacy product',current_date,current_date + 365,100);
+  PERFORM prod_batch_to_qc('00000000-0000-7300-9000-000000000003');
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7300-9000-000000000003';
+    PERFORM public.lifecycle_transition('batch_record','00000000-0000-7300-9000-000000000003',
+      'release','00000000-0000-7300-a000-00000000000a','00000000-0000-7300-b000-000000000001');
     v_ok := true; v_msg := 'released';
   EXCEPTION WHEN others THEN v_msg := SQLERRM;
   END;
@@ -601,9 +625,9 @@ BEGIN
           'nafdac_product_registration','Legacy Syrup Licence','Legacy Syrup 100ml','nafdac','A4-1234');
 
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,status,manufacturing_date,expiry_date,batch_size)
+    (id,company_id,batch_number,product_name,manufacturing_date,expiry_date,batch_size)
   VALUES ('00000000-0000-7300-9000-000000000010','00000000-0000-7300-a000-00000000000a',
-          'LEGACY-B1','Legacy Syrup 100ml','qc_pending',current_date,current_date+365,50);
+          'LEGACY-B1','Legacy Syrup 100ml',current_date,current_date+365,50);
 END $l0$;
 
 DO $l1$
@@ -655,9 +679,10 @@ END $l1$;
 DO $l2$
 DECLARE v_ok boolean := false; v_msg text;
 BEGIN
+  PERFORM prod_batch_to_qc('00000000-0000-7300-9000-000000000010');
   BEGIN
-    UPDATE public.batch_records SET status='released'
-     WHERE id='00000000-0000-7300-9000-000000000010';
+    PERFORM public.lifecycle_transition('batch_record','00000000-0000-7300-9000-000000000010',
+      'release','00000000-0000-7300-a000-00000000000a','00000000-0000-7300-b000-000000000001');
     v_ok := true; v_msg := 'released';
   EXCEPTION WHEN others THEN v_msg := SQLERRM;
   END;
@@ -724,4 +749,5 @@ EXCEPTION WHEN others THEN
 END $cleanup$;
 
 DROP FUNCTION IF EXISTS prod_assert(text,text,boolean,text);
+DROP FUNCTION IF EXISTS prod_batch_to_qc(uuid);
 DROP TABLE IF EXISTS prod_results;

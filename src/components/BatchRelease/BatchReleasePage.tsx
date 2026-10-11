@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FlaskConical, Plus, CheckCircle2, AlertTriangle, Clock, XCircle, Package, PackageCheck } from 'lucide-react';
+import { FlaskConical, Plus, CheckCircle2, AlertTriangle, Clock, XCircle, Package, PackageCheck, Factory, ClipboardCheck } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   listBatchRecords,
@@ -25,6 +25,8 @@ const RM_STATUS_COLORS: Record<RawMaterialStatus, string> = {
 };
 
 const STATUS_ICONS: Record<BatchStatus, typeof FlaskConical> = {
+  in_progress: Factory,
+  execution_complete: ClipboardCheck,
   qc_pending: Clock,
   qc_in_progress: FlaskConical,
   hold: AlertTriangle,
@@ -78,6 +80,13 @@ export default function BatchReleasePage() {
         if (!reason) { setActionLoading(null); return; }
         extra.holdReason = reason;
       }
+      //  The engine declares `reject` as requiring a comment, so asking
+      //  for one is not politeness — the transition is refused without it.
+      if (newStatus === 'rejected') {
+        const reason = prompt('Reason for rejecting this batch (required):');
+        if (!reason) { setActionLoading(null); return; }
+        extra.comment = reason;
+      }
       if (newStatus === 'released') {
         extra.releaseNotes = prompt('Release notes (optional):') ?? '';
       }
@@ -90,17 +99,33 @@ export default function BatchReleasePage() {
     }
   };
 
-  const nextActions = (status: BatchStatus): { label: string; status: BatchStatus; danger?: boolean }[] => {
+  //  One entry per transition the engine actually declares. A batch under
+  //  manufacturing is driven by its stages, not from here, so the only
+  //  move offered on it is the hold — closing execution is the batch
+  //  record's own screen and requires every stage to be signed off.
+  const nextActions = (record: BatchRecord): { label: string; status: BatchStatus; danger?: boolean }[] => {
+    const { status } = record;
     switch (status) {
-      case 'qc_pending': return [{ label: 'Start QC', status: 'qc_in_progress' }];
+      case 'in_progress': return [{ label: 'Place on Hold', status: 'hold' }];
+      case 'execution_complete': return [{ label: 'Submit for QC', status: 'qc_pending' }];
+      case 'qc_pending': return [
+        { label: 'Start QC', status: 'qc_in_progress' },
+        { label: 'Place on Hold', status: 'hold' },
+      ];
       case 'qc_in_progress': return [
         { label: 'Release', status: 'released' },
         { label: 'Place on Hold', status: 'hold' },
         { label: 'Reject', status: 'rejected', danger: true },
       ];
       case 'hold': return [
-        { label: 'Resume QC', status: 'qc_in_progress' },
-        { label: 'Reject', status: 'rejected', danger: true },
+        //  Only offered while execution is still open. A closed record is
+        //  refused this by the database too; not offering it is so the
+        //  operator is not shown a button that cannot work.
+        ...(record.execution_closed_at
+          ? []
+          : [{ label: 'Resume Manufacturing', status: 'in_progress' as BatchStatus }]),
+        { label: 'Resume QC', status: 'qc_in_progress' as BatchStatus },
+        { label: 'Reject', status: 'rejected' as BatchStatus, danger: true },
       ];
       default: return [];
     }
@@ -208,7 +233,7 @@ export default function BatchReleasePage() {
         <div className="space-y-3">
           {records.map(record => {
             const StatusIcon = STATUS_ICONS[record.status];
-            const actions = nextActions(record.status);
+            const actions = nextActions(record);
             const isActioning = actionLoading === record.id;
 
             return (
