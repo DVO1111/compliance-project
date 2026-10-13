@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/react';
 import { getPermissions } from './lib/permissions';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
 import OnboardingCompany from './pages/OnboardingCompany';
@@ -29,6 +29,57 @@ import { applyDeepLinksFromUrl } from './integrations/utils/deepLinks';
 import RealtimePopups from './components/Notifications/RealtimePopups';
 import FeatureGate from './components/Billing/FeatureGate';
 
+/**
+ * A lazily-loaded page, with one recovery the plain `lazy` does not have.
+ *
+ * Vite writes content-hashed filenames, so EVERY DEPLOY CHANGES THE CHUNK
+ * NAMES. A tab opened before a deploy is holding an index.html that names
+ * the old ones, and when the person then navigates, the browser asks for
+ * a file that no longer exists. Netlify's SPA fallback answers any
+ * unmatched path with index.html at status 200 — so the request does not
+ * even fail honestly: it succeeds, returns HTML, and the browser reports
+ * a module that will not parse.
+ *
+ * It did not matter when the whole app was one chunk loaded at the first
+ * paint. It matters now, and it is not an edge case: it is what happens
+ * to anyone with the app open while a deploy lands.
+ *
+ * So a failed chunk fetch reloads the page once, which fetches the
+ * current index.html and the chunks it names. The one-shot flag is
+ * cleared by the next page that loads successfully, so a later deploy
+ * can recover the same way; without that it would reload only once ever.
+ * If the reload does not fix it, the error boundary around renderPage
+ * shows PageErrorFallback rather than a blank screen.
+ */
+const CHUNK_RELOAD_KEY = 'criateur.chunk-reload';
+
+function lazyPage<T extends ComponentType<any>>(
+  load: () => Promise<{ default: T }>,
+) {
+  return lazy(() =>
+    load()
+      .then((mod) => {
+        //  Loaded cleanly, so any earlier recovery is spent and the next
+        //  deploy is allowed its own reload.
+        try { sessionStorage.removeItem(CHUNK_RELOAD_KEY); } catch { /* private mode */ }
+        return mod;
+      })
+      .catch((err) => {
+        let alreadyTried = true;
+        try {
+          alreadyTried = sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1';
+          if (!alreadyTried) sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+        } catch {
+          //  No sessionStorage (private mode, blocked storage). Reloading
+          //  without the flag risks a loop, so fall through to the error
+          //  boundary instead, which is recoverable by hand.
+        }
+        if (!alreadyTried) window.location.reload();
+        throw err;
+      }),
+  );
+}
+
 /* ──────────────────────────────────────────────────────────────────
    THE PAGES ARE LOADED ON DEMAND.
 
@@ -54,101 +105,101 @@ import FeatureGate from './components/Billing/FeatureGate';
                                  fails, which is exactly when a fetch
                                  is not to be relied on.
    ────────────────────────────────────────────────────────────────── */
-const DepartmentsPage           = lazy(() => import('./components/company/DepartmentsPage'));
-const AIDashboardPage           = lazy(() => import('./components/Governance/AI/AIDashboardPage'));
-const DashboardPage             = lazy(() => import('./components/Dashboard/DashboardPage'));
-const UploadPage                = lazy(() => import('./components/Upload/UploadPage'));
-const ArchivePage               = lazy(() => import('./components/Archive/ArchivePage'));
-const RegulationsPage           = lazy(() => import('./components/Regulations/RegulationsPage'));
-const LegalReviewPage           = lazy(() => import('./components/LegalReview/LegalReviewPage'));
-const CorrectionEditorPage      = lazy(() => import('./components/CorrectionEditor/CorrectionEditorPage'));
-const MembersPage               = lazy(() => import('./components/company/MembersPage'));
-const InvitesPage               = lazy(() => import('./components/company/InvitesPage'));
-const TrainingLogPage           = lazy(() => import('./components/Training/TrainingLogPage'));
-const ProfilePage               = lazy(() => import('./components/Profile/ProfilePage'));
-const NotificationsPage         = lazy(() => import('./components/Notifications/NotificationsPage'));
-const LicenseVaultPage          = lazy(() => import('./components/LicenseVault/LicenseVaultPage'));
-const IntegrationsPage          = lazy(() => import('./components/Integrations/IntegrationsPage'));
-const AuditTrailPage            = lazy(() => import('./components/AuditTrail/AuditTrailPage'));
-const RoleManagementPage        = lazy(() => import('./components/Roles/RoleManagementPage'));
-const ContentCalendarPage       = lazy(() => import('./components/Calendar/ContentCalendarPage'));
-const TeamChatPage              = lazy(() => import('./components/Chat/TeamChatPage'));
-const DriftMonitorPage          = lazy(() => import('./components/DriftMonitor/DriftMonitorPage'));
-const ConsentManagementPage     = lazy(() => import('./components/ConsentManagement/ConsentManagementPage'));
-const ContentBlocksPage         = lazy(() => import('./components/ContentBlocks/ContentBlocksPage'));
-const AgencyPortalPage          = lazy(() => import('./components/AgencyPortal/AgencyPortalPage'));
-const ComplianceReportingPage   = lazy(() => import('./components/Reporting/ComplianceReportingPage'));
-const HorizonScanningPage       = lazy(() => import('./components/HorizonScanning/HorizonScanningPage'));
-const ChannelRulesPage          = lazy(() => import('./components/ChannelRules/ChannelRulesPage'));
-const RegulatoryLibraryPage     = lazy(() => import('./components/RegulatoryLibrary/RegulatoryLibraryPage'));
-const TranslationCompliancePage = lazy(() => import('./components/TranslationCompliance/TranslationCompliancePage'));
-const CrisisResponsePage        = lazy(() => import('./components/CrisisResponse/CrisisResponsePage'));
-const ProgrammaticAdPage        = lazy(() => import('./components/ProgrammaticAd/ProgrammaticAdPage'));
-const WhistleblowerPage         = lazy(() => import('./components/Whistleblower/WhistleblowerPage'));
-const PredictiveRiskPage        = lazy(() => import('./components/PredictiveRisk/PredictiveRiskPage'));
-const SocialListeningPage       = lazy(() => import('./components/SocialListening/SocialListeningPage'));
-const WebsiteMonitoringPage     = lazy(() => import('./components/WebsiteMonitoring/WebsiteMonitoringPage'));
-const VendorScorecardPage       = lazy(() => import('./components/VendorScorecard/VendorScorecardPage'));
-const CapaManagementPage        = lazy(() => import('./components/CapaManagement/CapaManagementPage'));
-const TrainingSimulationPage    = lazy(() => import('./components/TrainingSimulation/TrainingSimulationPage'));
-const ClaimExtractionPage       = lazy(() => import('./components/ClaimExtraction/ClaimExtractionPage'));
-const SecretVaultPage           = lazy(() => import('./components/Vault/SecretVaultPage'));
-const LegalMarketplacePage      = lazy(() => import('./components/Marketplace/LegalMarketplacePage'));
-const LegalPartnerDashboard     = lazy(() => import('./components/Marketplace/LegalPartnerDashboard'));
-const PartnerVerificationPage   = lazy(() => import('./components/Marketplace/PartnerVerificationPage'));
-const PolicyAssistantPage       = lazy(() => import('./components/PolicyAssistant/PolicyAssistantPage'));
-const GrcFrameworksPage         = lazy(() => import('./components/GrcFrameworks/GrcFrameworksPage'));
-const GrcControlsPage           = lazy(() => import('./components/GrcControls/GrcControlsPage'));
-const GrcDashboardPage          = lazy(() => import('./components/GrcDashboard/GrcDashboardPage'));
-const GrcAutomationPage         = lazy(() => import('./components/GrcAutomation/GrcAutomationPage'));
-const AIAssetsPage              = lazy(() => import('./components/Governance/AI/AIAssetsPage'));
-const AIAssetDetailPage         = lazy(() => import('./components/Governance/AI/AIAssetDetailPage'));
-const AIUsageLogsPage           = lazy(() => import('./components/Governance/AI/AIUsageLogsPage'));
-const AIReviewsPage             = lazy(() => import('./components/Governance/AI/AIReviewsPage'));
-const AIPromptTemplatesPage     = lazy(() => import('./components/Governance/AI/AIPromptTemplatesPage'));
-const AIIncidentsPage           = lazy(() => import('./components/Governance/AI/AIIncidentsPage'));
-const PoliciesPage              = lazy(() => import('./components/Governance/Policies/PoliciesPage'));
-const PolicyDetailPage          = lazy(() => import('./components/Governance/Policies/PolicyDetailPage'));
-const MyPoliciesPage            = lazy(() => import('./components/Governance/Policies/MyPoliciesPage'));
-const VendorsPage               = lazy(() => import('./components/Vendors/VendorsPage'));
-const VendorDetailPage          = lazy(() => import('./components/Vendors/VendorDetailPage'));
-const AuditSessionsPage         = lazy(() => import('./components/Governance/Audits/AuditSessionsPage'));
-const AuditSessionDetailPage    = lazy(() => import('./components/Governance/Audits/AuditSessionDetailPage'));
-const RiskRegisterPage          = lazy(() => import('./components/Governance/Risks/RiskRegisterPage'));
-const RiskDetailDrawer          = lazy(() => import('./components/Governance/Risks/RiskDetailDrawer'));
-const CommandCenterPage         = lazy(() => import('./components/Governance/CommandCenter/CommandCenterPage'));
-const ObligationListPage        = lazy(() => import('./components/Governance/Obligations/ObligationListPage'));
-const ObligationDetailPage      = lazy(() => import('./components/Governance/Obligations/ObligationDetailPage'));
-const IdentityProvidersPage     = lazy(() => import('./components/Governance/Identity/IdentityProvidersPage'));
-const PlatformJobsPage          = lazy(() => import('./components/Platform/PlatformJobsPage'));
-const RetentionPoliciesPage     = lazy(() => import('./components/Governance/Retention/RetentionPoliciesPage'));
-const LegalHoldsPage            = lazy(() => import('./components/Governance/LegalHold/LegalHoldsPage'));
-const GovernanceTimelinePage    = lazy(() => import('./components/Governance/Timeline/GovernanceTimelinePage'));
-const WebhooksPage              = lazy(() => import('./components/Platform/WebhooksPage'));
-const EvidenceIngestionsPage    = lazy(() => import('./components/Platform/EvidenceIngestionsPage'));
-const EcosystemHubPage          = lazy(() => import('./components/Platform/EcosystemHubPage'));
-const CompanySettingsPage       = lazy(() => import('./components/company/CompanySettingsPage'));
-const BillingPage               = lazy(() => import('./components/Billing/BillingPage'));
-const BatchReleasePage          = lazy(() => import('./components/BatchRelease/BatchReleasePage'));
-const ChangeControlPage         = lazy(() => import('./components/ChangeControl/ChangeControlPage'));
-const SopLibraryPage            = lazy(() => import('./components/SopLibrary/SopLibraryPage'));
-const ComingSoonPage            = lazy(() => import('./components/Common/ComingSoonPage'));
-const AIInsightsPage            = lazy(() => import('./components/Dashboard/AIInsightsPage'));
-const FrameworkLibraryPage      = lazy(() => import('./components/FrameworkLibrary/FrameworkLibraryPage'));
-const ControlHealthDashboard    = lazy(() => import('./components/ControlMonitoring/ControlHealthDashboard'));
-const RegulatoryAffairsPage     = lazy(() => import('./components/RegulatoryAffairs/RegulatoryAffairsPage'));
-const GmpInspectionPage         = lazy(() => import('./components/GmpInspection/GmpInspectionPage'));
-const SONCompliancePage         = lazy(() => import('./components/SONCompliance/SONCompliancePage'));
-const CTDDossierPage            = lazy(() => import('./components/CTDDossier/CTDDossierPage'));
-const ContrabandRejectionPage   = lazy(() => import('./components/ContrabandRejection/ContrabandRejectionPage'));
-const ShipmentEventLogPage      = lazy(() => import('./components/Logistics/ShipmentEventLogPage'));
-const CN2223DeclarationPage     = lazy(() => import('./components/Logistics/CN2223DeclarationPage'));
-const ComplianceAlertingPage    = lazy(() => import('./components/Alerts/ComplianceAlertingPage'));
-const AuditPrepPage             = lazy(() => import('./components/AuditPrep/AuditPrepPage'));
-const CoaRegisterPage           = lazy(() => import('./components/Coa/CoaRegisterPage'));
-const OrgManagementPanel        = lazy(() => import('./components/Enterprise/OrgManagementPanel'));
-const EnterpriseDashboardPage   = lazy(() => import('./components/Enterprise/EnterpriseDashboardPage'));
-const PharmaIntegrationsPage    = lazy(() => import('./components/PharmaIntegrations/PharmaIntegrationsPage'));
+const DepartmentsPage           = lazyPage(() => import('./components/company/DepartmentsPage'));
+const AIDashboardPage           = lazyPage(() => import('./components/Governance/AI/AIDashboardPage'));
+const DashboardPage             = lazyPage(() => import('./components/Dashboard/DashboardPage'));
+const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
+const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
+const RegulationsPage           = lazyPage(() => import('./components/Regulations/RegulationsPage'));
+const LegalReviewPage           = lazyPage(() => import('./components/LegalReview/LegalReviewPage'));
+const CorrectionEditorPage      = lazyPage(() => import('./components/CorrectionEditor/CorrectionEditorPage'));
+const MembersPage               = lazyPage(() => import('./components/company/MembersPage'));
+const InvitesPage               = lazyPage(() => import('./components/company/InvitesPage'));
+const TrainingLogPage           = lazyPage(() => import('./components/Training/TrainingLogPage'));
+const ProfilePage               = lazyPage(() => import('./components/Profile/ProfilePage'));
+const NotificationsPage         = lazyPage(() => import('./components/Notifications/NotificationsPage'));
+const LicenseVaultPage          = lazyPage(() => import('./components/LicenseVault/LicenseVaultPage'));
+const IntegrationsPage          = lazyPage(() => import('./components/Integrations/IntegrationsPage'));
+const AuditTrailPage            = lazyPage(() => import('./components/AuditTrail/AuditTrailPage'));
+const RoleManagementPage        = lazyPage(() => import('./components/Roles/RoleManagementPage'));
+const ContentCalendarPage       = lazyPage(() => import('./components/Calendar/ContentCalendarPage'));
+const TeamChatPage              = lazyPage(() => import('./components/Chat/TeamChatPage'));
+const DriftMonitorPage          = lazyPage(() => import('./components/DriftMonitor/DriftMonitorPage'));
+const ConsentManagementPage     = lazyPage(() => import('./components/ConsentManagement/ConsentManagementPage'));
+const ContentBlocksPage         = lazyPage(() => import('./components/ContentBlocks/ContentBlocksPage'));
+const AgencyPortalPage          = lazyPage(() => import('./components/AgencyPortal/AgencyPortalPage'));
+const ComplianceReportingPage   = lazyPage(() => import('./components/Reporting/ComplianceReportingPage'));
+const HorizonScanningPage       = lazyPage(() => import('./components/HorizonScanning/HorizonScanningPage'));
+const ChannelRulesPage          = lazyPage(() => import('./components/ChannelRules/ChannelRulesPage'));
+const RegulatoryLibraryPage     = lazyPage(() => import('./components/RegulatoryLibrary/RegulatoryLibraryPage'));
+const TranslationCompliancePage = lazyPage(() => import('./components/TranslationCompliance/TranslationCompliancePage'));
+const CrisisResponsePage        = lazyPage(() => import('./components/CrisisResponse/CrisisResponsePage'));
+const ProgrammaticAdPage        = lazyPage(() => import('./components/ProgrammaticAd/ProgrammaticAdPage'));
+const WhistleblowerPage         = lazyPage(() => import('./components/Whistleblower/WhistleblowerPage'));
+const PredictiveRiskPage        = lazyPage(() => import('./components/PredictiveRisk/PredictiveRiskPage'));
+const SocialListeningPage       = lazyPage(() => import('./components/SocialListening/SocialListeningPage'));
+const WebsiteMonitoringPage     = lazyPage(() => import('./components/WebsiteMonitoring/WebsiteMonitoringPage'));
+const VendorScorecardPage       = lazyPage(() => import('./components/VendorScorecard/VendorScorecardPage'));
+const CapaManagementPage        = lazyPage(() => import('./components/CapaManagement/CapaManagementPage'));
+const TrainingSimulationPage    = lazyPage(() => import('./components/TrainingSimulation/TrainingSimulationPage'));
+const ClaimExtractionPage       = lazyPage(() => import('./components/ClaimExtraction/ClaimExtractionPage'));
+const SecretVaultPage           = lazyPage(() => import('./components/Vault/SecretVaultPage'));
+const LegalMarketplacePage      = lazyPage(() => import('./components/Marketplace/LegalMarketplacePage'));
+const LegalPartnerDashboard     = lazyPage(() => import('./components/Marketplace/LegalPartnerDashboard'));
+const PartnerVerificationPage   = lazyPage(() => import('./components/Marketplace/PartnerVerificationPage'));
+const PolicyAssistantPage       = lazyPage(() => import('./components/PolicyAssistant/PolicyAssistantPage'));
+const GrcFrameworksPage         = lazyPage(() => import('./components/GrcFrameworks/GrcFrameworksPage'));
+const GrcControlsPage           = lazyPage(() => import('./components/GrcControls/GrcControlsPage'));
+const GrcDashboardPage          = lazyPage(() => import('./components/GrcDashboard/GrcDashboardPage'));
+const GrcAutomationPage         = lazyPage(() => import('./components/GrcAutomation/GrcAutomationPage'));
+const AIAssetsPage              = lazyPage(() => import('./components/Governance/AI/AIAssetsPage'));
+const AIAssetDetailPage         = lazyPage(() => import('./components/Governance/AI/AIAssetDetailPage'));
+const AIUsageLogsPage           = lazyPage(() => import('./components/Governance/AI/AIUsageLogsPage'));
+const AIReviewsPage             = lazyPage(() => import('./components/Governance/AI/AIReviewsPage'));
+const AIPromptTemplatesPage     = lazyPage(() => import('./components/Governance/AI/AIPromptTemplatesPage'));
+const AIIncidentsPage           = lazyPage(() => import('./components/Governance/AI/AIIncidentsPage'));
+const PoliciesPage              = lazyPage(() => import('./components/Governance/Policies/PoliciesPage'));
+const PolicyDetailPage          = lazyPage(() => import('./components/Governance/Policies/PolicyDetailPage'));
+const MyPoliciesPage            = lazyPage(() => import('./components/Governance/Policies/MyPoliciesPage'));
+const VendorsPage               = lazyPage(() => import('./components/Vendors/VendorsPage'));
+const VendorDetailPage          = lazyPage(() => import('./components/Vendors/VendorDetailPage'));
+const AuditSessionsPage         = lazyPage(() => import('./components/Governance/Audits/AuditSessionsPage'));
+const AuditSessionDetailPage    = lazyPage(() => import('./components/Governance/Audits/AuditSessionDetailPage'));
+const RiskRegisterPage          = lazyPage(() => import('./components/Governance/Risks/RiskRegisterPage'));
+const RiskDetailDrawer          = lazyPage(() => import('./components/Governance/Risks/RiskDetailDrawer'));
+const CommandCenterPage         = lazyPage(() => import('./components/Governance/CommandCenter/CommandCenterPage'));
+const ObligationListPage        = lazyPage(() => import('./components/Governance/Obligations/ObligationListPage'));
+const ObligationDetailPage      = lazyPage(() => import('./components/Governance/Obligations/ObligationDetailPage'));
+const IdentityProvidersPage     = lazyPage(() => import('./components/Governance/Identity/IdentityProvidersPage'));
+const PlatformJobsPage          = lazyPage(() => import('./components/Platform/PlatformJobsPage'));
+const RetentionPoliciesPage     = lazyPage(() => import('./components/Governance/Retention/RetentionPoliciesPage'));
+const LegalHoldsPage            = lazyPage(() => import('./components/Governance/LegalHold/LegalHoldsPage'));
+const GovernanceTimelinePage    = lazyPage(() => import('./components/Governance/Timeline/GovernanceTimelinePage'));
+const WebhooksPage              = lazyPage(() => import('./components/Platform/WebhooksPage'));
+const EvidenceIngestionsPage    = lazyPage(() => import('./components/Platform/EvidenceIngestionsPage'));
+const EcosystemHubPage          = lazyPage(() => import('./components/Platform/EcosystemHubPage'));
+const CompanySettingsPage       = lazyPage(() => import('./components/company/CompanySettingsPage'));
+const BillingPage               = lazyPage(() => import('./components/Billing/BillingPage'));
+const BatchReleasePage          = lazyPage(() => import('./components/BatchRelease/BatchReleasePage'));
+const ChangeControlPage         = lazyPage(() => import('./components/ChangeControl/ChangeControlPage'));
+const SopLibraryPage            = lazyPage(() => import('./components/SopLibrary/SopLibraryPage'));
+const ComingSoonPage            = lazyPage(() => import('./components/Common/ComingSoonPage'));
+const AIInsightsPage            = lazyPage(() => import('./components/Dashboard/AIInsightsPage'));
+const FrameworkLibraryPage      = lazyPage(() => import('./components/FrameworkLibrary/FrameworkLibraryPage'));
+const ControlHealthDashboard    = lazyPage(() => import('./components/ControlMonitoring/ControlHealthDashboard'));
+const RegulatoryAffairsPage     = lazyPage(() => import('./components/RegulatoryAffairs/RegulatoryAffairsPage'));
+const GmpInspectionPage         = lazyPage(() => import('./components/GmpInspection/GmpInspectionPage'));
+const SONCompliancePage         = lazyPage(() => import('./components/SONCompliance/SONCompliancePage'));
+const CTDDossierPage            = lazyPage(() => import('./components/CTDDossier/CTDDossierPage'));
+const ContrabandRejectionPage   = lazyPage(() => import('./components/ContrabandRejection/ContrabandRejectionPage'));
+const ShipmentEventLogPage      = lazyPage(() => import('./components/Logistics/ShipmentEventLogPage'));
+const CN2223DeclarationPage     = lazyPage(() => import('./components/Logistics/CN2223DeclarationPage'));
+const ComplianceAlertingPage    = lazyPage(() => import('./components/Alerts/ComplianceAlertingPage'));
+const AuditPrepPage             = lazyPage(() => import('./components/AuditPrep/AuditPrepPage'));
+const CoaRegisterPage           = lazyPage(() => import('./components/Coa/CoaRegisterPage'));
+const OrgManagementPanel        = lazyPage(() => import('./components/Enterprise/OrgManagementPanel'));
+const EnterpriseDashboardPage   = lazyPage(() => import('./components/Enterprise/EnterpriseDashboardPage'));
+const PharmaIntegrationsPage    = lazyPage(() => import('./components/PharmaIntegrations/PharmaIntegrationsPage'));
 
 type UnauthView = 'landing' | 'platform' | 'who' | 'about' | 'contact' | 'login' | 'signup';
 
