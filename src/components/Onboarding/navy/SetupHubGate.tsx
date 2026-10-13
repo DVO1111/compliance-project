@@ -112,6 +112,20 @@ export default function SetupHubGate({
 }: SetupHubGateProps) {
   const [completed, setCompleted] = useState<Record<string, boolean> | null>(null);
 
+  //  SIGN IN → /onboarding. The hub is reached by state, not by a router,
+  //  so without this the address bar would still read "/" while the
+  //  onboarding screen is showing. The URL is the thing being
+  //  demonstrated and the thing someone will type later, so it is made
+  //  to match. replaceState, not pushState: Back should leave onboarding
+  //  rather than step through it.
+  useEffect(() => {
+    try {
+      if (window.location.pathname.replace(/\/+$/, '').toLowerCase() !== '/onboarding') {
+        window.history.replaceState({}, '', '/onboarding');
+      }
+    } catch { /* history is unavailable in some embedded views */ }
+  }, []);
+
   useEffect(() => {
     let live = true;
     fetchSetupProgress({ companyId, industryType, jurisdiction })

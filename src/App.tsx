@@ -485,7 +485,11 @@ function AppContent() {
       only make it slower to open. It is NOT yet the screen a new user
       is routed to — see SetupHubPreview for why the hub cannot be the
       live gate until the six step screens exist. */
-  if (wantsOnboardingHub) {
+  /*  Signed OUT, or a build with no backend: the static viewer, which is
+      what makes /onboarding presentable without an account. Signed IN,
+      the same URL serves the REAL hub further down — same address, real
+      data, real routing. */
+  if (wantsOnboardingHub && (!isSupabaseConfigured || (!loading && !user))) {
     return <SetupHubPreview />;
   }
 
@@ -686,7 +690,10 @@ function AppContent() {
   //  opens the workspace and is remembered, so it does not reappear on
   //  every sign-in. See SetupHubGate for which steps can be ticked and
   //  why the other three cannot be yet.
-  if (needsSetup) {
+  //  /onboarding while signed in: the real hub, not the viewer. Shown
+  //  even once setup has been dismissed, so the address can be opened
+  //  deliberately — to demonstrate it, or to pick the setup back up.
+  if (wantsOnboardingHub || needsSetup) {
     return (
       <SetupHubGate
         companyId={profile?.company_id}
@@ -694,6 +701,11 @@ function AppContent() {
         jurisdiction={(profile as any)?.default_jurisdiction}
         onFinish={(navigateTo?: string) => {
           localStorage.setItem(setupDoneKey, 'true');
+          //  Leaving the hub has to leave its ADDRESS too. The route is
+          //  read from window.location on every render, so finishing
+          //  while the bar still says /onboarding would land straight
+          //  back on the hub.
+          if (wantsOnboardingHub) window.history.replaceState({}, '', '/');
           if (navigateTo) {
             window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: navigateTo } }));
           }
