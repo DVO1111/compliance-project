@@ -19,7 +19,6 @@ import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import SignupPage from './components/Auth/SignupPage';
 import OnboardingWizard from './components/Onboarding/OnboardingWizard';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
-import SetupHubPreview from './components/Onboarding/navy/SetupHubPreview';
 import BrandSplash from './components/BrandSplash';
 import ConfigurationNeeded from './components/ConfigurationNeeded';
 import { isSupabaseConfigured } from './lib/supabase';
@@ -387,8 +386,8 @@ function AppContent() {
     }
   })();
 
-  const wantsOnboardingHub = onboardingPath === '/onboarding';
-  const wantsOnboardingViewer = onboardingPath === '/design/onboarding';
+  const wantsOnboardingHub =
+    onboardingPath === '/onboarding' || onboardingPath === '/design/onboarding';
 
   //  /onboarding opens on the sign-in form for a signed-out visitor, the
   //  same as /portal does. "Take me to onboarding" and "take me to the
@@ -494,18 +493,13 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  /*  /design/onboarding — the viewer. It sits ABOVE the auth gates on
-      purpose: it holds no session, reads no table and writes nothing, so
-      waiting on an auth round-trip would only make it slower to open,
-      and it is the one screen that must still work on a build with no
-      backend at all. */
-  if (wantsOnboardingViewer) {
-    return <SetupHubPreview />;
-  }
-
-  /*  /onboarding on a build with no backend cannot do anything useful —
-      there is nothing to sign in to — so it says so rather than showing
-      a sign-in form that will not work. */
+  /*  THERE IS ONE ONBOARDING SCREEN AND IT IS THE REAL ONE.
+      /design/onboarding used to serve a viewer with a demonstration
+      strip across the top — device toggles, buttons to tick steps, a
+      PREVIEW banner. It is gone. A screen that cannot be filled in is
+      not onboarding, and a banner saying so does not make it one. The
+      alias still answers, so a link someone was given does not 404; it
+      goes to the same place as /onboarding. */
   if (wantsOnboardingHub && !isSupabaseConfigured) {
     return <ConfigurationNeeded />;
   }
@@ -726,8 +720,7 @@ function AppContent() {
     return (
       <SetupHubGate
         companyId={profile?.company_id}
-        industryType={industryType}
-        jurisdiction={(profile as any)?.default_jurisdiction}
+        userId={user?.id}
         onFinish={(navigateTo?: string) => {
           localStorage.setItem(setupDoneKey, 'true');
           //  Leaving the hub has to leave its ADDRESS too. The route is
