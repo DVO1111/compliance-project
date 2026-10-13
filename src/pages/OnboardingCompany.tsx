@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function OnboardingCompany({ onDone }: { onDone: () => void }) {
   const [companyName, setCompanyName] = useState("");
@@ -7,6 +7,8 @@ export default function OnboardingCompany({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
   const trimmedName = useMemo(() => companyName.trim(), [companyName]);
+
+  const { provisionWorkspace } = useAuth();
 
   async function handleCreateCompany(e: React.FormEvent) {
     e.preventDefault();
@@ -19,19 +21,31 @@ export default function OnboardingCompany({ onDone }: { onDone: () => void }) {
 
     setSubmitting(true);
 
-    const { data, error: rpcErr } = await (supabase as any).rpc(
-      "create_company_and_set_owner",
-      { p_name: trimmedName }
-    );
+    //  WHY THIS GOES THROUGH provisionWorkspace AND NOT A BARE RPC.
+    //
+    //  This screen used to call create_company_and_set_owner, which
+    //  exists in no migration — so creating a company from the one
+    //  screen whose job is creating a company failed every time.
+    //
+    //  The obvious repair, calling create_company instead, is still not
+    //  enough: it writes the company and the caller's owner membership,
+    //  and nothing else. profiles.company_id stays null, which is the
+    //  very condition that routes here — so the person would land back
+    //  on this screen having just created a company.
+    //
+    //  provisionWorkspace runs create_company AND provision_profile, the
+    //  same pair verified sign-up runs. One definition of what a new
+    //  workspace is, rather than three that disagree.
+    const { error: err } = await provisionWorkspace(trimmedName);
 
     setSubmitting(false);
 
-    if (rpcErr) {
-      setError(rpcErr.message);
+    if (err) {
+      setError(err.message);
       return;
     }
 
-    if (data) onDone();
+    onDone();
   }
 
   return (
