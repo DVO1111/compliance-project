@@ -770,7 +770,12 @@ BEGIN
   PERFORM _b7k('F','F4 a reading inside the limits is in specification',
     (r->>'in_specification')='true', coalesce(r::text,'NULL'));
 
-  r := public.batch_stage_record_reading(s2, p_speed, 160);
+  --  Week 4 item 11 added the acknowledgement: an out-of-specification
+  --  reading still SAVES — that is item 11's first NOT DONE IF — but the
+  --  person entering it has to confirm they have seen the flag. Item 11's
+  --  own suite asserts that the save is not blocked and that the refusal
+  --  without acknowledgement says so in as many words.
+  r := public.batch_stage_record_reading(s2, p_speed, 160, NULL, true);
   PERFORM _b7k('F','F5 a reading outside the limits is not',
     (r->>'in_specification')='false', coalesce(r::text,'NULL'));
   PERFORM _b7k('F','F6 the machine setting is typed as one',

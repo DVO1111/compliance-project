@@ -63,6 +63,18 @@ BEGIN
   DELETE FROM public.entity_current_state WHERE entity_type='product' AND company_id IN (c_a,c_b);
   DELETE FROM public.products  WHERE company_id IN (c_a,c_b);
 
+  --  Section D's change control, and the lifecycle state behind it. It
+  --  is inserted under a fixed id with ON CONFLICT DO NOTHING, so on a
+  --  second run the row survived as "approved" and D14c's set_approved
+  --  failed with LIFECYCLE_INVALID_TRANSITION. The fixture was the only
+  --  thing broken, but the suite aborted, which is worse than a failing
+  --  assertion: it reported nothing at all.
+  DELETE FROM public.entity_state_history
+   WHERE entity_type='change_control' AND company_id IN (c_a,c_b);
+  DELETE FROM public.entity_current_state
+   WHERE entity_type='change_control' AND company_id IN (c_a,c_b);
+  DELETE FROM public.change_controls WHERE company_id IN (c_a,c_b);
+
   INSERT INTO public.companies(id,name) VALUES (c_a,'Formula Pharma') ON CONFLICT (id) DO NOTHING;
   INSERT INTO public.companies(id,name) VALUES (c_b,'Другая Ltd')    ON CONFLICT (id) DO NOTHING;
   INSERT INTO auth.users(id,email) VALUES
