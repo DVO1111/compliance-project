@@ -1,5 +1,5 @@
 /**
- * A viewer for the v2 onboarding hub, served at /design/onboarding.
+ * A viewer for the v2 onboarding hub, served at /onboarding.
  *
  * WHY THIS EXISTS AND WHY IT IS NOT THE REAL ROUTE. ONB-00 is a hub over
  * six step screens, and four of those steps need schema the database does
@@ -28,8 +28,8 @@ type Device = 'desktop' | 'mobile';
 /*  The two controls are also readable from the URL, so a particular state
     can be linked to rather than clicked to during a walkthrough:
 
-      /design/onboarding?device=mobile
-      /design/onboarding?done=1,2,3      → first three Done, fourth Current
+      /onboarding?device=mobile
+      /onboarding?done=1,2,3      → first three Done, fourth Current
 
     Anything unparseable is ignored and the defaults stand; this is a
     viewer, and a malformed link should still show the screen. */
