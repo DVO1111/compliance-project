@@ -49,6 +49,88 @@
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
+
+  <!--
+    A BLANK PAGE IS NOT AN ACCEPTABLE FAILURE.
+
+    If anything throws while the bundle is evaluating — most often a build
+    made without VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY, which makes
+    src/lib/supabase.ts throw the moment it is imported — React never
+    mounts and every route renders white, with nothing on screen to say
+    why. The person reloads, tries another page, and gets the same
+    nothing; the cause is only visible in the browser console, which is
+    not where a user looks.
+
+    This watches for that one condition: an error reached the window AND
+    #root is still empty. It then prints the real message. It cannot fire
+    on a healthy page, because a healthy page has mounted something.
+
+    Inline on purpose: an external file would be one more fetch that can
+    fail in exactly the situation this exists for. CSP allows it —
+    script-src includes 'unsafe-inline'.
+  -->
+  <script>
+    (function () {
+      var firstError = null;
+      var shown = false;
+
+      window.addEventListener('error', function (e) {
+        if (!firstError) firstError = (e && e.message) || 'Script error';
+        check();
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        if (!firstError) {
+          var r = e && e.reason;
+          firstError = (r && (r.message || r)) || 'Unhandled rejection';
+        }
+        check();
+      });
+
+      function check() {
+        if (shown) return;
+        var root = document.getElementById('root');
+        if (!root || root.childElementCount > 0) return;   // it mounted; nothing to do
+        if (!firstError) return;
+        shown = true;
+
+        var config = /Missing Supabase environment variables/i.test(String(firstError));
+
+        root.innerHTML =
+          '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+          'padding:24px;background:#0d1933;color:#fbf9f5;' +
+          'font-family:system-ui,-apple-system,Segoe UI,sans-serif;text-align:left">' +
+            '<div style="max-width:560px">' +
+              '<img src="/criateur-logo-ondark.svg" alt="Criateur" style="width:132px;height:auto;margin-bottom:28px">' +
+              '<h1 style="margin:0 0 12px;font-size:20px;line-height:28px;font-weight:600">' +
+                (config ? 'This build is missing its configuration' : 'This page could not start') +
+              '</h1>' +
+              '<p style="margin:0 0 16px;font-size:14px;line-height:21px;color:#bbc3db">' +
+                (config
+                  ? 'The site was built without VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. ' +
+                    'Vite reads those at build time, so adding them requires a rebuild — ' +
+                    'they cannot be supplied to a deploy that already exists.'
+                  : 'The application stopped while loading, so nothing could be rendered. ' +
+                    'Reloading sometimes clears it; if it does not, the message below is the cause.') +
+              '</p>' +
+              '<pre style="margin:0;padding:12px 14px;border-radius:8px;overflow-x:auto;' +
+              'background:#182445;border:1px solid #334572;color:#93a2cf;' +
+              'font-size:12px;line-height:18px;white-space:pre-wrap">' +
+                String(firstError).replace(/[&<>]/g, function (c) {
+                  return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+                }) +
+              '</pre>' +
+            '</div>' +
+          '</div>';
+      }
+
+      //  A silent hang leaves no error to catch, so look once, late enough
+      //  that a slow connection has finished rather than been accused.
+      setTimeout(function () {
+        if (!firstError) firstError = 'The application did not start, and reported no error.';
+        check();
+      }, 15000);
+    })();
+  </script>
 </body>
 
 </html>
