@@ -1,123 +1,55 @@
 /**
- * The onboarding hub as the screen you land on after signing in.
+ * The onboarding hub, as the screen you land on after signing in.
  *
- * WHAT IT REPLACES. This slot used to render CompanySetupChecklist. The
- * hub is the v2 design of the same moment (ONB-00), so it takes the slot
- * rather than sitting beside it.
+ * IT IS NOT A CHECKLIST OF LINKS. Each row opens a form, the form saves
+ * to the database, and the row ticks because the value is now stored —
+ * see src/lib/onboarding/setupSteps.ts for what each one writes and
+ * where it shows up in the product.
  *
- * IT NEVER TRAPS ANYONE, and that is the condition on it being here at
- * all. Two of the six steps ask for things this database cannot yet
- * store — `companies` holds only id, name and created_at, so there is
- * nowhere to put a CAC number or a head office, and there is no `sites`
- * table — so a hub that demanded all six before opening the workspace
- * would be a locked door. "Finish later" always opens the workspace, and
- * it is recorded per user, so the hub does not reappear on every sign-in
- * once it has been dismissed.
+ * IT NEVER TRAPS ANYONE. "Finish later" opens the workspace and is
+ * remembered per user, so the hub does not reappear on every sign-in.
  *
- * WHAT "DONE" MEANS HERE. Only the three steps whose state actually
- * exists are ever ticked, and each is ticked by reading the real data,
- * never by remembering that someone visited the screen:
- *
- *   industry and region   the profile carries industry_type and
- *                         default_jurisdiction, both set at sign-up
- *   sites and departments at least one department exists
- *   invite your team      the company has more than one member
- *
- * The other three stay open because nothing in the database can tell us
- * otherwise. That is a truthful 3 of 6, not a decorative one — the
- * progress bar is only worth having if it cannot lie.
+ * IT DOES NOT MAKE ANYONE WAIT FOR IT. The hub renders immediately and
+ * the stored progress fills in when it arrives, rather than holding a
+ * spinner over the whole screen first. Signing in is already several
+ * round trips; adding one more before anything is drawn is what made it
+ * feel slow.
  */
 
-import { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { useCallback, useEffect, useState } from 'react';
 import { logger } from '../../../lib/logger';
+import {
+  loadSetupState, completedFromState, EMPTY_SETUP_STATE, type SetupState,
+} from '../../../lib/onboarding/setupSteps';
 import SetupHub, { SETUP_STEPS } from './SetupHub';
-import BrandSplash from '../../BrandSplash';
-
-/**
- * Where each step sends you. Several share a destination, because one
- * screen covers several steps today.
- *
- * `company-details` goes to Company Settings even though the fields it
- * describes — CAC registration number, head office — have nowhere to be
- * stored yet. A button that does nothing when pressed is worse than one
- * that lands somewhere approximately right: the first reads as a broken
- * product, the second as an unfinished one. When those columns exist,
- * this is the line that changes.
- */
-export const STEP_DESTINATION: Record<string, string> = {
-  'company-details': 'company-settings',
-  'industry-region': 'company-settings',
-  'sites-departments': 'company-departments',
-  'modules': 'company-settings',
-  'invite-team': 'company-invites',
-  'review-records': 'obligations',
-};
-
-export interface SetupProgressInput {
-  companyId: string | null | undefined;
-  industryType?: string | null;
-  jurisdiction?: string | null;
-}
-
-/** Reads the three checkable steps. Anything that fails is reported as
- *  NOT done: a lookup that errored is not evidence that the work was
- *  finished, and claiming otherwise would tick a box on a failure. */
-export async function fetchSetupProgress(
-  input: SetupProgressInput,
-): Promise<Record<string, boolean>> {
-  const done: Record<string, boolean> = {
-    'industry-region': Boolean(input.industryType && input.jurisdiction),
-  };
-
-  if (!input.companyId) return done;
-
-  const [departments, members] = await Promise.all([
-    (supabase as any)
-      .from('departments')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', input.companyId),
-    (supabase as any)
-      .from('company_members')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('company_id', input.companyId),
-  ]);
-
-  if (departments?.error) {
-    logger.warn('setup progress: department count failed', departments.error.message);
-  } else {
-    done['sites-departments'] = (departments?.count ?? 0) > 0;
-  }
-
-  if (members?.error) {
-    logger.warn('setup progress: member count failed', members.error.message);
-  } else {
-    //  More than one, because the person reading this screen is the first.
-    done['invite-team'] = (members?.count ?? 0) > 1;
-  }
-
-  return done;
-}
+import StepPanel from './StepPanel';
 
 export interface SetupHubGateProps {
   companyId: string | null | undefined;
-  industryType?: string | null;
-  jurisdiction?: string | null;
+  userId: string | null | undefined;
   /** Dismisses the hub and opens the workspace, optionally on a page. */
   onFinish: (navigateTo?: string) => void;
 }
 
-export default function SetupHubGate({
-  companyId, industryType, jurisdiction, onFinish,
-}: SetupHubGateProps) {
-  const [completed, setCompleted] = useState<Record<string, boolean> | null>(null);
+export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGateProps) {
+  const [state, setState] = useState<SetupState>(EMPTY_SETUP_STATE);
+  const [openStep, setOpenStep] = useState<string | null>(null);
 
-  //  SIGN IN → /onboarding. The hub is reached by state, not by a router,
-  //  so without this the address bar would still read "/" while the
-  //  onboarding screen is showing. The URL is the thing being
-  //  demonstrated and the thing someone will type later, so it is made
-  //  to match. replaceState, not pushState: Back should leave onboarding
-  //  rather than step through it.
+  const refresh = useCallback(() => {
+    if (!companyId) return;
+    loadSetupState(companyId, userId)
+      .then(setState)
+      //  The hub is still usable with nothing ticked, so a failed read
+      //  leaves it empty rather than blocking the way in.
+      .catch((err) => logger.warn('[setup] progress read failed', err));
+  }, [companyId, userId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  //  SIGN IN → /onboarding. The hub is reached by state rather than by a
+  //  router, so without this the address bar would still read "/" while
+  //  the onboarding screen is showing. replaceState, not pushState: Back
+  //  should leave onboarding rather than step through it.
   useEffect(() => {
     try {
       if (window.location.pathname.replace(/\/+$/, '').toLowerCase() !== '/onboarding') {
@@ -126,36 +58,29 @@ export default function SetupHubGate({
     } catch { /* history is unavailable in some embedded views */ }
   }, []);
 
-  useEffect(() => {
-    let live = true;
-    fetchSetupProgress({ companyId, industryType, jurisdiction })
-      .then((p) => { if (live) setCompleted(p); })
-      .catch((err) => {
-        //  The hub is still useful with nothing ticked, so a failed probe
-        //  shows the hub rather than blocking the way in.
-        logger.warn('setup progress failed', err);
-        if (live) setCompleted({});
-      });
-    return () => { live = false; };
-  }, [companyId, industryType, jurisdiction]);
-
-  if (completed === null) return <BrandSplash />;
-
-  const openStep = (stepId: string) => {
-    //  Dismisses the hub and opens the workspace on that step's screen.
-    //  Falling back to Company Settings means every row leads somewhere:
-    //  no button on this screen is inert.
-    onFinish(STEP_DESTINATION[stepId] ?? 'company-settings');
-  };
-
-  const firstOpenStep = SETUP_STEPS.find((s) => completed[s.id] !== true);
+  const completed = completedFromState(state);
+  const firstOpen = SETUP_STEPS.find((s) => completed[s.id] !== true);
 
   return (
-    <SetupHub
-      completed={completed}
-      onOpenStep={openStep}
-      onStartSetup={() => { if (firstOpenStep) openStep(firstOpenStep.id); }}
-      onFinishLater={() => onFinish()}
-    />
+    <>
+      <SetupHub
+        completed={completed}
+        onOpenStep={(id) => setOpenStep(id)}
+        onStartSetup={() => setOpenStep(firstOpen?.id ?? SETUP_STEPS[0].id)}
+        onFinishLater={() => onFinish()}
+      />
+
+      {openStep && companyId && userId && (
+        <StepPanel
+          stepId={openStep}
+          state={state}
+          companyId={companyId}
+          userId={userId}
+          onSaved={refresh}
+          onClose={() => setOpenStep(null)}
+          onNavigate={(page) => onFinish(page)}
+        />
+      )}
+    </>
   );
 }

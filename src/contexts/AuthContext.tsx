@@ -211,19 +211,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loadProfileInner = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    //  THE MEMBERSHIP IS FETCHED ALONGSIDE THE PROFILE, NOT AFTER IT.
+    //  It used to wait for the profile so it could filter on company_id —
+    //  but company_members is keyed on user_id too, so the row can be
+    //  fetched on the user alone and matched to the company afterwards.
+    //  That is one fewer round trip between pressing Sign in and seeing
+    //  anything, on the path where the person is watching a spinner.
+    //
+    //  Several rows come back for someone in more than one company, which
+    //  is why the profile's company_id still decides which one counts
+    //  rather than "the first one".
+    const [profileRes, memberRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      (supabase as any)
+        .from('company_members')
+        .select('company_id, role, module_access')
+        .eq('user_id', userId),
+    ]);
 
-    if (error) {
-      logger.error('loadProfile error:', error);
+    if (profileRes.error) {
+      logger.error('loadProfile error:', profileRes.error);
       setProfile(null);
       return;
     }
 
-    const baseProfile = (data ?? null) as ProfileRow | null;
+    const baseProfile = (profileRes.data ?? null) as ProfileRow | null;
 
     // If no profile row exists, stop
     if (!baseProfile) {
@@ -231,46 +243,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    //  THE TWO LOOKUPS BELOW RUN TOGETHER, NOT ONE AFTER THE OTHER.
-    //  Both need the profile row and neither needs the other, so awaiting
-    //  them in sequence spent a whole extra round trip for nothing — and
-    //  it was a round trip the user sat through, because the app is
-    //  behind the full-screen splash until this function returns. Over a
-    //  long link that is the difference between a pause and a wait.
-    const customRoleId = (baseProfile as any).custom_role_id;
-
-    const memberQuery = baseProfile.company_id
-      ? (supabase as any)
-          .from('company_members')
-          .select('role, module_access')
-          .eq('company_id', baseProfile.company_id)
-          .eq('user_id', userId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null });
-
-    //  fetchRoleById can reject; the permissions fall back to the legacy
-    //  role in that case, so it must not take the sign-in down with it.
-    const roleQuery = customRoleId
-      ? fetchRoleById(customRoleId).catch(() => null)
-      : Promise.resolve(null);
-
-    const [{ data: memberRow, error: memberErr }, customRole] =
-      await Promise.all([memberQuery, roleQuery]);
-
     let company_role: string | null = null;
     let module_access: string[] | null = null;
 
-    if (memberErr) {
-      // Not fatal — app can still run, just no company_role attached
-      logger.warn('loadProfile company_members role lookup failed:', memberErr.message);
-    } else {
-      company_role = (memberRow as any)?.role ?? null;
-      const raw = (memberRow as any)?.module_access;
+    if (memberRes?.error) {
+      // Not fatal — the app still runs, just with no company_role attached
+      logger.warn('loadProfile company_members lookup failed:', memberRes.error.message);
+    } else if (baseProfile.company_id) {
+      const row = ((memberRes?.data as any[]) ?? [])
+        .find((m) => m.company_id === baseProfile.company_id);
+      company_role = row?.role ?? null;
+      const raw = row?.module_access;
       module_access = Array.isArray(raw) && raw.length > 0 ? raw : null;
     }
 
-    const customPermissions: Partial<Permissions> | null =
-      (customRole?.permissions as Partial<Permissions> | undefined) ?? null;
+    //  The custom role is the one lookup that genuinely cannot start
+    //  earlier: its id is a column on the profile. Most accounts have
+    //  none, so most sign-ins never make this call at all.
+    let customPermissions: Partial<Permissions> | null = null;
+    const customRoleId = (baseProfile as any).custom_role_id;
+    if (customRoleId) {
+      const role = await fetchRoleById(customRoleId).catch(() => null);
+      customPermissions = (role?.permissions as Partial<Permissions> | undefined) ?? null;
+    }
 
     // ✅ Ensure system roles exist for this company (run-once per company)
     if (baseProfile.company_id) {
