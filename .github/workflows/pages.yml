@@ -84,6 +84,12 @@ jobs:
         run: cp dist/index.html dist/404.html
 
       - uses: actions/configure-pages@v5
+        with:
+          #  Turns Pages on for the repository if it is off, so there is
+          #  no settings page to visit first. If the token is not allowed
+          #  to do that, this step fails with a message saying so, which
+          #  beats a published artifact that has nowhere to go.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
