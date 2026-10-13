@@ -117,12 +117,29 @@ BEGIN
     RETURN;
   END IF;
 
-  --  Insert the guard immediately after the function's opening BEGIN, so
-  --  it runs before any row is written.
+  --  WHERE THE GUARD GOES, AND WHY NOT AT THE TOP.
+  --
+  --  It is inserted immediately AFTER the function has resolved
+  --  v_email, which is two decisions earlier than it looks:
+  --
+  --    1. IT CHECKS v_email, NOT p_email. p_email is client input. The
+  --       function deliberately prefers the address Supabase Auth holds
+  --       over the one the caller sent — provisioning is tested for
+  --       exactly that — so a guard on p_email would have been no gate
+  --       at all: anyone could pass an allowlisted address as the
+  --       argument while signed in as somebody else, and walk straight
+  --       through. That is a bypass, not a detail.
+  --
+  --    2. IT RUNS AFTER THE IDENTITY CHECKS. A caller with no session is
+  --       refused as unauthenticated and a caller with no address as
+  --       missing an address, which is what those errors mean. Put the
+  --       allowlist first and every one of those cases starts reporting
+  --       "not permitted" instead — a worse message, and one that tells
+  --       an anonymous caller about the allowlist.
   v_src := regexp_replace(
     v_src,
-    '(\$function\$[[:space:]]*(DECLARE[\s\S]*?)?BEGIN)',
-    E'\\1\n  IF NOT public.app_signin_is_allowed(p_email) THEN\n'
+    '(PROFILE_EMAIL_REQUIRED[^$]*?END IF;)',
+    E'\\1\n\n  IF NOT public.app_signin_is_allowed(v_email) THEN\n'
     '    RAISE EXCEPTION ''SIGNIN_NOT_ALLOWED: this address is not permitted to use Criateur yet''\n'
     '      USING ERRCODE = ''P0001'';\n  END IF;\n',
     ''
@@ -146,6 +163,21 @@ BEGIN
   IF v_src NOT LIKE '%app_signin_is_allowed%' THEN
     RAISE EXCEPTION
       'DEPLOY GUARD: provision_profile lost its allowlist check. A later migration redefined it without the guard; re-apply this one after that migration.';
+  END IF;
+
+  --  The guard must read the RESOLVED address, not the argument. A guard
+  --  on p_email would pass the check above while gating nothing, since
+  --  the caller chooses p_email.
+  IF v_src NOT LIKE '%app_signin_is_allowed(v_email)%' THEN
+    RAISE EXCEPTION
+      'DEPLOY GUARD: the allowlist check is not reading v_email. Checking the client-supplied p_email would let any caller name an allowlisted address.';
+  END IF;
+
+  --  And it must sit after the identity checks, so that an
+  --  unauthenticated caller is still told it is unauthenticated.
+  IF position('app_signin_is_allowed' in v_src) < position('PROFILE_NOT_AUTHENTICATED' in v_src) THEN
+    RAISE EXCEPTION
+      'DEPLOY GUARD: the allowlist check runs before the identity checks; an anonymous caller would be told about the allowlist instead of being refused as unauthenticated.';
   END IF;
 
   --  The gate must fail CLOSED for an address that is not listed. A
