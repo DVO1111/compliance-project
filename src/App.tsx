@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/react';
 import { getPermissions } from './lib/permissions';
+import { appPath, appUrl } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import { useEffect, useState, lazy, Suspense, type ComponentType } from 'react';
@@ -336,7 +337,7 @@ function AppContent() {
 
   const inviteTokenFromUrl = (() => {
     try {
-      if (window.location.pathname !== '/invite/accept') return null;
+      if (appPath() !== '/invite/accept') return null;
       const params = new URLSearchParams(window.location.search);
       return params.get('token');
     } catch {
@@ -358,8 +359,7 @@ function AppContent() {
 
   const wantsLogin = (() => {
     try {
-      const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
-      return SIGN_IN_PATHS.includes(path);
+      return SIGN_IN_PATHS.includes(appPath());
     } catch {
       return false;
     }
@@ -381,7 +381,7 @@ function AppContent() {
       real route rather than a presentation. */
   const onboardingPath = (() => {
     try {
-      return window.location.pathname.replace(/\/+$/, '').toLowerCase();
+      return appPath();
     } catch {
       return '';
     }
@@ -485,7 +485,7 @@ function AppContent() {
         localStorage.removeItem('pending_invite_token');
         await refreshProfile();
 
-        window.history.replaceState({}, '', '/');
+        window.history.replaceState({}, '', appUrl('/'));
         setCurrentPage('dashboard');
       } catch {
         // keep token for retry
@@ -573,7 +573,7 @@ function AppContent() {
     //  end.
     const backToLanding = () => {
       if (wantsOnboardingHub) {
-        try { window.history.replaceState({}, '', '/'); } catch { /* no history */ }
+        try { window.history.replaceState({}, '', appUrl('/')); } catch { /* no history */ }
       }
       setUnauthView('landing');
     };
@@ -712,7 +712,7 @@ function AppContent() {
           //  read from window.location on every render, so finishing
           //  while the bar still says /onboarding would land straight
           //  back on the hub.
-          if (wantsOnboardingHub) window.history.replaceState({}, '', '/');
+          if (wantsOnboardingHub) window.history.replaceState({}, '', appUrl('/'));
           if (navigateTo) {
             window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: navigateTo } }));
           }

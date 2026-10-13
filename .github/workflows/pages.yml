@@ -1,0 +1,99 @@
+#  Publish to GitHub Pages.
+#
+#  WHY THIS EXISTS ALONGSIDE THE NETLIFY DEPLOY. Netlify refused a
+#  deploy with "Account credit usage exceeded — new deploys are blocked
+#  until credits are added". The build was fine; the host would not
+#  accept it. This repository is public, so GitHub Pages costs nothing
+#  and has no deploy quota to exhaust, and it runs on the same two
+#  secrets the Netlify job already uses.
+#
+#  It does not replace the Netlify job — that one still runs, and will
+#  start working again the moment the account does. This is a second
+#  destination, not a migration.
+#
+#  WHAT A PAGES SITE DOES NOT DO, said plainly:
+#
+#    - No custom headers. netlify.toml sets X-Frame-Options,
+#      X-Content-Type-Options, Referrer-Policy and Permissions-Policy;
+#      Pages serves none of them. The Content-Security-Policy is a meta
+#      tag in index.html, so that one still applies.
+#    - No redirect rules. The SPA fallback is done by copying
+#      index.html to 404.html: Pages serves 404.html for any unmatched
+#      path, with a 404 status, and the app then routes normally. Good
+#      enough for people, not for crawlers.
+#    - A project site lives under /<repo>/, so the build sets
+#      VITE_BASE_PATH and the app strips that prefix when it reads the
+#      route. With a custom domain the base would be '/' instead.
+
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  #  So it can be published on demand without waiting for a commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+#  One publish at a time. Queued rather than cancelled: a half-finished
+#  deploy is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          #  A project site is served under /<repo>/. The trailing slash
+          #  matters to Vite.
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Fail if the build has no Supabase configuration
+        #  Without the two secrets the bundle still builds and the site
+        #  renders a configuration screen on every route. Better to fail
+        #  here, where the reason is written down, than to publish a
+        #  site that cannot sign anyone in.
+        run: |
+          if ! grep -rqs "supabase.co" dist/assets/*.js; then
+            echo "::error::No Supabase URL in the bundle — VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set as repository secrets."
+            exit 1
+          fi
+
+      - name: SPA fallback
+        #  Pages has no redirect rules, so an unknown path would 404
+        #  instead of reaching the app's router. Serving index.html as
+        #  the 404 page is the standard way round it.
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
