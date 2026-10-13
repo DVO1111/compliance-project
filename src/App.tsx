@@ -365,22 +365,37 @@ function AppContent() {
     }
   })();
 
-  /*  /onboarding. The old /design/onboarding stays as a silent alias —
-      it was published in a commit message and may already have been
-      linked to, and a 404 for someone opening a link they were given is
-      not worth the tidiness of retiring it. */
-  const ONBOARDING_PATHS = ['/onboarding', '/design/onboarding'];
+  /*  TWO ADDRESSES, AND THE DIFFERENCE IS WHO THEY ARE FOR.
 
-  const wantsOnboardingHub = (() => {
+      /onboarding          the product. It needs an account: a signed-out
+                           visitor is sent to the sign-in screen, not
+                           shown a demonstration of a workspace they do
+                           not have. Signing in lands them back here,
+                           because the address does not change.
+
+      /design/onboarding   the viewer, for showing the screen to people
+                           without giving them a login. No account, no
+                           data, nothing to sign in to.
+
+      Keeping the demo on its own address is what lets /onboarding be a
+      real route rather than a presentation. */
+  const onboardingPath = (() => {
     try {
-      const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
-      return ONBOARDING_PATHS.includes(path);
+      return window.location.pathname.replace(/\/+$/, '').toLowerCase();
     } catch {
-      return false;
+      return '';
     }
   })();
 
-  const [unauthView, setUnauthView] = useState<UnauthView>(wantsLogin ? 'login' : 'landing');
+  const wantsOnboardingHub = onboardingPath === '/onboarding';
+  const wantsOnboardingViewer = onboardingPath === '/design/onboarding';
+
+  //  /onboarding opens on the sign-in form for a signed-out visitor, the
+  //  same as /portal does. "Take me to onboarding" and "take me to the
+  //  product" are the same request when there is no session.
+  const [unauthView, setUnauthView] = useState<UnauthView>(
+    wantsLogin || wantsOnboardingHub ? 'login' : 'landing',
+  );
   const [currentPage, setCurrentPage] = useRoutePersistence<PageId>('dashboard', isValidPageId);
   const [currentPolicyId, setCurrentPolicyId] = useState<string | null>(null);
   const [currentVendorId, setCurrentVendorId] = useState<string | null>(null);
@@ -479,18 +494,20 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  /*  /onboarding — the v2 onboarding hub (ONB-00) as a viewer. It sits
-      ABOVE the auth gates on purpose: it holds no session, reads no
-      table and writes nothing, so waiting on an auth round-trip would
-      only make it slower to open. It is NOT yet the screen a new user
-      is routed to — see SetupHubPreview for why the hub cannot be the
-      live gate until the six step screens exist. */
-  /*  Signed OUT, or a build with no backend: the static viewer, which is
-      what makes /onboarding presentable without an account. Signed IN,
-      the same URL serves the REAL hub further down — same address, real
-      data, real routing. */
-  if (wantsOnboardingHub && (!isSupabaseConfigured || (!loading && !user))) {
+  /*  /design/onboarding — the viewer. It sits ABOVE the auth gates on
+      purpose: it holds no session, reads no table and writes nothing, so
+      waiting on an auth round-trip would only make it slower to open,
+      and it is the one screen that must still work on a build with no
+      backend at all. */
+  if (wantsOnboardingViewer) {
     return <SetupHubPreview />;
+  }
+
+  /*  /onboarding on a build with no backend cannot do anything useful —
+      there is nothing to sign in to — so it says so rather than showing
+      a sign-in form that will not work. */
+  if (wantsOnboardingHub && !isSupabaseConfigured) {
+    return <ConfigurationNeeded />;
   }
 
   /*  Everything past this point needs a backend. Saying so beats a
@@ -554,11 +571,23 @@ function AppContent() {
   }
 
   if (!user) {
+    //  Leaving the sign-in screen for the marketing site has to drop the
+    //  /onboarding address with it. Otherwise the landing page renders
+    //  under a URL that promises onboarding — which is exactly the
+    //  "it just shows the landing page" confusion this route is meant to
+    //  end.
+    const backToLanding = () => {
+      if (wantsOnboardingHub) {
+        try { window.history.replaceState({}, '', '/'); } catch { /* no history */ }
+      }
+      setUnauthView('landing');
+    };
+
     if (unauthView === 'signup') {
       return (
         <SignupPage
           onToggleLogin={() => setUnauthView('login')}
-          onBackToLanding={() => setUnauthView('landing')}
+          onBackToLanding={backToLanding}
         />
       );
     }
@@ -568,7 +597,7 @@ function AppContent() {
         <LoginPage
           onToggleSignup={() => setUnauthView('signup')}
           onRequestAccess={() => setUnauthView('contact')}
-          onBackToLanding={() => setUnauthView('landing')}
+          onBackToLanding={backToLanding}
         />
       );
     }
