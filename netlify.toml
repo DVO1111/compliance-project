@@ -2,6 +2,25 @@
   command = "npm run build"
   publish = "dist"
 
+  # ── Secrets scanning ──────────────────────────────
+  # Netlify scans the build output for the values of environment
+  # variables and fails the deploy when it finds one, on the assumption
+  # that a value in a published file is a leak.
+  #
+  # For these two that assumption is inverted. Anything named VITE_* is
+  # compiled INTO the JavaScript by design — that is the only way a
+  # browser can reach Supabase — and the anon key is published on
+  # purpose: it identifies the project, and row-level security, not
+  # secrecy, is what protects the data. Finding them in dist/ is the
+  # build working.
+  #
+  # So these two keys, named explicitly, are exempt. Scanning stays ON
+  # for everything else, which is the part worth keeping: a
+  # service_role key or an SMTP password reaching the bundle must still
+  # fail the build, loudly.
+  [build.environment]
+    SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+
 [context.production]
   environment = { NODE_VERSION = "18" }
 
