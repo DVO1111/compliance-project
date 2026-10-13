@@ -21,6 +21,7 @@ import OnboardingWizard from './components/Onboarding/OnboardingWizard';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
 import BrandSplash from './components/BrandSplash';
 import ConfigurationNeeded from './components/ConfigurationNeeded';
+import WorkspaceSetupNeeded from './components/WorkspaceSetupNeeded';
 import { isSupabaseConfigured } from './lib/supabase';
 import MainLayout from './components/Layout/MainLayout';
 import type { PageId } from './components/Layout/MainLayout';
@@ -645,28 +646,12 @@ function AppContent() {
     );
   }
 
+  //  Signed in, but the product has no record of them. This used to be a
+  //  spinner with a guess about email verification and a sign-out link —
+  //  and nothing in the app could create the missing profile, so it was a
+  //  dead end. WorkspaceSetupNeeded does the work instead.
   if (user && !profile) {
-    // Signed in but no profile row yet. This is normally a brief provisioning
-    // window, but if a session gets stuck without a profile (e.g. signup that
-    // never completed verification), give the user a way out instead of an
-    // endless spinner.
-    return (
-      <BrandSplash
-        message="Setting up your account… If this doesn’t finish, your sign-up may not have been verified."
-        action={
-          <button
-            onClick={() => signOut()}
-            style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              font: 'inherit', fontSize: 14,
-              color: 'var(--nv-text-primary)', textDecoration: 'underline',
-            }}
-          >
-            Sign out and try again
-          </button>
-        }
-      />
-    );
+    return <WorkspaceSetupNeeded />;
   }
 
   const industryType = (profile as any)?.industry_type as string | null | undefined;

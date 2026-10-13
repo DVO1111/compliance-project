@@ -61,6 +61,19 @@ interface AuthContextType {
   isRecoveringPassword: boolean;
   refreshProfile: () => Promise<void>;
   switchBrand: (brandId: string | null) => void;
+  /**
+   * Why there is a session but no profile. Null while loading, and null
+   * when the profile loaded fine. A string here is the database's own
+   * message — the screen shows it instead of guessing at a cause.
+   */
+  profileLoadError: string | null;
+  /**
+   * Creates the company and the profile for a signed-in user who has
+   * neither. This is the way out of "signed in, but the product does not
+   * know who you are": before it existed, that state had a spinner, a
+   * guess about email verification, and a sign-out button.
+   */
+  provisionWorkspace: (companyName: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -72,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Track whether the initial profile load has completed. After that,
   // background refreshes (token refresh, window focus) must NEVER set
   // loading=true — that unmounts the entire app and loses all page state.
@@ -231,14 +245,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (profileRes.error) {
       logger.error('loadProfile error:', profileRes.error);
+      setProfileLoadError(profileRes.error.message);
       setProfile(null);
       return;
     }
 
     const baseProfile = (profileRes.data ?? null) as ProfileRow | null;
 
-    // If no profile row exists, stop
+    // If no profile row exists, stop — but say so, because "no row" and
+    // "the query failed" need different answers from the person.
     if (!baseProfile) {
+      setProfileLoadError('NO_PROFILE');
       setProfile(null);
       return;
     }
@@ -288,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toJurisdictionId((baseProfile as any).default_jurisdiction ?? (baseProfile as any).primary_markets?.[0])
     );
 
+    setProfileLoadError(null);
     setProfile({ ...baseProfile, company_role, module_access, customPermissions });
   };
 
@@ -550,6 +568,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * The way out of a session with no profile.
+   *
+   * It runs exactly what verified sign-up runs — create_company, then
+   * provision_profile — because the gap it fills is a sign-up that got
+   * as far as an auth user and no further. Reusing that path rather than
+   * writing a second one means there is one definition of what a new
+   * workspace is.
+   */
+  const provisionWorkspace = async (companyName: string) => {
+    if (!user?.id || !user.email) {
+      return { error: new Error('You are not signed in.') };
+    }
+    const name = companyName.trim();
+    if (name.length < 2) {
+      return { error: new Error('Enter your company name.') };
+    }
+    try {
+      const meta = user.user_metadata ?? {};
+      await completeSignupProfile(
+        user.id,
+        user.email,
+        (meta.full_name as string) ?? '',
+        name,
+        undefined,
+        (meta.industry_type as string | null) ?? undefined,
+        (meta.default_jurisdiction as string | null) ?? undefined,
+      );
+      return { error: null };
+    } catch (err) {
+      return { error: err as Error };
+    }
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await loadProfile(user.id);
@@ -558,7 +610,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, refreshProfile, switchBrand }}
+      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, refreshProfile, switchBrand, profileLoadError, provisionWorkspace }}
     >
       {children}
     </AuthContext.Provider>
