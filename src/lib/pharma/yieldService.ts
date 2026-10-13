@@ -27,7 +27,14 @@
  */
 
 import { supabase } from '../supabase';
-import { recordAuditEvent } from '../auditService';
+import { recordAuditEvent, type AuditEventParams } from '../auditService';
+
+/**
+ * Who is performing the act, for the audit row. Taken from the audit
+ * type rather than re-declared, so it cannot drift from what
+ * recordAuditEvent requires.
+ */
+export type Actor = Pick<AuditEventParams, 'userId' | 'companyId'>;
 import { logger } from '../logger';
 import {
   checkYieldClear,
@@ -88,6 +95,8 @@ export async function listYieldConfigs(companyId: string): Promise<YieldConfig[]
 
 export interface YieldConfigInput {
   companyId: string;
+  /** Who is setting the threshold — it goes on the audit row. */
+  userId: string;
   productId: string;
   /** null for the batch-completion config. */
   formulaStageId: string | null;
@@ -136,6 +145,8 @@ export async function saveYieldConfig(
   //  Worth auditing on its own: the threshold decides what blocks a
   //  stage, so changing it changes what every later batch may do.
   await recordAuditEvent({
+    userId: input.userId,
+    companyId: input.companyId,
     action: 'yield_reconciliation_config.save',
     entityType: 'product',
     entityId: input.productId,
@@ -274,6 +285,7 @@ export async function flagInvestigation(
 export async function authoriseVariance(
   reconciliationId: string,
   reason: string,
+  actor: Actor,
   signatureId?: string | null,
 ): Promise<YieldResult<{ authorisedBy: string | null; deviationCreated: boolean }>> {
   const { data, error } = await (supabase as any).rpc('yield_authorise_variance', {
@@ -288,6 +300,8 @@ export async function authoriseVariance(
   const r = (data ?? {}) as Record<string, unknown>;
 
   await recordAuditEvent({
+    userId: actor.userId,
+    companyId: actor.companyId,
     action: 'yield_reconciliation.authorise',
     entityType: 'batch_yield_reconciliation',
     entityId: reconciliationId,

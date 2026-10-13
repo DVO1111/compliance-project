@@ -25,7 +25,17 @@
  */
 
 import { supabase } from '../supabase';
-import { recordAuditEvent } from '../auditService';
+import { recordAuditEvent, type AuditEventParams } from '../auditService';
+
+/**
+ * Who is performing the act, for the audit row.
+ *
+ * Taken from the audit type rather than re-declared, so it cannot drift
+ * from what recordAuditEvent requires. Every sibling service in this
+ * folder — dispensing, line clearance, instruments — takes these two the
+ * same way: from the caller, which holds the session.
+ */
+export type Actor = Pick<AuditEventParams, 'userId' | 'companyId'>;
 import { logger } from '../logger';
 import {
   fetchSamplingDue,
@@ -131,6 +141,8 @@ export async function listWeightLimits(companyId: string): Promise<ProductWeight
 
 export interface WeightLimitsInput {
   companyId: string;
+  /** Who is setting the limits — it goes on the audit row. */
+  userId: string;
   productId: string;
   targetValue: number;
   lal: number;
@@ -187,6 +199,8 @@ export async function saveWeightLimits(
   //  Worth auditing on its own: changing an action limit changes what
   //  every later reading on that product is judged against.
   await recordAuditEvent({
+    userId: input.userId,
+    companyId: input.companyId,
     action: 'product_weight_limits.save',
     entityType: 'product',
     entityId: input.productId,
@@ -337,6 +351,7 @@ export async function decideEscalation(
   escalationId: string,
   decision: OosDecision,
   reason: string,
+  actor: Actor,
   signatureId?: string | null,
 ): Promise<InprocessResult<{ decision: OosDecision; deviationCreated: boolean }>> {
   const { data, error } = await (supabase as any).rpc('inprocess_decide_escalation', {
@@ -352,6 +367,8 @@ export async function decideEscalation(
   const r = (data ?? {}) as Record<string, unknown>;
 
   await recordAuditEvent({
+    userId: actor.userId,
+    companyId: actor.companyId,
     action: 'inprocess_oos.decide',
     entityType: 'inprocess_oos_escalation',
     entityId: escalationId,
