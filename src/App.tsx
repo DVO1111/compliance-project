@@ -20,6 +20,7 @@ import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import SignupPage from './components/Auth/SignupPage';
 import OnboardingWizard from './components/Onboarding/OnboardingWizard';
 import CompanySetupChecklist from './components/Onboarding/CompanySetupChecklist';
+import SetupHubPreview from './components/Onboarding/navy/SetupHubPreview';
 import MainLayout from './components/Layout/MainLayout';
 import type { PageId } from './components/Layout/MainLayout';
 import AIDashboardPage from './components/Governance/AI/AIDashboardPage';
@@ -260,6 +261,15 @@ function AppContent() {
     }
   })();
 
+  const wantsDesignPreview = (() => {
+    try {
+      const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+      return path === '/design/onboarding';
+    } catch {
+      return false;
+    }
+  })();
+
   const [unauthView, setUnauthView] = useState<UnauthView>(wantsLogin ? 'login' : 'landing');
   const [currentPage, setCurrentPage] = useRoutePersistence<PageId>('dashboard', isValidPageId);
   const [currentPolicyId, setCurrentPolicyId] = useState<string | null>(null);
@@ -358,6 +368,15 @@ function AppContent() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  /*  /design/onboarding — the v2 onboarding hub (ONB-00) as a viewer.
+      It sits ABOVE the auth gates on purpose: it holds no session, reads
+      no table and writes nothing, so waiting on an auth round-trip would
+      only make it slower to open. It is NOT the live onboarding route —
+      see SetupHubPreview for why the hub cannot be the live gate yet. */
+  if (wantsDesignPreview) {
+    return <SetupHubPreview />;
+  }
 
   if (loading) {
     return (
