@@ -193,6 +193,35 @@
   --icon-disabled: #b6bbbe;
   --icon-on-color-secondary: #ffffff;
 
+  /* ── Onboarding glow ──────────────────────────────────────────
+     The background of every onboarding screen, taken from the frame
+     fill on ONB-00 in the Product Design file:
+     https://www.figma.com/design/wSj81KWfoy7rS8u9CDcqtY/Criateur-Compliance---Product-Design?node-id=26-384
+
+     Three details are load-bearing and easy to lose in a redraw:
+
+       - the angle is 137.57deg, not 135. A diagonal that reads as
+         "corner to corner" in a screenshot is usually not;
+       - the second stop sits at 83.333%, not 100%, so the last sixth
+         of the sweep is flat. That flat tail is what keeps the bottom
+         of a long scrolling step list from continuing to brighten;
+       - the two stops are the ONLY raw colours on that frame. Every
+         other value in the onboarding design is a bound Figma
+         variable, so these two were left deliberately unbound and are
+         a gradient rather than a colour pair. They are declared here
+         as one token for that reason — splitting them into
+         --onboarding-glow-from / --to would invite someone to use
+         half of a gradient as a surface colour.
+
+     NOTE ON PALETTE. These are navy (#0D1933 / #1F336C); the product's
+     dark ground is #08131A and its brand green is #478D4B at hue 123.
+     The onboarding design is drawn in a different family, with its own
+     green (#71A66A, hue ~112). That divergence is the design file's,
+     not this file's, and it is not resolved here — see the note in the
+     component that uses this token. */
+  --onboarding-glow:
+    linear-gradient(137.57deg, #0d1933 0%, #1f336c 83.333%);
+
   /* ── Control sizing ───────────────────────────────────────────
      Button heights from the Button component sheet; icons are 16px
      at every size except Large, which uses 19px. */
