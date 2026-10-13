@@ -55,3 +55,10 @@ tmp/
 
 # Local Netlify folder
 .netlify
+
+## Claude Code per-machine settings
+#  settings.json is shared; settings.local.json is this machine's own
+#  permission allowlist and was tracked by mistake. It accumulates
+#  entries that name one machine's paths and one session's ids, so it
+#  showed as modified on every status for everybody.
+.claude/settings.local.json
