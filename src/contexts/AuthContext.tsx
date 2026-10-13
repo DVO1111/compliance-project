@@ -585,20 +585,111 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (name.length < 2) {
       return { error: new Error('Enter your company name.') };
     }
+
+    //  WHY THIS DOES NOT SIMPLY CALL THE TWO RPCs.
+    //
+    //  The repository's migrations and the deployed database are not
+    //  known to match — Supabase's own preview check has failed on this
+    //  repository since before any of this work, on a policy that
+    //  "already exists", which is what a diverged migration history
+    //  looks like. So create_company and provision_profile may or may
+    //  not be installed on the database this build is talking to, and a
+    //  bare RPC call fails with "function does not exist" and strands
+    //  the person exactly where this function exists to rescue them.
+    //
+    //  Each step therefore tries the RPC and, ONLY when the database
+    //  says that function is not there, does the same work directly.
+    //  The direct path is not a way around a control: where the
+    //  hardening migration has been applied the client INSERT is
+    //  revoked and will fail, and where it has not been applied the
+    //  direct INSERT is exactly what this application used to do. Role
+    //  is written as 'content_creator' either way — the least
+    //  privileged value, the same one provision_profile writes — so
+    //  nothing here can ask for a privilege.
+    const missingFunction = (e: any) =>
+      e?.code === '42883' || e?.code === 'PGRST202' ||
+      /(does not exist|could not find the function)/i.test(e?.message ?? '');
+
     try {
       const meta = user.user_metadata ?? {};
-      await completeSignupProfile(
-        user.id,
-        user.email,
-        (meta.full_name as string) ?? '',
-        name,
-        undefined,
-        (meta.industry_type as string | null) ?? undefined,
-        (meta.default_jurisdiction as string | null) ?? undefined,
-      );
+      const fullName = (meta.full_name as string) ?? '';
+
+      // ── 1. the company ──────────────────────────────────────────────
+      let companyId: string | null = null;
+      const created = await (supabase as any).rpc('create_company', { p_name: name });
+
+      if (!created.error) {
+        companyId = created.data as string;
+      } else if (missingFunction(created.error)) {
+        logger.warn('create_company is not installed; creating the company directly');
+        const ins = await (supabase as any)
+          .from('companies').insert({ name }).select('id').single();
+        if (ins.error) throw ins.error;
+        companyId = ins.data.id as string;
+        //  Ownership has to be written too, or the profile step below is
+        //  refused for naming a company the caller is not a member of.
+        const mem = await (supabase as any).from('company_members').insert({
+          company_id: companyId, user_id: user.id, role: 'owner', status: 'active',
+        });
+        if (mem.error) throw mem.error;
+      } else {
+        throw created.error;
+      }
+
+      if (!companyId) throw new Error('The company was created but no id came back.');
+
+      // ── 2. the profile ──────────────────────────────────────────────
+      const provisionArgs = {
+        p_email: user.email,
+        p_full_name: fullName,
+        p_organization: name,
+        p_onboarding_completed: false,
+        p_industry_type: (meta.industry_type as string | null) ?? null,
+        p_default_jurisdiction: (meta.default_jurisdiction as string | null) ?? null,
+        p_primary_markets: meta.default_jurisdiction ? [meta.default_jurisdiction] : null,
+        p_company_id: companyId,
+      };
+
+      const provisioned = await (supabase as any).rpc('provision_profile', provisionArgs);
+
+      if (provisioned.error) {
+        if (!missingFunction(provisioned.error)) throw provisioned.error;
+
+        logger.warn('provision_profile is not installed; writing the profile directly');
+        const ins = await (supabase as any).from('profiles').insert({
+          id: user.id,
+          email: user.email,
+          full_name: fullName || null,
+          organization: name,
+          company_id: companyId,
+          onboarding_completed: false,
+          role: 'content_creator',
+        });
+
+        //  A duplicate key here is the single most useful diagnostic this
+        //  screen can produce: the row EXISTS and this session cannot
+        //  read it. That is row-level security, not a missing profile,
+        //  and it needs a policy fixed rather than another attempt.
+        if (ins.error?.code === '23505') {
+          throw new Error(
+            'A profile already exists for this account but this session cannot read it. ' +
+            'That is a row-level security policy on `profiles`, not a missing record — ' +
+            'the policy that lets someone read their own row is not matching.',
+          );
+        }
+        if (ins.error) throw ins.error;
+      }
+
+      await loadProfile(user.id);
       return { error: null };
     } catch (err) {
-      return { error: err as Error };
+      logger.error('provisionWorkspace failed', err);
+      const e = err as any;
+      //  The code is worth showing: 42501 is a refused privilege, 23505 a
+      //  duplicate, 42883 a missing function. They lead to different
+      //  fixes and the message alone often does not distinguish them.
+      const detail = e?.code ? ` (${e.code})` : '';
+      return { error: new Error(`${e?.message ?? 'Something went wrong.'}${detail}`) };
     }
   };
 

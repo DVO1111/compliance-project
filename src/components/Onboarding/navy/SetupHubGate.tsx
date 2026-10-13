@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { logger } from '../../../lib/logger';
+import { appPath, appUrl } from '../../../lib/routing';
 import {
   loadSetupState, completedFromState, EMPTY_SETUP_STATE, type SetupState,
 } from '../../../lib/onboarding/setupSteps';
@@ -52,8 +53,8 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
   //  should leave onboarding rather than step through it.
   useEffect(() => {
     try {
-      if (window.location.pathname.replace(/\/+$/, '').toLowerCase() !== '/onboarding') {
-        window.history.replaceState({}, '', '/onboarding');
+      if (appPath() !== '/onboarding') {
+        window.history.replaceState({}, '', appUrl('/onboarding'));
       }
     } catch { /* history is unavailable in some embedded views */ }
   }, []);
