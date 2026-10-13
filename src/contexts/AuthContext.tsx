@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useJurisdictionStore } from '../stores/jurisdictionStore';
 import { toJurisdictionId } from '../lib/regulatoryProfile';
 import type { Database } from '../lib/database.types';
@@ -8,6 +8,7 @@ import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
 import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
+import { isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -79,6 +80,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const switchBrand = (brandId: string | null) => setActiveBrandId(brandId);
 
   useEffect(() => {
+    //  No backend in this build: there is no session to restore and
+    //  touching supabase.auth would throw. App.tsx shows the
+    //  configuration screen; this just makes sure it is not shown behind
+    //  a spinner that never ends.
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     //  THE SPLASH MUST COME DOWN EVEN WHEN THIS CALL DOES NOT ANSWER.
     //  getSession() reads the stored session and, if the access token has
     //  expired, refreshes it over the network — so on a bad connection it
@@ -103,6 +113,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (settled) return;
         settled = true;
         clearTimeout(deadline);
+        //  A session can outlive the allowlist: it is stored in the
+        //  browser, so an address removed from the list would otherwise
+        //  keep walking back in until its token expired. Checked on
+        //  restore as well as at sign-in, so the list governs who is
+        //  inside and not merely who may knock.
+        if (session?.user && !isEmailAllowedToSignIn(session.user.email)) {
+          logger.warn('restored session is not on the sign-in allowlist — signing out');
+          void supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -454,6 +477,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    //  Refused BEFORE the password is sent, so a closed beta does not
+    //  quietly accept credentials it is going to reject anyway. The
+    //  allowlist is a front door, not a lock — see allowlist.ts for what
+    //  it does and does not protect, and for the migration that puts the
+    //  same rule in the database where it cannot be skipped.
+    if (!isEmailAllowedToSignIn(email)) {
+      return { error: new Error(SIGNIN_NOT_ALLOWED_MESSAGE) };
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,

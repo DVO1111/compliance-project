@@ -18,9 +18,11 @@ import LoginPage from './components/Auth/LoginPage';
 import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import SignupPage from './components/Auth/SignupPage';
 import OnboardingWizard from './components/Onboarding/OnboardingWizard';
-import CompanySetupChecklist from './components/Onboarding/CompanySetupChecklist';
+import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
 import SetupHubPreview from './components/Onboarding/navy/SetupHubPreview';
 import BrandSplash from './components/BrandSplash';
+import ConfigurationNeeded from './components/ConfigurationNeeded';
+import { isSupabaseConfigured } from './lib/supabase';
 import MainLayout from './components/Layout/MainLayout';
 import type { PageId } from './components/Layout/MainLayout';
 import { useCalendarReminders } from './hooks/useCalendarReminders';
@@ -487,6 +489,13 @@ function AppContent() {
     return <SetupHubPreview />;
   }
 
+  /*  Everything past this point needs a backend. Saying so beats a
+      spinner that never resolves or a login form that cannot work.
+      The hub above is served first because it needs no database. */
+  if (!isSupabaseConfigured) {
+    return <ConfigurationNeeded />;
+  }
+
   if (loading) {
     return <BrandSplash />;
   }
@@ -671,10 +680,19 @@ function AppContent() {
     !localStorage.getItem(setupDoneKey) &&
     ['Admin', 'Executive', 'Compliance'].includes(profile.role ?? '');
 
+  //  LOG IN → ONBOARDING. The hub from the Product Design file (ONB-00)
+  //  is what you land on after signing in, in the slot
+  //  CompanySetupChecklist used to hold. It never blocks: "Finish later"
+  //  opens the workspace and is remembered, so it does not reappear on
+  //  every sign-in. See SetupHubGate for which steps can be ticked and
+  //  why the other three cannot be yet.
   if (needsSetup) {
     return (
-      <CompanySetupChecklist
-        onComplete={(navigateTo?: string) => {
+      <SetupHubGate
+        companyId={profile?.company_id}
+        industryType={industryType}
+        jurisdiction={(profile as any)?.default_jurisdiction}
+        onFinish={(navigateTo?: string) => {
           localStorage.setItem(setupDoneKey, 'true');
           if (navigateTo) {
             window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: navigateTo } }));
