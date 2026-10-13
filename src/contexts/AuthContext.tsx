@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useJurisdictionStore } from '../stores/jurisdictionStore';
 import { toJurisdictionId } from '../lib/regulatoryProfile';
 import type { Database } from '../lib/database.types';
@@ -8,6 +8,7 @@ import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
 import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
+import { isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -79,15 +80,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const switchBrand = (brandId: string | null) => setActiveBrandId(brandId);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
+    //  No backend in this build: there is no session to restore and
+    //  touching supabase.auth would throw. App.tsx shows the
+    //  configuration screen; this just makes sure it is not shown behind
+    //  a spinner that never ends.
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
+    //  THE SPLASH MUST COME DOWN EVEN WHEN THIS CALL DOES NOT ANSWER.
+    //  getSession() reads the stored session and, if the access token has
+    //  expired, refreshes it over the network — so on a bad connection it
+    //  can hang, and it can reject. With neither a .catch nor a deadline
+    //  this promise was the app's only way out of the loading state: a
+    //  refresh that never came back meant a spinner that never left, with
+    //  no error, no login form and nothing to click. Now the worst case
+    //  is the sign-in screen, which is recoverable.
+    //
+    //  The deadline is not a cancellation — a late answer still arrives
+    //  through onAuthStateChange and signs the user in.
+    let settled = false;
+    const deadline = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      logger.warn('getSession did not answer within 8s — showing the sign-in screen');
+      setLoading(false);
+    }, 8000);
+
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+        //  A session can outlive the allowlist: it is stored in the
+        //  browser, so an address removed from the list would otherwise
+        //  keep walking back in until its token expired. Checked on
+        //  restore as well as at sign-in, so the list governs who is
+        //  inside and not merely who may knock.
+        if (session?.user && !isEmailAllowedToSignIn(session.user.email)) {
+          logger.warn('restored session is not on the sign-in allowlist — signing out');
+          void supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          loadProfile(session.user.id);
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+        logger.error('getSession failed:', err);
         setLoading(false);
-      }
-    });
+      });
 
     const {
       data: { subscription },
@@ -124,15 +177,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(deadline);
+      subscription.unsubscribe();
+    };
   }, []);
 
+  /**
+   * Loads the profile, and GUARANTEES the splash comes down afterwards.
+   *
+   * Every path inside already cleared `loading` by hand, which worked
+   * right up until something threw: a dropped connection mid-query
+   * rejects rather than returning `{ error }`, and the app was then left
+   * on the full-screen spinner with nothing arriving and no way out.
+   * The `finally` is the fix — the loading flag is released by the
+   * structure of the function rather than by remembering to.
+   */
   const loadProfile = async (userId: string) => {
     // Only show the full-screen spinner on the very first load.
     // All subsequent calls (token refresh, manual refresh, window focus)
     // update profile silently without unmounting the app.
     if (!initialLoadDone.current) setLoading(true);
 
+    try {
+      await loadProfileInner(userId);
+    } catch (err) {
+      logger.error('loadProfile failed:', err);
+      setProfile(null);
+    } finally {
+      setLoading(false);
+      initialLoadDone.current = true;
+    }
+  };
+
+  const loadProfileInner = async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -142,8 +220,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       logger.error('loadProfile error:', error);
       setProfile(null);
-      setLoading(false);
-      initialLoadDone.current = true;
       return;
     }
 
@@ -152,52 +228,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If no profile row exists, stop
     if (!baseProfile) {
       setProfile(null);
-      setLoading(false);
-      initialLoadDone.current = true;
       return;
     }
 
-    // ✅ Fetch company authority role + module_access from company_members
+    //  THE TWO LOOKUPS BELOW RUN TOGETHER, NOT ONE AFTER THE OTHER.
+    //  Both need the profile row and neither needs the other, so awaiting
+    //  them in sequence spent a whole extra round trip for nothing — and
+    //  it was a round trip the user sat through, because the app is
+    //  behind the full-screen splash until this function returns. Over a
+    //  long link that is the difference between a pause and a wait.
+    const customRoleId = (baseProfile as any).custom_role_id;
+
+    const memberQuery = baseProfile.company_id
+      ? (supabase as any)
+          .from('company_members')
+          .select('role, module_access')
+          .eq('company_id', baseProfile.company_id)
+          .eq('user_id', userId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null });
+
+    //  fetchRoleById can reject; the permissions fall back to the legacy
+    //  role in that case, so it must not take the sign-in down with it.
+    const roleQuery = customRoleId
+      ? fetchRoleById(customRoleId).catch(() => null)
+      : Promise.resolve(null);
+
+    const [{ data: memberRow, error: memberErr }, customRole] =
+      await Promise.all([memberQuery, roleQuery]);
+
     let company_role: string | null = null;
     let module_access: string[] | null = null;
 
+    if (memberErr) {
+      // Not fatal — app can still run, just no company_role attached
+      logger.warn('loadProfile company_members role lookup failed:', memberErr.message);
+    } else {
+      company_role = (memberRow as any)?.role ?? null;
+      const raw = (memberRow as any)?.module_access;
+      module_access = Array.isArray(raw) && raw.length > 0 ? raw : null;
+    }
+
+    const customPermissions: Partial<Permissions> | null =
+      (customRole?.permissions as Partial<Permissions> | undefined) ?? null;
+
+    // ✅ Ensure system roles exist for this company (run-once per company)
     if (baseProfile.company_id) {
-      const { data: memberRow, error: memberErr } = await (supabase as any)
-        .from('company_members')
-        .select('role, module_access')
-        .eq('company_id', baseProfile.company_id)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (memberErr) {
-        // Not fatal — app can still run, just no company_role attached
-        logger.warn('loadProfile company_members role lookup failed:', memberErr.message);
-      } else {
-        company_role = (memberRow as any)?.role ?? null;
-        const raw = (memberRow as any)?.module_access;
-        module_access = Array.isArray(raw) && raw.length > 0 ? raw : null;
-      }
-
-      // ✅ Ensure system roles exist for this company (run-once per company)
       const seedKey = `seeded_roles_${baseProfile.company_id}`;
       if (!localStorage.getItem(seedKey)) {
         ensureSystemRoles(baseProfile.company_id)
           .then(() => localStorage.setItem(seedKey, '1'))
           .catch(() => { /* RPC not available yet — will retry next login */ });
-      }
-    }
-
-    // ✅ Load custom role permissions if assigned
-    let customPermissions: Partial<Permissions> | null = null;
-    const customRoleId = (baseProfile as any).custom_role_id;
-    if (customRoleId) {
-      try {
-        const role = await fetchRoleById(customRoleId);
-        if (role) {
-          customPermissions = role.permissions as Partial<Permissions>;
-        }
-      } catch {
-        // Not fatal — falls back to legacy role
       }
     }
 
@@ -213,8 +294,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     setProfile({ ...baseProfile, company_role, module_access, customPermissions });
-    setLoading(false);
-    initialLoadDone.current = true;
   };
 
   const signUp = async (
@@ -398,6 +477,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    //  Refused BEFORE the password is sent, so a closed beta does not
+    //  quietly accept credentials it is going to reject anyway. The
+    //  allowlist is a front door, not a lock — see allowlist.ts for what
+    //  it does and does not protect, and for the migration that puts the
+    //  same rule in the database where it cannot be skipped.
+    if (!isEmailAllowedToSignIn(email)) {
+      return { error: new Error(SIGNIN_NOT_ALLOWED_MESSAGE) };
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,

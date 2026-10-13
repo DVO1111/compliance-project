@@ -666,10 +666,21 @@ BEGIN
   UPDATE public.regulatory_licences SET expiry_date = current_date - 1
    WHERE id = '00000000-0000-7500-d000-000000000006';
 
+  --  Since item 07 the batch's state lives in the lifecycle engine and
+  --  `status` is a mirror no caller may write, so the batch is walked to
+  --  the point of release through the engine. The gate under test is
+  --  unchanged: it fires on the status write the mirror performs.
+  PERFORM public.lifecycle_transition('batch_record','00000000-0000-7500-e000-000000000002',
+    'close_execution','00000000-0000-7500-a000-00000000000c','00000000-0000-7500-b000-000000000001');
+  PERFORM public.lifecycle_transition('batch_record','00000000-0000-7500-e000-000000000002',
+    'submit_for_qc','00000000-0000-7500-a000-00000000000c','00000000-0000-7500-b000-000000000001');
+  PERFORM public.lifecycle_transition('batch_record','00000000-0000-7500-e000-000000000002',
+    'start_qc','00000000-0000-7500-a000-00000000000c','00000000-0000-7500-b000-000000000001');
+
   v_ok := false;
   BEGIN
-    UPDATE public.batch_records SET status = 'released'
-     WHERE id = '00000000-0000-7500-e000-000000000002';
+    PERFORM public.lifecycle_transition('batch_record','00000000-0000-7500-e000-000000000002',
+      'release','00000000-0000-7500-a000-00000000000c','00000000-0000-7500-b000-000000000001');
     v_msg := 'RELEASE ACCEPTED AGAINST AN EXPIRED LICENCE';
   EXCEPTION WHEN others THEN
     v_ok := SQLERRM LIKE 'LICENCE_EXPIRED%'; v_msg := SQLERRM;

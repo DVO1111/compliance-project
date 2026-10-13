@@ -2,8 +2,27 @@ import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
 import { assertBatchAllowed } from '../licenceService';
+import { transition as lifecycleTransition } from '../lifecycleService';
+import { BATCH_TRANSITIONS } from './batchTransitions';
 
-export type BatchStatus = 'qc_pending' | 'qc_in_progress' | 'hold' | 'released' | 'rejected' | 'archived';
+/**
+ * The states a batch record can be in.
+ *
+ * `in_progress` and `execution_complete` were added by Week 4 item 07,
+ * which put manufacturing execution in front of QC. A batch now BEGINS at
+ * `in_progress` rather than `qc_pending`, so this list is wider than the
+ * screens that predate item 07 expect — hence the labels, colours and
+ * actions below all cover every member rather than defaulting.
+ */
+export type BatchStatus =
+  | 'in_progress'
+  | 'execution_complete'
+  | 'qc_pending'
+  | 'qc_in_progress'
+  | 'hold'
+  | 'released'
+  | 'rejected'
+  | 'archived';
 
 export interface BatchRecord {
   id: string;
@@ -18,6 +37,17 @@ export interface BatchRecord {
   batch_size: number;
   unit: string;
   status: BatchStatus;
+  /** The customer this batch is manufactured for, when it is contract work. */
+  customer_name: string | null;
+  /** The master formula version the batch was initiated on, if any. */
+  formula_id: string | null;
+  /**
+   * When manufacturing execution was closed. Once set, the stages and
+   * readings are frozen and the record cannot return to manufacturing, so
+   * the screens read it to decide which actions to offer.
+   */
+  execution_closed_at: string | null;
+  execution_closed_by: string | null;
   hold_reason: string | null;
   release_notes: string | null;
   qc_started_at: string | null;
@@ -69,16 +99,26 @@ export async function getBatchRecord(id: string, companyId: string): Promise<Bat
 export async function createBatchRecord(
   companyId: string,
   userId: string,
-  record: Omit<BatchRecord, 'id' | 'company_id' | 'status' | 'hold_reason' | 'release_notes' | 'qc_started_at' | 'qc_completed_at' | 'released_at' | 'released_by' | 'created_by' | 'created_at' | 'updated_at'>
+  //  formula_id and the two closure columns are left out because they are
+  //  not the caller's to set: a batch built from a master formula is
+  //  created by the batch_record_initiate() RPC, which resolves the
+  //  approved version and instantiates the stages. This path remains for
+  //  the batches that have no formula behind them, which is what the
+  //  existing screen creates.
+  record: Omit<BatchRecord, 'id' | 'company_id' | 'status' | 'hold_reason' | 'release_notes' | 'qc_started_at' | 'qc_completed_at' | 'released_at' | 'released_by' | 'created_by' | 'created_at' | 'updated_at' | 'formula_id' | 'execution_closed_at' | 'execution_closed_by' | 'customer_name'> & { customer_name?: string | null }
 ): Promise<BatchRecord> {
   //  Asked before the write purely so the operator sees which licence
   //  expired and when. The authority is trg_batch_records_licence_gate,
   //  which refuses the insert whatever this call returns.
   await assertBatchAllowed(record.product_id, 'initiation');
 
+  //  No status is sent. Since item 07 the column is a mirror of the
+  //  lifecycle engine maintained by trigger, and the database refuses a
+  //  direct write to it — a batch starts in the engine's initial state,
+  //  `in_progress`, whatever this call might ask for.
   const { data, error } = await (supabase as any)
     .from('batch_records')
-    .insert({ ...record, company_id: companyId, created_by: userId, status: 'qc_pending' })
+    .insert({ ...record, company_id: companyId, created_by: userId })
     .select()
     .single();
 
@@ -97,35 +137,88 @@ export async function createBatchRecord(
   return data;
 }
 
+
+/**
+ * Moves a batch to a new state.
+ *
+ * Since Week 4 item 07 the state is held by the lifecycle engine and
+ * `batch_records.status` is a read-only mirror: a direct UPDATE of it is
+ * refused by a trigger, so this goes through `lifecycle_transition`. The
+ * side columns the screens read — when QC started, who released, the hold
+ * reason — are not state and are still written here, after the engine has
+ * accepted the move.
+ */
 export async function updateBatchStatus(
   id: string,
   companyId: string,
   userId: string,
   newStatus: BatchStatus,
-  extra?: { holdReason?: string; releaseNotes?: string }
+  extra?: { holdReason?: string; releaseNotes?: string; comment?: string }
 ): Promise<void> {
   const now = new Date().toISOString();
-  const updates: any = { status: newStatus };
+
+  const existing = await getBatchRecord(id, companyId);
+  if (!existing) throw new Error('That batch record is no longer available.');
+  if (existing.status === newStatus) return;
 
   //  Release is the point the registration has to be in force. A batch
   //  legitimately started under a valid licence still cannot be released
-  //  once that licence has lapsed.
+  //  once that licence has lapsed. Asked here so the operator sees which
+  //  licence and when; the authority is the database trigger, which
+  //  refuses the transition whatever this returns.
   if (newStatus === 'released') {
-    const existing = await getBatchRecord(id, companyId);
-    await assertBatchAllowed(existing?.product_id, 'release');
+    await assertBatchAllowed(existing.product_id, 'release');
   }
 
-  if (newStatus === 'qc_in_progress') updates.qc_started_at = now;
-  if (newStatus === 'released') { updates.released_at = now; updates.released_by = userId; updates.release_notes = extra?.releaseNotes ?? null; }
+  const actionKey = BATCH_TRANSITIONS[`${existing.status}->${newStatus}`];
+  if (!actionKey) {
+    throw new Error(
+      `A batch that is "${STATUS_LABELS[existing.status] ?? existing.status}" cannot move straight to ` +
+      `"${STATUS_LABELS[newStatus] ?? newStatus}".`
+    );
+  }
+
+  //  `hold` and `reject` are declared as requiring a comment, so the
+  //  reason the caller collected is passed as that comment rather than
+  //  only into a column — the engine's history is where an auditor looks.
+  const comment = extra?.comment
+    ?? extra?.holdReason
+    ?? (newStatus === 'released' ? (extra?.releaseNotes || undefined) : undefined);
+
+  const result = await lifecycleTransition({
+    entityType: 'batch_record',
+    entityId: id,
+    actionKey,
+    companyId,
+    comment,
+    metadata: { requested_status: newStatus },
+  });
+
+  if (!result.ok) throw new Error(result.message);
+
+  //  Not state, so not the engine's: these are the facts the screens
+  //  display alongside it.
+  const updates: Record<string, unknown> = {};
+  if (newStatus === 'qc_in_progress' && !existing.qc_started_at) updates.qc_started_at = now;
+  if (newStatus === 'released') {
+    updates.released_at = now;
+    updates.released_by = userId;
+    updates.release_notes = extra?.releaseNotes ?? null;
+  }
   if (newStatus === 'hold') updates.hold_reason = extra?.holdReason ?? null;
 
-  const { error } = await (supabase as any)
-    .from('batch_records')
-    .update(updates)
-    .eq('id', id)
-    .eq('company_id', companyId);
-
-  if (error) throw error;
+  if (Object.keys(updates).length > 0) {
+    const { error } = await (supabase as any)
+      .from('batch_records')
+      .update(updates)
+      .eq('id', id)
+      .eq('company_id', companyId);
+    //  The transition has already committed, so a failure here leaves the
+    //  state correct and a detail missing. Logged rather than thrown: the
+    //  caller reloading would otherwise see the move succeed and an error
+    //  reported for it.
+    if (error) logger.error('updateBatchStatus: transition committed but detail write failed', error);
+  }
 
   await recordAuditEvent({
     userId,
@@ -133,7 +226,7 @@ export async function updateBatchStatus(
     action: `batch_status_${newStatus}`,
     entityType: 'batch_record',
     entityId: id,
-    metadata: { new_status: newStatus, ...extra },
+    metadata: { new_status: newStatus, action_key: actionKey, ...extra },
     captureEvidence: false,
   }).catch(e => logger.error('Audit failed for batch status update:', e));
 }
@@ -300,6 +393,8 @@ export async function updateRawMaterialStatus(
 }
 
 export const STATUS_LABELS: Record<BatchStatus, string> = {
+  in_progress: 'In Manufacturing',
+  execution_complete: 'Execution Complete',
   qc_pending: 'QC Pending',
   qc_in_progress: 'QC In Progress',
   hold: 'On Hold',
@@ -309,6 +404,8 @@ export const STATUS_LABELS: Record<BatchStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<BatchStatus, string> = {
+  in_progress: 'text-indigo-600 bg-indigo-50 border-indigo-200',
+  execution_complete: 'text-sky-600 bg-sky-50 border-sky-200',
   qc_pending: 'text-amber-600 bg-amber-50 border-amber-200',
   qc_in_progress: 'text-blue-600 bg-blue-50 border-blue-200',
   hold: 'text-orange-600 bg-orange-50 border-orange-200',

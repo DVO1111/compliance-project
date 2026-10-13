@@ -96,6 +96,21 @@ BEGIN
     (u_inv,'pprov-invitee@local.test')
     ON CONFLICT (id) DO NOTHING;
 
+  --  The sign-in allowlist (20261017000000) gates provisioning, so these
+  --  fixtures have to be admitted or every assertion below would fail
+  --  for the wrong reason. Admitted explicitly rather than by emptying
+  --  the table: emptying it would switch the gate OFF for the whole
+  --  database, and this suite would then pass even if the gate were
+  --  broken. `signin_allowlist_test.sql` covers the gate itself.
+  IF to_regclass('public.allowed_signins') IS NOT NULL THEN
+    INSERT INTO public.allowed_signins(email, note) VALUES
+      ('pprov-owner@local.test',    'pprov fixture'),
+      ('pprov-attacker@local.test', 'pprov fixture'),
+      ('pprov-invitee@local.test',  'pprov fixture'),
+      ('pprov-guest@local.test',    'pprov fixture')
+      ON CONFLICT (email) DO NOTHING;
+  END IF;
+
   -- the victim tenant has a real member, so it is not an empty shell
   INSERT INTO public.profiles(id,email,role,company_id)
     VALUES (u_own,'pprov-owner@local.test','admin',ca) ON CONFLICT (id) DO NOTHING;
@@ -600,6 +615,9 @@ BEGIN
   DELETE FROM public.company_members WHERE user_id::text LIKE '00000000-0000-6200-b000-%';
   DELETE FROM public.profiles  WHERE email LIKE 'pprov-%@local.test';
   DELETE FROM auth.users       WHERE email LIKE 'pprov-%@local.test';
+  IF to_regclass('public.allowed_signins') IS NOT NULL THEN
+    DELETE FROM public.allowed_signins WHERE email LIKE 'pprov-%@local.test';
+  END IF;
   DELETE FROM public.companies WHERE name LIKE 'PPROV %';
   RAISE NOTICE 'pprov fixtures removed.';
 EXCEPTION WHEN others THEN

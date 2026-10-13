@@ -213,24 +213,33 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   // Show a loading screen while the invited-user shortcut resolves
   if (isInvitedUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex items-center justify-center">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--onboarding-glow)' }}
+      >
         <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-white" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#002D62] via-[#003d7a] to-[var(--color-behance-blue)] flex items-center justify-center px-4 py-12">
-      <div className="absolute inset-0 opacity-10">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
-            backgroundSize: '48px 48px',
-          }}
-        />
-      </div>
-
+    /*  THE ONBOARDING GLOW, from ONB-00 in the Product Design file.
+     *
+     *  What was here before was a three-stop Tailwind gradient
+     *  (#002D62 → #003d7a → --color-behance-blue) with a 10% white dot
+     *  grid over it. Neither came from a design; both were written
+     *  before this screen had one. The dot grid goes with the gradient
+     *  it belonged to — the design has no texture over the glow, and
+     *  leaving the dots would mean the screen still did not look like
+     *  the design it was just given. It is two lines to restore if that
+     *  reads as a loss.
+     *
+     *  The value lives in tokens.css, where the angle and the 83.333%
+     *  stop are explained. Do not inline it here.  */
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-12"
+      style={{ background: 'var(--onboarding-glow)' }}
+    >
       <div className="w-full max-w-2xl relative z-10">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-4">

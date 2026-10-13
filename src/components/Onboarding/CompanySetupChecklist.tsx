@@ -106,17 +106,15 @@ export default function CompanySetupChecklist({ onComplete }: Props) {
     const progressPct = Math.round((completedCount / totalCount) * 100);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#002D62] via-[#003d7a] to-[var(--color-behance-blue)] flex items-center justify-center px-4 py-12">
-            <div className="absolute inset-0 opacity-10">
-                <div
-                    className="absolute inset-0"
-                    style={{
-                        backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
-                        backgroundSize: '48px 48px',
-                    }}
-                />
-            </div>
-
+        /*  The same onboarding glow as OnboardingWizard, and for the same
+         *  reason it has to be the same: this checklist and that wizard
+         *  are two screens of one flow, so a person moving between them
+         *  would otherwise watch the background change. See tokens.css
+         *  for the value and the Figma node it came from.  */
+        <div
+            className="min-h-screen flex items-center justify-center px-4 py-12"
+            style={{ background: 'var(--onboarding-glow)' }}
+        >
             <div className="w-full max-w-2xl relative z-10">
                 {/* Header */}
                 <div className="text-center mb-8">

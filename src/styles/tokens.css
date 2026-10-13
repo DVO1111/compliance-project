@@ -193,6 +193,106 @@
   --icon-disabled: #b6bbbe;
   --icon-on-color-secondary: #ffffff;
 
+  /* ══ THE NAVY (v2) THEME ══════════════════════════════════════
+     From the Criateur Compliance · Product Design file:
+     https://www.figma.com/design/wSj81KWfoy7rS8u9CDcqtY/Criateur-Compliance---Product-Design
+
+     Every value here is a BOUND Figma variable except the two gradient
+     stops, which the design deliberately left raw — see the glow below.
+
+     WHY THIS IS NAVY AND NOT THE PRODUCT'S #08131A GROUND. It is the
+     design's own decision, stated in the ONB-00 notes frame: "Visual
+     layer moves to the v2 system: CR Blue / Navy theme tokens,
+     Bricolage + Sora, green action colour." An earlier version of this
+     comment called the divergence an open question; it is not one. The
+     navy is the direction, and these tokens are scoped to the surfaces
+     drawn in it rather than replacing the product-wide palette, so the
+     two can coexist while the rest of the product follows.
+
+     The action green here (#71A66A) is the v2 system's, and is NOT the
+     brand green #478D4B used elsewhere. Both are correct in their own
+     surface. Do not "fix" one to match the other without a design
+     decision to do so. */
+
+  /* ── Navy: surfaces and strokes ─────────────────────────────── */
+  --nv-surface-raised:   #182445;
+  --nv-surface-recessed: #1e2c54;
+  --nv-surface-hover:    #24335d;
+  --nv-border-default:   #26345b;
+  --nv-border-strong:    #334572;
+
+  /* ── Navy: text ─────────────────────────────────────────────── */
+  --nv-text-primary:     #fbf9f5;
+  --nv-text-secondary:   #bbc3db;
+  --nv-text-tertiary:    #93a2cf;
+  --nv-text-placeholder: #93a2cf;
+
+  /* ── Navy: fields ───────────────────────────────────────────── */
+  --nv-field-bg:     #182445;
+  --nv-field-border: #334572;
+
+  /* ── Navy: actions ──────────────────────────────────────────── */
+  --nv-action-primary-bg:   #71a66a;
+  --nv-action-primary-text: #101931;
+  --nv-action-outline-text: #fbf9f5;
+  /*  The button spec's focus ring: 2 px CR Blue Light, outside stroke,
+      the SAME on every variant. outline-offset stays 0. */
+  --nv-focus-ring: #183470;
+
+  /* ── Navy: icons ────────────────────────────────────────────── */
+  --nv-icon-default: #bbc3db;
+
+  /* ── Navy: state (the "Done" badge on a finished step) ──────── */
+  --nv-state-compliant-bg:     #283d52;
+  --nv-state-compliant-border: #4d7970;
+  --nv-state-compliant-text:   #79be94;
+
+  /* ── Status, from the icon toolkit's Status section ───────────
+     PROPOSED in the design, pending Brand Design's confirmation under
+     Week 2 item 01, so these may move. Each state pairs its colour with
+     a distinct SHAPE (see src/lib/design/icons.ts) so the states stay
+     legible in greyscale and to colour-blind readers — the colour alone
+     is never the signal. */
+  --nv-status-success: #12a05a;
+  --nv-status-warning: #f08128;
+  --nv-status-danger:  #c62f1e;
+  --nv-status-info:    #183470;
+  --nv-status-neutral: #6e6e73;
+
+  /* ── The onboarding glow ──────────────────────────────────────
+     The background of every onboarding screen, from the frame fill on
+     ONB-00 (node 26:384). Three details are load-bearing and easy to
+     lose in a redraw:
+
+       - the angle is 137.57deg, not 135. A diagonal that reads as
+         "corner to corner" in a screenshot is usually not;
+       - the second stop sits at 83.333%, not 100%, so the last sixth
+         of the sweep is flat. That flat tail is what keeps the bottom
+         of a long scrolling step list from continuing to brighten;
+       - the two stops are the ONLY raw colours on that frame. Every
+         other value in the onboarding design is a bound Figma variable,
+         so these two were left deliberately unbound and are a gradient
+         rather than a colour pair. They are declared here as ONE token
+         for that reason — splitting them into -from / -to would invite
+         someone to use half of a gradient as a surface colour. */
+  --onboarding-glow:
+    linear-gradient(137.57deg, #0d1933 0%, #1f336c 83.333%);
+
+  /* ── Navy: type, per the design and the mobile adaptation rules ──
+      title    Bricolage 32/38 desktop, 24/30 mobile
+      body     Sora 15/22 desktop, 14/20 mobile
+      meta     IBM Plex Mono 11/16, unchanged on mobile
+     Controls stay 40 px high on both, which with full-width hit areas
+     and 8 px spacing gives an effective target of 44 px or more. */
+  --nv-font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --nv-font-body:    'Sora', system-ui, -apple-system, sans-serif;
+  --nv-font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --nv-control-height: 40px;
+  --nv-radius-control: 8px;
+  --nv-radius-card:    12px;
+  --nv-gutter-mobile:  16px;
+  --nv-content-mobile: 358px;
+
   /* ── Control sizing ───────────────────────────────────────────
      Button heights from the Button component sheet; icons are 16px
      at every size except Large, which uses 19px. */
@@ -225,3 +325,58 @@
 .type-label-02       { font-size: var(--type-label-02-size);       line-height: var(--type-label-02-lh);       font-weight: 400; }
 .type-caption-01     { font-size: var(--type-caption-01-size);     line-height: var(--type-caption-01-lh);     font-weight: 400; }
 .type-helper-text-01 { font-size: var(--type-helper-text-01-size); line-height: var(--type-helper-text-01-lh); font-weight: 400; }
+
+/* ──────────────────────────────────────────────────────────────
+   The v2 (navy) button — the parts of its spec that cannot be an
+   inline style, because a pseudo-class and a keyframe have nowhere
+   to live in a `style` attribute. The geometry and colour are in
+   src/components/Onboarding/navy/NavyButton.tsx; this is the rest.
+   ────────────────────────────────────────────────────────────── */
+
+/*  "Focus: 2 px CR Blue Light (#183470) outside stroke, same on every
+    variant (CSS: outline 2px solid #183470; outline-offset 0)."
+
+    The SAME on every variant is the clause that matters, so there is one
+    rule here and no per-variant override. :focus-visible rather than
+    :focus so a mouse click does not leave a ring behind. */
+.navy-btn:focus-visible {
+  outline: 2px solid var(--nv-focus-ring);
+  outline-offset: 0;
+}
+
+/*  "Disabled: no hover or focus, cursor not-allowed." The cursor is set
+    inline; removing the ring has to happen here. */
+.navy-btn:disabled:focus-visible { outline: none; }
+
+/*  HOVER IS A STAND-IN, NOT A TRANSCRIPTION. The button's Figma
+    description specifies focus, loading and disabled; it does not give a
+    hover fill, and no hover variable is bound on the component. The
+    ghost and outline variants can therefore use a real token
+    (surface/hover); the primary green has none, so it is lifted
+    optically instead. Replace this with the token once the design
+    publishes one — do not read a value off a screenshot. */
+.navy-btn:not(:disabled)[data-variant='ghost']:hover,
+.navy-btn:not(:disabled)[data-variant='outline']:hover {
+  background: var(--nv-surface-hover);
+}
+.navy-btn:not(:disabled)[data-variant='primary']:hover {
+  filter: brightness(1.07);
+}
+
+/*  "16 px spinner (270° arc, 2 px) in the label colour." The arc is
+    drawn in the component; this spins it. */
+.navy-btn-spinner {
+  animation: navy-btn-spin 720ms linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes navy-btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/*  A continuously rotating element is exactly what this setting is for.
+    The arc stays visible and stops moving, so the button still reads as
+    busy — aria-busy carries the rest. */
+@media (prefers-reduced-motion: reduce) {
+  .navy-btn-spinner { animation: none; }
+}

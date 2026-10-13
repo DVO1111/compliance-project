@@ -2,8 +2,7 @@ import * as Sentry from '@sentry/react';
 import { getPermissions } from './lib/permissions';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
-import { useEffect, useState } from 'react';
-import DepartmentsPage from './components/company/DepartmentsPage';
+import { useEffect, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
 import OnboardingCompany from './pages/OnboardingCompany';
@@ -19,108 +18,190 @@ import LoginPage from './components/Auth/LoginPage';
 import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import SignupPage from './components/Auth/SignupPage';
 import OnboardingWizard from './components/Onboarding/OnboardingWizard';
-import CompanySetupChecklist from './components/Onboarding/CompanySetupChecklist';
+import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
+import SetupHubPreview from './components/Onboarding/navy/SetupHubPreview';
+import BrandSplash from './components/BrandSplash';
+import ConfigurationNeeded from './components/ConfigurationNeeded';
+import { isSupabaseConfigured } from './lib/supabase';
 import MainLayout from './components/Layout/MainLayout';
 import type { PageId } from './components/Layout/MainLayout';
-import AIDashboardPage from './components/Governance/AI/AIDashboardPage';
-import DashboardPage from './components/Dashboard/DashboardPage';
-import UploadPage from './components/Upload/UploadPage';
-import ArchivePage from './components/Archive/ArchivePage';
-import RegulationsPage from './components/Regulations/RegulationsPage';
-import LegalReviewPage from './components/LegalReview/LegalReviewPage';
-import CorrectionEditorPage from './components/CorrectionEditor/CorrectionEditorPage';
-import MembersPage from './components/company/MembersPage';
-import InvitesPage from './components/company/InvitesPage';
-import TrainingLogPage from './components/Training/TrainingLogPage';
-import ProfilePage from './components/Profile/ProfilePage';
-import NotificationsPage from './components/Notifications/NotificationsPage';
-import LicenseVaultPage from './components/LicenseVault/LicenseVaultPage';
-import IntegrationsPage from './components/Integrations/IntegrationsPage';
-import AuditTrailPage from './components/AuditTrail/AuditTrailPage';
-import RoleManagementPage from './components/Roles/RoleManagementPage';
-import ContentCalendarPage from './components/Calendar/ContentCalendarPage';
-import TeamChatPage from './components/Chat/TeamChatPage';
-import DriftMonitorPage from './components/DriftMonitor/DriftMonitorPage';
-import ConsentManagementPage from './components/ConsentManagement/ConsentManagementPage';
-import ContentBlocksPage from './components/ContentBlocks/ContentBlocksPage';
-import AgencyPortalPage from './components/AgencyPortal/AgencyPortalPage';
-import ComplianceReportingPage from './components/Reporting/ComplianceReportingPage';
-import HorizonScanningPage from './components/HorizonScanning/HorizonScanningPage';
-import ChannelRulesPage from './components/ChannelRules/ChannelRulesPage';
-import RegulatoryLibraryPage from './components/RegulatoryLibrary/RegulatoryLibraryPage';
-import TranslationCompliancePage from './components/TranslationCompliance/TranslationCompliancePage';
-import CrisisResponsePage from './components/CrisisResponse/CrisisResponsePage';
-import ProgrammaticAdPage from './components/ProgrammaticAd/ProgrammaticAdPage';
-import WhistleblowerPage from './components/Whistleblower/WhistleblowerPage';
-import PredictiveRiskPage from './components/PredictiveRisk/PredictiveRiskPage';
-import SocialListeningPage from './components/SocialListening/SocialListeningPage';
-import WebsiteMonitoringPage from './components/WebsiteMonitoring/WebsiteMonitoringPage';
-import VendorScorecardPage from './components/VendorScorecard/VendorScorecardPage';
-import CapaManagementPage from './components/CapaManagement/CapaManagementPage';
-import TrainingSimulationPage from './components/TrainingSimulation/TrainingSimulationPage';
-import ClaimExtractionPage from './components/ClaimExtraction/ClaimExtractionPage';
-import SecretVaultPage from './components/Vault/SecretVaultPage';
-import LegalMarketplacePage from './components/Marketplace/LegalMarketplacePage';
-import LegalPartnerDashboard from './components/Marketplace/LegalPartnerDashboard';
-import PartnerVerificationPage from './components/Marketplace/PartnerVerificationPage';
-import PolicyAssistantPage from './components/PolicyAssistant/PolicyAssistantPage';
-import GrcFrameworksPage from './components/GrcFrameworks/GrcFrameworksPage';
-import GrcControlsPage from './components/GrcControls/GrcControlsPage';
-import GrcDashboardPage from './components/GrcDashboard/GrcDashboardPage';
-import GrcAutomationPage from './components/GrcAutomation/GrcAutomationPage';
-import AIAssetsPage from './components/Governance/AI/AIAssetsPage';
-import AIAssetDetailPage from './components/Governance/AI/AIAssetDetailPage';
-import AIUsageLogsPage from './components/Governance/AI/AIUsageLogsPage';
-import AIReviewsPage from './components/Governance/AI/AIReviewsPage';
-import AIPromptTemplatesPage from './components/Governance/AI/AIPromptTemplatesPage';
-import AIIncidentsPage from './components/Governance/AI/AIIncidentsPage';
-import PoliciesPage from './components/Governance/Policies/PoliciesPage';
-import PolicyDetailPage from './components/Governance/Policies/PolicyDetailPage';
-import MyPoliciesPage from './components/Governance/Policies/MyPoliciesPage';
-import VendorsPage from './components/Vendors/VendorsPage';
-import VendorDetailPage from './components/Vendors/VendorDetailPage';
-import AuditSessionsPage from './components/Governance/Audits/AuditSessionsPage';
-import AuditSessionDetailPage from './components/Governance/Audits/AuditSessionDetailPage';
-import RiskRegisterPage from './components/Governance/Risks/RiskRegisterPage';
-import RiskDetailDrawer from './components/Governance/Risks/RiskDetailDrawer';
-import CommandCenterPage from './components/Governance/CommandCenter/CommandCenterPage';
-import ObligationListPage from './components/Governance/Obligations/ObligationListPage';
-import ObligationDetailPage from './components/Governance/Obligations/ObligationDetailPage';
-import IdentityProvidersPage from './components/Governance/Identity/IdentityProvidersPage';
-import PlatformJobsPage from './components/Platform/PlatformJobsPage';
-import RetentionPoliciesPage from './components/Governance/Retention/RetentionPoliciesPage';
-import LegalHoldsPage from './components/Governance/LegalHold/LegalHoldsPage';
-import GovernanceTimelinePage from './components/Governance/Timeline/GovernanceTimelinePage';
-import WebhooksPage from './components/Platform/WebhooksPage';
-import EvidenceIngestionsPage from './components/Platform/EvidenceIngestionsPage';
-import EcosystemHubPage from './components/Platform/EcosystemHubPage';
 import { useCalendarReminders } from './hooks/useCalendarReminders';
 import { useRoutePersistence } from './hooks/useRoutePersistence';
 import { applyDeepLinksFromUrl } from './integrations/utils/deepLinks';
 import RealtimePopups from './components/Notifications/RealtimePopups';
-import CompanySettingsPage from './components/company/CompanySettingsPage';
-import BillingPage from './components/Billing/BillingPage';
 import FeatureGate from './components/Billing/FeatureGate';
-import BatchReleasePage from './components/BatchRelease/BatchReleasePage';
-import ChangeControlPage from './components/ChangeControl/ChangeControlPage';
-import SopLibraryPage from './components/SopLibrary/SopLibraryPage';
-import ComingSoonPage from './components/Common/ComingSoonPage';
-import AIInsightsPage from './components/Dashboard/AIInsightsPage';
-import FrameworkLibraryPage from './components/FrameworkLibrary/FrameworkLibraryPage';
-import ControlHealthDashboard from './components/ControlMonitoring/ControlHealthDashboard';
-import RegulatoryAffairsPage from './components/RegulatoryAffairs/RegulatoryAffairsPage';
-import GmpInspectionPage from './components/GmpInspection/GmpInspectionPage';
-import SONCompliancePage from './components/SONCompliance/SONCompliancePage';
-import CTDDossierPage from './components/CTDDossier/CTDDossierPage';
-import ContrabandRejectionPage from './components/ContrabandRejection/ContrabandRejectionPage';
-import ShipmentEventLogPage from './components/Logistics/ShipmentEventLogPage';
-import CN2223DeclarationPage from './components/Logistics/CN2223DeclarationPage';
-import ComplianceAlertingPage from './components/Alerts/ComplianceAlertingPage';
-import AuditPrepPage from './components/AuditPrep/AuditPrepPage';
-import CoaRegisterPage from './components/Coa/CoaRegisterPage';
-import OrgManagementPanel from './components/Enterprise/OrgManagementPanel';
-import EnterpriseDashboardPage from './components/Enterprise/EnterpriseDashboardPage';
-import PharmaIntegrationsPage from './components/PharmaIntegrations/PharmaIntegrationsPage';
+
+/**
+ * A lazily-loaded page, with one recovery the plain `lazy` does not have.
+ *
+ * Vite writes content-hashed filenames, so EVERY DEPLOY CHANGES THE CHUNK
+ * NAMES. A tab opened before a deploy is holding an index.html that names
+ * the old ones, and when the person then navigates, the browser asks for
+ * a file that no longer exists. Netlify's SPA fallback answers any
+ * unmatched path with index.html at status 200 — so the request does not
+ * even fail honestly: it succeeds, returns HTML, and the browser reports
+ * a module that will not parse.
+ *
+ * It did not matter when the whole app was one chunk loaded at the first
+ * paint. It matters now, and it is not an edge case: it is what happens
+ * to anyone with the app open while a deploy lands.
+ *
+ * So a failed chunk fetch reloads the page once, which fetches the
+ * current index.html and the chunks it names. The one-shot flag is
+ * cleared by the next page that loads successfully, so a later deploy
+ * can recover the same way; without that it would reload only once ever.
+ * If the reload does not fix it, the error boundary around renderPage
+ * shows PageErrorFallback rather than a blank screen.
+ */
+const CHUNK_RELOAD_KEY = 'criateur.chunk-reload';
+
+function lazyPage<T extends ComponentType<any>>(
+  load: () => Promise<{ default: T }>,
+) {
+  return lazy(() =>
+    load()
+      .then((mod) => {
+        //  Loaded cleanly, so any earlier recovery is spent and the next
+        //  deploy is allowed its own reload.
+        try { sessionStorage.removeItem(CHUNK_RELOAD_KEY); } catch { /* private mode */ }
+        return mod;
+      })
+      .catch((err) => {
+        let alreadyTried = true;
+        try {
+          alreadyTried = sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1';
+          if (!alreadyTried) sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+        } catch {
+          //  No sessionStorage (private mode, blocked storage). Reloading
+          //  without the flag risks a loop, so fall through to the error
+          //  boundary instead, which is recoverable by hand.
+        }
+        if (!alreadyTried) window.location.reload();
+        throw err;
+      }),
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   THE PAGES ARE LOADED ON DEMAND.
+
+   Every one of these was a static import, which put all ~95 of them —
+   and everything they pull in: pdfjs-dist, mammoth, jszip, recharts,
+   framer-motion — into ONE chunk that the browser had to download and
+   parse before it could draw anything at all. Including the login
+   form. Someone signing in was waiting on the code for pages they had
+   not asked for and might never open.
+
+   Each page is now its own chunk, fetched when its route is first
+   shown. The Suspense boundary is around renderPage() at the bottom of
+   this file, inside MainLayout, so the shell stays on screen while a
+   page arrives rather than the app blanking.
+
+   WHAT MUST NOT BE LAZY, and why they are still imported above:
+     AccessDenied, FeatureGate   rendered as the fallback INSIDE a case,
+                                 so lazying them would put a second
+                                 spinner behind the first;
+     MainLayout, RealtimePopups  the shell itself — it is what the
+                                 fallback is drawn inside;
+     PageErrorFallback           it has to be loadable when a chunk
+                                 fails, which is exactly when a fetch
+                                 is not to be relied on.
+   ────────────────────────────────────────────────────────────────── */
+const DepartmentsPage           = lazyPage(() => import('./components/company/DepartmentsPage'));
+const AIDashboardPage           = lazyPage(() => import('./components/Governance/AI/AIDashboardPage'));
+const DashboardPage             = lazyPage(() => import('./components/Dashboard/DashboardPage'));
+const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
+const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
+const RegulationsPage           = lazyPage(() => import('./components/Regulations/RegulationsPage'));
+const LegalReviewPage           = lazyPage(() => import('./components/LegalReview/LegalReviewPage'));
+const CorrectionEditorPage      = lazyPage(() => import('./components/CorrectionEditor/CorrectionEditorPage'));
+const MembersPage               = lazyPage(() => import('./components/company/MembersPage'));
+const InvitesPage               = lazyPage(() => import('./components/company/InvitesPage'));
+const TrainingLogPage           = lazyPage(() => import('./components/Training/TrainingLogPage'));
+const ProfilePage               = lazyPage(() => import('./components/Profile/ProfilePage'));
+const NotificationsPage         = lazyPage(() => import('./components/Notifications/NotificationsPage'));
+const LicenseVaultPage          = lazyPage(() => import('./components/LicenseVault/LicenseVaultPage'));
+const IntegrationsPage          = lazyPage(() => import('./components/Integrations/IntegrationsPage'));
+const AuditTrailPage            = lazyPage(() => import('./components/AuditTrail/AuditTrailPage'));
+const RoleManagementPage        = lazyPage(() => import('./components/Roles/RoleManagementPage'));
+const ContentCalendarPage       = lazyPage(() => import('./components/Calendar/ContentCalendarPage'));
+const TeamChatPage              = lazyPage(() => import('./components/Chat/TeamChatPage'));
+const DriftMonitorPage          = lazyPage(() => import('./components/DriftMonitor/DriftMonitorPage'));
+const ConsentManagementPage     = lazyPage(() => import('./components/ConsentManagement/ConsentManagementPage'));
+const ContentBlocksPage         = lazyPage(() => import('./components/ContentBlocks/ContentBlocksPage'));
+const AgencyPortalPage          = lazyPage(() => import('./components/AgencyPortal/AgencyPortalPage'));
+const ComplianceReportingPage   = lazyPage(() => import('./components/Reporting/ComplianceReportingPage'));
+const HorizonScanningPage       = lazyPage(() => import('./components/HorizonScanning/HorizonScanningPage'));
+const ChannelRulesPage          = lazyPage(() => import('./components/ChannelRules/ChannelRulesPage'));
+const RegulatoryLibraryPage     = lazyPage(() => import('./components/RegulatoryLibrary/RegulatoryLibraryPage'));
+const TranslationCompliancePage = lazyPage(() => import('./components/TranslationCompliance/TranslationCompliancePage'));
+const CrisisResponsePage        = lazyPage(() => import('./components/CrisisResponse/CrisisResponsePage'));
+const ProgrammaticAdPage        = lazyPage(() => import('./components/ProgrammaticAd/ProgrammaticAdPage'));
+const WhistleblowerPage         = lazyPage(() => import('./components/Whistleblower/WhistleblowerPage'));
+const PredictiveRiskPage        = lazyPage(() => import('./components/PredictiveRisk/PredictiveRiskPage'));
+const SocialListeningPage       = lazyPage(() => import('./components/SocialListening/SocialListeningPage'));
+const WebsiteMonitoringPage     = lazyPage(() => import('./components/WebsiteMonitoring/WebsiteMonitoringPage'));
+const VendorScorecardPage       = lazyPage(() => import('./components/VendorScorecard/VendorScorecardPage'));
+const CapaManagementPage        = lazyPage(() => import('./components/CapaManagement/CapaManagementPage'));
+const TrainingSimulationPage    = lazyPage(() => import('./components/TrainingSimulation/TrainingSimulationPage'));
+const ClaimExtractionPage       = lazyPage(() => import('./components/ClaimExtraction/ClaimExtractionPage'));
+const SecretVaultPage           = lazyPage(() => import('./components/Vault/SecretVaultPage'));
+const LegalMarketplacePage      = lazyPage(() => import('./components/Marketplace/LegalMarketplacePage'));
+const LegalPartnerDashboard     = lazyPage(() => import('./components/Marketplace/LegalPartnerDashboard'));
+const PartnerVerificationPage   = lazyPage(() => import('./components/Marketplace/PartnerVerificationPage'));
+const PolicyAssistantPage       = lazyPage(() => import('./components/PolicyAssistant/PolicyAssistantPage'));
+const GrcFrameworksPage         = lazyPage(() => import('./components/GrcFrameworks/GrcFrameworksPage'));
+const GrcControlsPage           = lazyPage(() => import('./components/GrcControls/GrcControlsPage'));
+const GrcDashboardPage          = lazyPage(() => import('./components/GrcDashboard/GrcDashboardPage'));
+const GrcAutomationPage         = lazyPage(() => import('./components/GrcAutomation/GrcAutomationPage'));
+const AIAssetsPage              = lazyPage(() => import('./components/Governance/AI/AIAssetsPage'));
+const AIAssetDetailPage         = lazyPage(() => import('./components/Governance/AI/AIAssetDetailPage'));
+const AIUsageLogsPage           = lazyPage(() => import('./components/Governance/AI/AIUsageLogsPage'));
+const AIReviewsPage             = lazyPage(() => import('./components/Governance/AI/AIReviewsPage'));
+const AIPromptTemplatesPage     = lazyPage(() => import('./components/Governance/AI/AIPromptTemplatesPage'));
+const AIIncidentsPage           = lazyPage(() => import('./components/Governance/AI/AIIncidentsPage'));
+const PoliciesPage              = lazyPage(() => import('./components/Governance/Policies/PoliciesPage'));
+const PolicyDetailPage          = lazyPage(() => import('./components/Governance/Policies/PolicyDetailPage'));
+const MyPoliciesPage            = lazyPage(() => import('./components/Governance/Policies/MyPoliciesPage'));
+const VendorsPage               = lazyPage(() => import('./components/Vendors/VendorsPage'));
+const VendorDetailPage          = lazyPage(() => import('./components/Vendors/VendorDetailPage'));
+const AuditSessionsPage         = lazyPage(() => import('./components/Governance/Audits/AuditSessionsPage'));
+const AuditSessionDetailPage    = lazyPage(() => import('./components/Governance/Audits/AuditSessionDetailPage'));
+const RiskRegisterPage          = lazyPage(() => import('./components/Governance/Risks/RiskRegisterPage'));
+const RiskDetailDrawer          = lazyPage(() => import('./components/Governance/Risks/RiskDetailDrawer'));
+const CommandCenterPage         = lazyPage(() => import('./components/Governance/CommandCenter/CommandCenterPage'));
+const ObligationListPage        = lazyPage(() => import('./components/Governance/Obligations/ObligationListPage'));
+const ObligationDetailPage      = lazyPage(() => import('./components/Governance/Obligations/ObligationDetailPage'));
+const IdentityProvidersPage     = lazyPage(() => import('./components/Governance/Identity/IdentityProvidersPage'));
+const PlatformJobsPage          = lazyPage(() => import('./components/Platform/PlatformJobsPage'));
+const RetentionPoliciesPage     = lazyPage(() => import('./components/Governance/Retention/RetentionPoliciesPage'));
+const LegalHoldsPage            = lazyPage(() => import('./components/Governance/LegalHold/LegalHoldsPage'));
+const GovernanceTimelinePage    = lazyPage(() => import('./components/Governance/Timeline/GovernanceTimelinePage'));
+const WebhooksPage              = lazyPage(() => import('./components/Platform/WebhooksPage'));
+const EvidenceIngestionsPage    = lazyPage(() => import('./components/Platform/EvidenceIngestionsPage'));
+const EcosystemHubPage          = lazyPage(() => import('./components/Platform/EcosystemHubPage'));
+const CompanySettingsPage       = lazyPage(() => import('./components/company/CompanySettingsPage'));
+const BillingPage               = lazyPage(() => import('./components/Billing/BillingPage'));
+const BatchReleasePage          = lazyPage(() => import('./components/BatchRelease/BatchReleasePage'));
+const ChangeControlPage         = lazyPage(() => import('./components/ChangeControl/ChangeControlPage'));
+const SopLibraryPage            = lazyPage(() => import('./components/SopLibrary/SopLibraryPage'));
+const ComingSoonPage            = lazyPage(() => import('./components/Common/ComingSoonPage'));
+const AIInsightsPage            = lazyPage(() => import('./components/Dashboard/AIInsightsPage'));
+const FrameworkLibraryPage      = lazyPage(() => import('./components/FrameworkLibrary/FrameworkLibraryPage'));
+const ControlHealthDashboard    = lazyPage(() => import('./components/ControlMonitoring/ControlHealthDashboard'));
+const RegulatoryAffairsPage     = lazyPage(() => import('./components/RegulatoryAffairs/RegulatoryAffairsPage'));
+const GmpInspectionPage         = lazyPage(() => import('./components/GmpInspection/GmpInspectionPage'));
+const SONCompliancePage         = lazyPage(() => import('./components/SONCompliance/SONCompliancePage'));
+const CTDDossierPage            = lazyPage(() => import('./components/CTDDossier/CTDDossierPage'));
+const ContrabandRejectionPage   = lazyPage(() => import('./components/ContrabandRejection/ContrabandRejectionPage'));
+const ShipmentEventLogPage      = lazyPage(() => import('./components/Logistics/ShipmentEventLogPage'));
+const CN2223DeclarationPage     = lazyPage(() => import('./components/Logistics/CN2223DeclarationPage'));
+const ComplianceAlertingPage    = lazyPage(() => import('./components/Alerts/ComplianceAlertingPage'));
+const AuditPrepPage             = lazyPage(() => import('./components/AuditPrep/AuditPrepPage'));
+const CoaRegisterPage           = lazyPage(() => import('./components/Coa/CoaRegisterPage'));
+const OrgManagementPanel        = lazyPage(() => import('./components/Enterprise/OrgManagementPanel'));
+const EnterpriseDashboardPage   = lazyPage(() => import('./components/Enterprise/EnterpriseDashboardPage'));
+const PharmaIntegrationsPage    = lazyPage(() => import('./components/PharmaIntegrations/PharmaIntegrationsPage'));
 
 type UnauthView = 'landing' | 'platform' | 'who' | 'about' | 'contact' | 'login' | 'signup';
 
@@ -226,6 +307,30 @@ function isValidPageId(value: any): value is PageId {
   );
 }
 
+/**
+ * What is shown while a page's chunk is in flight.
+ *
+ * It is deliberately small and in the content area. The full-screen
+ * splash is for "the app does not know who you are yet"; a page loading
+ * is not that, and borrowing the splash for it would make every
+ * navigation look like a cold start.
+ */
+function PageLoading() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading page"
+      style={{ display: 'grid', placeItems: 'center', minHeight: 320, padding: 32 }}
+    >
+      <svg width="28" height="28" viewBox="0 0 32 32" className="navy-btn-spinner"
+           style={{ color: 'var(--color-text-secondary, #8e8e8e)' }}>
+        <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor"
+                strokeWidth="3" strokeLinecap="round" strokeDasharray="61.26 20.42" />
+      </svg>
+    </div>
+  );
+}
+
 function AppContent() {
   const { user, profile, loading, isRecoveringPassword, refreshProfile, signOut } = useAuth();
 
@@ -255,6 +360,21 @@ function AppContent() {
     try {
       const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
       return SIGN_IN_PATHS.includes(path);
+    } catch {
+      return false;
+    }
+  })();
+
+  /*  /onboarding. The old /design/onboarding stays as a silent alias —
+      it was published in a commit message and may already have been
+      linked to, and a 404 for someone opening a link they were given is
+      not worth the tidiness of retiring it. */
+  const ONBOARDING_PATHS = ['/onboarding', '/design/onboarding'];
+
+  const wantsOnboardingHub = (() => {
+    try {
+      const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+      return ONBOARDING_PATHS.includes(path);
     } catch {
       return false;
     }
@@ -359,12 +479,29 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  /*  /onboarding — the v2 onboarding hub (ONB-00) as a viewer. It sits
+      ABOVE the auth gates on purpose: it holds no session, reads no
+      table and writes nothing, so waiting on an auth round-trip would
+      only make it slower to open. It is NOT yet the screen a new user
+      is routed to — see SetupHubPreview for why the hub cannot be the
+      live gate until the six step screens exist. */
+  /*  Signed OUT, or a build with no backend: the static viewer, which is
+      what makes /onboarding presentable without an account. Signed IN,
+      the same URL serves the REAL hub further down — same address, real
+      data, real routing. */
+  if (wantsOnboardingHub && (!isSupabaseConfigured || (!loading && !user))) {
+    return <SetupHubPreview />;
+  }
+
+  /*  Everything past this point needs a backend. Saying so beats a
+      spinner that never resolves or a login form that cannot work.
+      The hub above is served first because it needs no database. */
+  if (!isSupabaseConfigured) {
+    return <ConfigurationNeeded />;
+  }
+
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
-      </div>
-    );
+    return <BrandSplash />;
   }
 
   //  A recovery link signs the user in before they have proved they know a
@@ -491,18 +628,21 @@ function AppContent() {
     // never completed verification), give the user a way out instead of an
     // endless spinner.
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex flex-col items-center justify-center gap-6 px-4 text-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
-        <p className="text-white/90 text-sm max-w-sm">
-          Setting up your account… If this doesn’t finish, your sign-up may not have been verified.
-        </p>
-        <button
-          onClick={() => signOut()}
-          className="text-white/80 hover:text-white underline text-sm"
-        >
-          Sign out and try again
-        </button>
-      </div>
+      <BrandSplash
+        message="Setting up your account… If this doesn’t finish, your sign-up may not have been verified."
+        action={
+          <button
+            onClick={() => signOut()}
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', fontSize: 14,
+              color: 'var(--nv-text-primary)', textDecoration: 'underline',
+            }}
+          >
+            Sign out and try again
+          </button>
+        }
+      />
     );
   }
 
@@ -544,11 +684,28 @@ function AppContent() {
     !localStorage.getItem(setupDoneKey) &&
     ['Admin', 'Executive', 'Compliance'].includes(profile.role ?? '');
 
-  if (needsSetup) {
+  //  LOG IN → ONBOARDING. The hub from the Product Design file (ONB-00)
+  //  is what you land on after signing in, in the slot
+  //  CompanySetupChecklist used to hold. It never blocks: "Finish later"
+  //  opens the workspace and is remembered, so it does not reappear on
+  //  every sign-in. See SetupHubGate for which steps can be ticked and
+  //  why the other three cannot be yet.
+  //  /onboarding while signed in: the real hub, not the viewer. Shown
+  //  even once setup has been dismissed, so the address can be opened
+  //  deliberately — to demonstrate it, or to pick the setup back up.
+  if (wantsOnboardingHub || needsSetup) {
     return (
-      <CompanySetupChecklist
-        onComplete={(navigateTo?: string) => {
+      <SetupHubGate
+        companyId={profile?.company_id}
+        industryType={industryType}
+        jurisdiction={(profile as any)?.default_jurisdiction}
+        onFinish={(navigateTo?: string) => {
           localStorage.setItem(setupDoneKey, 'true');
+          //  Leaving the hub has to leave its ADDRESS too. The route is
+          //  read from window.location on every render, so finishing
+          //  while the bar still says /onboarding would land straight
+          //  back on the hub.
+          if (wantsOnboardingHub) window.history.replaceState({}, '', '/');
           if (navigateTo) {
             window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: navigateTo } }));
           }
@@ -938,7 +1095,15 @@ function AppContent() {
           <PageErrorFallback error={error as Error} onReset={resetError} />
         )}
       >
-        {renderPage()}
+        {/*  The page's own chunk is fetched here. The fallback is a
+             quiet in-place spinner, not the full-screen splash: the
+             sidebar, header and the page the user came from stay where
+             they are, so a page arriving does not look like the app
+             restarting. Keyed to currentPage so React does not hold the
+             previous page on screen while the next one loads.  */}
+        <Suspense fallback={<PageLoading />}>
+          {renderPage()}
+        </Suspense>
       </Sentry.ErrorBoundary>
       <RealtimePopups />
     </MainLayout>

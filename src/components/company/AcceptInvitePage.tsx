@@ -157,7 +157,12 @@ export default function AcceptInvitePage({ token, onGoLogin, onGoSignup, onDone 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#002D62] to-[#00A86B] flex items-center justify-center p-6">
+    /*  The brand's own ground, not the #002D62 → #00A86B gradient this
+        screen used to carry. See src/components/BrandSplash.tsx.  */
+    <div
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ background: 'var(--onboarding-glow)' }}
+    >
       <div className="w-full max-w-lg dash-card rounded-xl shadow-xl border dash-border p-6">
         <h1 className="text-xl font-bold dash-text">Accept Invite</h1>
 
