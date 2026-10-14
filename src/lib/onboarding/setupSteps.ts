@@ -33,6 +33,7 @@
 
 import { supabase } from '../supabase';
 import { logger } from '../logger';
+import { appUrl } from '../routing';
 
 export interface SetupState {
   companyName: string;
@@ -209,4 +210,54 @@ export async function markOnboardingComplete(userId: string): Promise<void> {
   const { error } = await (supabase as any)
     .from('profiles').update({ onboarding_completed: true }).eq('id', userId);
   if (error) logger.warn('[setup] could not mark onboarding complete', error.message);
+}
+
+/** The roles create_company_invite accepts, in the order the team screen
+ *  offers them. `viewer` is the least privileged and is the default. */
+export const INVITE_ROLES = ['viewer', 'marketing', 'legal', 'admin'] as const;
+export type InviteRole = typeof INVITE_ROLES[number];
+
+/**
+ * Invites someone to the company.
+ *
+ * Goes through create_company_invite, the same RPC the team screen uses,
+ * rather than writing company_invites directly: the RPC mints and hashes
+ * the token, sets the expiry and checks the caller may invite at all.
+ * A second definition of "an invite" is the last thing this needs.
+ *
+ * Returns the acceptance link when the RPC hands one back, because on a
+ * workspace with no mail configured that link is the only way the
+ * invitation reaches anybody.
+ */
+export async function inviteTeammate(
+  companyId: string,
+  email: string,
+  role: string,
+  moduleKeys: string[],
+): Promise<SaveResult & { link?: string }> {
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed.includes('@')) return { ok: false, message: 'Enter a valid email address.' };
+  if (moduleKeys.length === 0) {
+    return { ok: false, message: 'Choose at least one module for this person.' };
+  }
+
+  const { data, error } = await (supabase as any).rpc('create_company_invite', {
+    p_company_id: companyId,
+    p_email: trimmed,
+    p_role: role,
+    p_module_access: moduleKeys,
+    p_department_id: null,
+    p_expires_in_hours: 72,
+  });
+
+  if (error) return failed('inviteTeammate', error);
+
+  const row = (Array.isArray(data) ? data[0] : data) ?? {};
+  const token = (row as any).raw_token;
+  return token
+    //  Through appUrl: on a site served under a path prefix, a link to
+    //  /invite/accept points at the wrong host root and the invitation
+    //  is dead on arrival.
+    ? { ok: true, link: `${window.location.origin}${appUrl('/invite/accept')}?token=${token}` }
+    : { ok: true };
 }

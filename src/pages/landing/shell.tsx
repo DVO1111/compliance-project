@@ -13,6 +13,7 @@
  * of it as neutral haze.
  */
 
+import { appUrl } from '../../lib/routing';
 import { motion } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -86,8 +87,13 @@ export interface NavLink {
    Every consumer goes through these two constants: the nav lockup and footer
    below, the auth pages, and the hero mockup. Changing a path here changes
    all of them. */
-export const LOGO_ON_DARK = '/criateur-logo-ondark.svg';
-export const LOGO_LIGHT = '/criateur-logo-light.svg';
+//  Through appUrl() because the site is not always served from the root.
+//  On a GitHub Pages project site it lives under /<repo>/, where a
+//  leading-slash path points at the host root instead and every lockup
+//  on the site — nav, footer, auth pages, hero — shows a broken image.
+//  A broken logo is the first thing anyone notices.
+export const LOGO_ON_DARK = appUrl('/criateur-logo-ondark.svg');
+export const LOGO_LIGHT = appUrl('/criateur-logo-light.svg');
 
 export function BrandLockup({
   onClick, height = 40,

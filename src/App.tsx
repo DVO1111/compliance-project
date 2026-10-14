@@ -390,6 +390,17 @@ function AppContent() {
   const wantsOnboardingHub =
     onboardingPath === '/onboarding' || onboardingPath === '/design/onboarding';
 
+  /*  THE MARKETING SITE OWNS "/", SIGNED IN OR NOT.
+      criateur.com is the front door: whoever types it gets the landing
+      page. It used to depend on whether a session happened to be in the
+      browser, so a signed-in visitor got the product — or, once the hub
+      started claiming that slot, the onboarding screen under the
+      marketing address. The home page of a company's website should not
+      change depending on who is looking at it.
+      The product is reached by its own addresses: /login to sign in,
+      /onboarding to set up, and the workspace from there. */
+  const wantsLandingPage = onboardingPath === '/';
+
   //  /onboarding opens on the sign-in form for a signed-out visitor, the
   //  same as /portal does. "Take me to onboarding" and "take me to the
   //  product" are the same request when there is no session.
@@ -565,7 +576,12 @@ function AppContent() {
     );
   }
 
-  if (!user) {
+  //  THE MARKETING SITE, which owns "/" whether or not someone is signed
+  //  in, as well as every signed-out visit. Its sub-pages — Platform,
+  //  Who it's for, About, Contact — are state rather than addresses, so
+  //  they are served from inside this block too; routing "/" straight to
+  //  the landing component would have made them unreachable.
+  if (!user || wantsLandingPage) {
     //  Leaving the sign-in screen for the marketing site has to drop the
     //  /onboarding address with it. Otherwise the landing page renders
     //  under a URL that promises onboarding — which is exactly the
@@ -682,13 +698,23 @@ function AppContent() {
   }
 
   const setupDoneKey = `setup_done_${user?.id}`;
-  //  No longer requires onboarding_completed: the hub is now what sets
-  //  it, so requiring it here would mean the hub only appeared for
-  //  people who had already been through the wizard it replaces.
+
+  /*  WHO SEES ONBOARDING: anyone who has not finished it.
+      Two conditions used to narrow this and both were wrong for the
+      flow as it stands.
+        - onboarding_completed was required, from when the old wizard
+          ran first and set it. The hub is what sets it now.
+        - the role had to be Admin, Executive or Compliance. But
+          provision_profile writes the least-privileged role by design,
+          so the account a new signup creates was excluded from the
+          onboarding meant for new signups: signing in went straight to
+          an empty dashboard.
+      Finishing the hub sets onboarding_completed, and "Finish later" is
+      remembered per user, so neither path loops. */
   const needsSetup =
     profile &&
-    !localStorage.getItem(setupDoneKey) &&
-    ['Admin', 'Executive', 'Compliance'].includes(profile.role ?? '');
+    !profile.onboarding_completed &&
+    !localStorage.getItem(setupDoneKey);
 
   //  LOG IN → ONBOARDING. The v2 hub (ONB-00) is what you land on after
   //  signing in, and it is what /onboarding serves.

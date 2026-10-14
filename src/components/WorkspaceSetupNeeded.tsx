@@ -21,6 +21,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { appUrl } from '../lib/routing';
 import NavyButton from './Onboarding/navy/NavyButton';
 
 export default function WorkspaceSetupNeeded() {
@@ -59,7 +60,7 @@ export default function WorkspaceSetupNeeded() {
       fontFamily: 'var(--nv-font-body)',
     }}>
       <div style={{ width: '100%', maxWidth: 480 }}>
-        <img src="/criateur-logo-ondark.svg" alt="Criateur"
+        <img src={appUrl("/criateur-logo-ondark.svg")} alt="Criateur"
              style={{ width: 132, height: 'auto', marginBottom: 28 }} />
 
         <h1 style={{

@@ -12,6 +12,8 @@
  * it is a static screen that never touches the database.
  */
 
+import { appUrl } from '../lib/routing';
+
 export default function ConfigurationNeeded() {
   return (
     <div
@@ -27,7 +29,7 @@ export default function ConfigurationNeeded() {
     >
       <div style={{ maxWidth: 560 }}>
         <img
-          src="/criateur-logo-ondark.svg"
+          src={appUrl("/criateur-logo-ondark.svg")}
           alt="Criateur"
           style={{ width: 132, height: 'auto', marginBottom: 28 }}
         />
@@ -64,7 +66,7 @@ export default function ConfigurationNeeded() {
           color: 'var(--nv-text-tertiary)',
         }}>
           The onboarding hub needs no backend and is at{' '}
-          <a href="/onboarding" style={{ color: 'var(--nv-action-primary-bg)' }}>/onboarding</a>.
+          <a href={appUrl("/onboarding")} style={{ color: 'var(--nv-action-primary-bg)' }}>/onboarding</a>.
         </p>
       </div>
     </div>
