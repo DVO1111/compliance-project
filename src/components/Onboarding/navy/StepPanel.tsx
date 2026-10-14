@@ -14,11 +14,9 @@
  */
 
 import { useState } from 'react';
-import { INDUSTRY_OPTIONS, JURISDICTION_IDS, JURISDICTION_LABELS } from '../../../lib/regulatoryProfile';
 import { MODULE_DEFINITIONS } from '../../../lib/moduleAccess';
 import {
-  addDepartment, removeDepartment, saveCompanyName, saveIndustryRegion, saveModules,
-  inviteTeammate, INVITE_ROLES, type SetupState,
+  saveModules, inviteTeammate, INVITE_ROLES, type SetupState,
 } from '../../../lib/onboarding/setupSteps';
 import NavyButton from './NavyButton';
 
@@ -59,10 +57,6 @@ export interface StepPanelProps {
 export default function StepPanel(props: StepPanelProps) {
   const { stepId, state, companyId, userId, onSaved, onClose, onNavigate } = props;
 
-  const [companyName, setCompanyName] = useState(state.companyName);
-  const [industry, setIndustry] = useState(state.industryType ?? '');
-  const [jurisdiction, setJurisdiction] = useState(state.jurisdiction ?? '');
-  const [deptName, setDeptName] = useState('');
   const [modules, setModules] = useState<string[]>(state.modules);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<string>('viewer');
@@ -92,73 +86,10 @@ export default function StepPanel(props: StepPanelProps) {
       //  be a second, worse definition of the same two steps — which is
       //  exactly the duplication that put the old wizard in front of
       //  the new hub.
-      case 'sites-departments':
-        return (
-          <>
-            <p style={help}>
-              Departments raise records and drive document numbering. Add the ones that
-              will use Criateur.
-            </p>
-
-            {state.departments.length > 0 && (
-              <ul style={{ listStyle: 'none', margin: '0 0 16px', padding: 0, display: 'grid', gap: 8 }}>
-                {state.departments.map((d) => (
-                  <li key={d.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '10px 12px', borderRadius: 8,
-                    background: 'var(--nv-surface-recessed)',
-                    border: '1px solid var(--nv-border-default)',
-                    color: 'var(--nv-text-primary)', fontSize: 14,
-                  }}>
-                    <span style={{ flex: '1 1 0' }}>{d.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => run(() => removeDepartment(d.id), false)}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                        color: 'var(--nv-text-tertiary)', fontSize: 13,
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <label style={label} htmlFor="onb-dept">Add a department</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                id="onb-dept"
-                style={field}
-                value={deptName}
-                onChange={(e) => setDeptName(e.target.value)}
-                placeholder="Quality Control"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && deptName.trim()) {
-                    run(() => addDepartment(companyId, deptName), false).then(() => setDeptName(''));
-                  }
-                }}
-                autoFocus
-              />
-              <NavyButton
-                variant="outline"
-                loading={busy}
-                onClick={() => run(() => addDepartment(companyId, deptName), false).then(() => setDeptName(''))}
-              >
-                Add
-              </NavyButton>
-            </div>
-
-            <p style={{ ...help, marginTop: 12 }}>
-              Sites are not stored separately yet — there is no site record in the
-              database. Departments carry the structure until there is.
-            </p>
-
-            <Actions busy={busy} onClose={onClose} doneLabel="Done" onSave={onClose} />
-          </>
-        );
-
+      //  'sites-departments' is not here either: ONB-03 is a full
+      //  screen with its own four cards, and the panel that used to
+      //  stand in for it could store a department name and nothing
+      //  else — no site, no code, no categories.
       case 'modules':
         return (
           <>

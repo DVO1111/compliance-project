@@ -21,11 +21,13 @@ import { logger } from '../../../lib/logger';
 import { appPath, appUrl } from '../../../lib/routing';
 import {
   loadSetupState, completedFromState, markOnboardingComplete, loadCompanyDetails,
-  EMPTY_SETUP_STATE, type SetupState, type CompanyDetailsInput,
+  loadSitesStep,
+  EMPTY_SETUP_STATE, type SetupState, type CompanyDetailsInput, type SitesStepState,
 } from '../../../lib/onboarding/setupSteps';
 import { INDUSTRIES } from '../../../lib/onboarding/onboardingData';
 import StepCompanyDetails from './StepCompanyDetails';
 import StepIndustryRegion from './StepIndustryRegion';
+import StepSites from './StepSites';
 import SetupHub, { SETUP_STEPS } from './SetupHub';
 import BrandSplash from '../../BrandSplash';
 import StepPanel from './StepPanel';
@@ -43,6 +45,9 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
   //  ONB-01 reads its own fields, several of which the hub has no use
   //  for. Loaded when the step opens rather than on every hub render.
   const [companyDetails, setCompanyDetails] = useState<Partial<CompanyDetailsInput> | null>(null);
+  //  ONB-03 reads sites, department codes and the company's product
+  //  categories — three queries the hub itself has no use for.
+  const [sitesState, setSitesState] = useState<SitesStepState | null>(null);
 
   const refresh = useCallback(() => {
     if (!companyId) return;
@@ -69,6 +74,28 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
 
   const completed = completedFromState(state);
   const firstOpen = SETUP_STEPS.find((s) => completed[s.id] !== true);
+
+  //  Each full-page step reads its own fields. Opening one means clearing
+  //  what is held, fetching, and letting the step render once it is
+  //  there — so the fields never fill in under the person's cursor.
+  const openSites = useCallback(() => {
+    setSitesState(null);
+    setOpenStep('sites-departments');
+    loadSitesStep(companyId)
+      .then(setSitesState)
+      .catch(() => setSitesState({
+        sites: [], departments: [], productCategories: [], sitesUnavailable: false,
+      }));
+  }, [companyId]);
+
+  const openStepById = useCallback((id: string) => {
+    if (id === 'sites-departments') { openSites(); return; }
+    if (id === 'company-details') {
+      setCompanyDetails(null);
+      loadCompanyDetails(companyId, userId).then(setCompanyDetails).catch(() => setCompanyDetails({}));
+    }
+    setOpenStep(id);
+  }, [companyId, userId, openSites]);
 
   //  THE FIRST TWO STEPS ARE FULL PAGES, not panels over the hub.
   //  ONB-01 and ONB-02 are designed as their own screens — their own
@@ -97,6 +124,21 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
         userId={userId}
         initialIndustryId={current}
         onBack={() => setOpenStep('company-details')}
+        onDone={() => { refresh(); openSites(); }}
+      />
+    );
+  }
+
+  if (openStep === 'sites-departments' && companyId) {
+    //  Held until the stored sites are in hand: the empty state opens a
+    //  blank form, and opening one over a workspace that already has
+    //  sites would invite a duplicate.
+    if (sitesState === null) return <BrandSplash />;
+    return (
+      <StepSites
+        companyId={companyId}
+        initial={sitesState}
+        onBack={() => setOpenStep('industry-region')}
         onDone={() => { refresh(); setOpenStep(null); }}
       />
     );
@@ -106,21 +148,8 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
     <>
       <SetupHub
         completed={completed}
-        onOpenStep={(id) => {
-          if (id === 'company-details') {
-            setCompanyDetails(null);
-            loadCompanyDetails(companyId, userId).then(setCompanyDetails).catch(() => setCompanyDetails({}));
-          }
-          setOpenStep(id);
-        }}
-        onStartSetup={() => {
-          const id = firstOpen?.id ?? SETUP_STEPS[0].id;
-          if (id === 'company-details') {
-            setCompanyDetails(null);
-            loadCompanyDetails(companyId, userId).then(setCompanyDetails).catch(() => setCompanyDetails({}));
-          }
-          setOpenStep(id);
-        }}
+        onOpenStep={openStepById}
+        onStartSetup={() => openStepById(firstOpen?.id ?? SETUP_STEPS[0].id)}
         onFinishLater={() => {
           //  Finishing here is finishing onboarding. Without this the
           //  older wizard would claim the next visit, since it is what

@@ -170,3 +170,153 @@ export const ADMIN_ROLES: readonly string[] = [
   'Managing Director / CEO',
   'Other',
 ];
+
+// ── ONB-03 · Sites, departments and products ─────────────────────────
+
+/**
+ * The kinds of premises a site can be.
+ *
+ * The screen offers manufacturing and warehouse — "Add every factory
+ * and warehouse" — and those two are also what the "at least one"
+ * rule counts. Laboratory and office are here because a regulated
+ * business has them and a site that is neither a factory nor a
+ * warehouse must still be nameable rather than mislabelled as one.
+ *
+ * `countsTowardMinimum` is the rule from the notes, held as data on the
+ * option rather than as a list of ids somewhere else that could drift
+ * out of step with it.
+ */
+export interface SiteTypeOption {
+  id: string;
+  label: string;
+  /** The badge beside the site name on the card. */
+  badge: string;
+  countsTowardMinimum: boolean;
+}
+
+export const SITE_TYPES: readonly SiteTypeOption[] = [
+  { id: 'manufacturing', label: 'Manufacturing', badge: 'MANUFACTURING', countsTowardMinimum: true },
+  { id: 'warehouse',     label: 'Warehouse',     badge: 'WAREHOUSE',     countsTowardMinimum: true },
+  { id: 'laboratory',    label: 'Laboratory',    badge: 'LABORATORY',    countsTowardMinimum: false },
+  { id: 'office',        label: 'Office',        badge: 'OFFICE',        countsTowardMinimum: false },
+];
+
+export function siteTypeBadge(id: string): string {
+  return SITE_TYPES.find((t) => t.id === id)?.badge ?? id.toUpperCase();
+}
+
+/**
+ * The product categories, from the PRD list (A2.2).
+ *
+ * THE IDs ARE products.category, not labels. That column carries a
+ * CHECK constraint naming these exact nine values, so a category
+ * chosen here can be written to a product without translation — and a
+ * tenth invented on this screen would be refused by the database
+ * rather than quietly stored.
+ *
+ * Herbal / nutraceutical is called out by the notes because it is the
+ * one the generic lists leave out, and it is a large part of what
+ * NAFDAC regulates.
+ */
+export const PRODUCT_CATEGORIES: readonly { id: string; label: string }[] = [
+  { id: 'drug_pharmaceutical',  label: 'Drug / pharmaceutical' },
+  { id: 'herbal_nutraceutical', label: 'Herbal / nutraceutical' },
+  { id: 'food',                 label: 'Food' },
+  { id: 'cosmetic',             label: 'Cosmetic' },
+  { id: 'medical_device',       label: 'Medical device' },
+  { id: 'veterinary',           label: 'Veterinary' },
+  { id: 'biologic_vaccine',     label: 'Biologic / vaccine' },
+  { id: 'agro_chemical',        label: 'Agro-chemical' },
+  { id: 'other',                label: 'Other' },
+];
+
+export function productCategoryLabel(id: string): string {
+  return PRODUCT_CATEGORIES.find((c) => c.id === id)?.label ?? id;
+}
+
+/**
+ * The departments offered, and the code each one carries.
+ *
+ * "Departments raise records and set document numbers. We suggested the
+ * usual ones; rename or add your own."
+ *
+ * The code is the part that matters: it goes into CC-{DEPT}-{YYYY}-
+ * {NNNN} (B3.9, X6.2–X6.3). It is held separately from the name so that
+ * renaming "Quality Assurance" to "Quality Assurance (QA)" does not
+ * change the numbers already issued under it — see departments.code.
+ */
+export const SUGGESTED_DEPARTMENTS: readonly {
+  name: string; code: string;
+  /** Ticked when the screen first opens. */
+  on: boolean;
+}[] = [
+  { name: 'Quality Assurance',  code: 'QA',  on: true },
+  { name: 'Quality Control',    code: 'QC',  on: true },
+  { name: 'Production',         code: 'PRD', on: true },
+  { name: 'Regulatory Affairs', code: 'RA',  on: true },
+  { name: 'Warehouse',          code: 'WH',  on: true },
+  //  Off, as the design shows it. Not every regulated manufacturer runs
+  //  engineering as a department that raises records, and one unticked
+  //  chip is also what tells you the row is a set of toggles rather
+  //  than a list of facts.
+  { name: 'Engineering',        code: 'ENG', on: false },
+];
+
+/** What departments.code accepts: 2–8 upper-case letters or digits. */
+export const DEPARTMENT_CODE_PATTERN = /^[A-Z0-9]{2,8}$/;
+
+/**
+ * The two series the preview illustrates, and the department each one
+ * naturally belongs to.
+ *
+ * The design shows CC-QA-2026-0001 · SOP-PRD-2026-0001, and that pairing
+ * is not arbitrary: a change control is raised by Quality Assurance, and
+ * a standard operating procedure is written by the department that does
+ * the work. Holding the preference as data keeps the example meaningful
+ * when a workspace does not have those departments — then the preview
+ * falls back to whatever they do have, rather than naming a code the
+ * person never ticked.
+ */
+const PREVIEW_SERIES: readonly { prefix: string; prefers: string }[] = [
+  { prefix: 'CC',  prefers: 'QA' },
+  { prefix: 'SOP', prefers: 'PRD' },
+];
+
+/**
+ * The numbering preview under the department chips.
+ *
+ * Built from the codes actually selected. Untick Quality Assurance and
+ * the preview stops saying CC-QA-, because that series will not exist —
+ * showing a code nobody picked promises a numbering scheme the product
+ * will not use.
+ *
+ * The sequence is 0001 because it is the first record of the year, and
+ * the year is this one. Neither is a count of anything stored.
+ */
+export function numberingPreview(codes: readonly string[], year = new Date().getFullYear()): string[] {
+  if (codes.length === 0) return [];
+
+  const used = new Set<string>();
+  return PREVIEW_SERIES.map((series) => {
+    const code =
+      (codes.includes(series.prefers) && !used.has(series.prefers))
+        ? series.prefers
+        //  Any code not already on screen; with only one department
+        //  ticked, both lines show it rather than one line disappearing.
+        : codes.find((c) => !used.has(c)) ?? codes[0];
+    used.add(code);
+    return `${series.prefix}-${code}-${year}-0001`;
+  });
+}
+
+/**
+ * The optional import card.
+ *
+ * The notes mark it SHOULD and place it here "as an optional card, so
+ * it never blocks progress". They also say row validation is "pattern
+ * to be specified" — so this screen offers the template and the file
+ * picker and says plainly that nothing is imported yet, rather than
+ * inventing a validator whose rules nobody has decided.
+ */
+export const IMPORT_NOT_READY_NOTE =
+  'Importing isn’t switched on yet — the row checks are still being specified. Download the template now if it’s useful, and bring your file in from the dashboard when it is ready. Nothing here blocks you from continuing.';

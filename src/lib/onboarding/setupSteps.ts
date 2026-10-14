@@ -40,6 +40,10 @@ export interface SetupState {
   industryType: string | null;
   jurisdiction: string | null;
   departments: { id: string; name: string }[];
+  /** ONB-03 makes the site the thing that completes step 3, not the
+   *  department: "at least one manufacturing or warehouse site is
+   *  required to continue". */
+  siteCount: number;
   modules: string[];
   memberCount: number;
 }
@@ -49,6 +53,7 @@ export const EMPTY_SETUP_STATE: SetupState = {
   industryType: null,
   jurisdiction: null,
   departments: [],
+  siteCount: 0,
   modules: [],
   memberCount: 0,
 };
@@ -65,7 +70,7 @@ export async function loadSetupState(
 ): Promise<SetupState> {
   if (!companyId) return EMPTY_SETUP_STATE;
 
-  const [company, profile, departments, members, membership] = await Promise.all([
+  const [company, profile, departments, members, membership, sites] = await Promise.all([
     (supabase as any).from('companies').select('name').eq('id', companyId).maybeSingle(),
     userId
       ? (supabase as any)
@@ -91,11 +96,18 @@ export async function loadSetupState(
           .eq('user_id', userId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    //  Counted, not listed: the hub only needs to know whether step 3
+    //  has been done. A database without the sites table reports the
+    //  error, which is logged below and leaves the count at zero.
+    (supabase as any)
+      .from('sites')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId),
   ]);
 
   for (const [what, r] of [
     ['company', company], ['profile', profile], ['departments', departments],
-    ['members', members], ['membership', membership],
+    ['members', members], ['membership', membership], ['sites', sites],
   ] as const) {
     if (r?.error) logger.warn(`[setup] ${what} lookup failed`, r.error.message);
   }
@@ -107,6 +119,7 @@ export async function loadSetupState(
     industryType: (profile?.data as any)?.industry_type ?? null,
     jurisdiction: (profile?.data as any)?.default_jurisdiction ?? null,
     departments: ((departments?.data as any[]) ?? []).map((d) => ({ id: d.id, name: d.name })),
+    siteCount: sites?.count ?? 0,
     modules: Array.isArray(rawModules) ? rawModules : [],
     memberCount: members?.count ?? 0,
   };
@@ -123,7 +136,11 @@ export function completedFromState(state: SetupState): Record<string, boolean> {
   return {
     'company-details': state.companyName.trim().length > 0,
     'industry-region': Boolean(state.industryType && state.jurisdiction),
-    'sites-departments': state.departments.length > 0,
+    //  A site, not a department. ONB-03 requires at least one
+    //  manufacturing site or warehouse to continue, and departments come
+    //  pre-ticked — so ticking on a department would mark the step done
+    //  for a workspace that has entered nothing.
+    'sites-departments': state.siteCount > 0,
     'modules': state.modules.length > 0,
     'invite-team': state.memberCount > 1,
     //  Reviewing the pre-loaded records is an act, not a stored fact.
@@ -424,6 +441,206 @@ export async function saveIndustryAndRegion(
     //  Not fatal and not worth stopping the flow for: the regulators
     //  follow from the industry, which did save.
     logger.warn('[setup] regulators not stored', withRegulators.error.message);
+  }
+
+  return { ok: true };
+}
+
+// ── ONB-03 · Sites, departments and products ─────────────────────────
+
+export interface SiteInput {
+  /** Absent on a site that has not been saved yet. */
+  id?: string;
+  name: string;
+  siteType: string;
+  address: string;
+  productCategories: string[];
+  notes: string;
+}
+
+export interface DepartmentInput {
+  id?: string;
+  name: string;
+  /** Upper-case, 2–8 characters. Goes into CC-{CODE}-{YYYY}-{NNNN}. */
+  code: string;
+}
+
+export interface SitesStepState {
+  sites: SiteInput[];
+  departments: DepartmentInput[];
+  productCategories: string[];
+  /** True when this database has no `sites` table yet. */
+  sitesUnavailable: boolean;
+}
+
+/**
+ * The error PostgREST gives for a table or column this database has not
+ * been migrated to have. The sites table and the department code arrive
+ * in 20261019000000; a workspace that has not run it must be told what
+ * to run, not shown a blank screen.
+ */
+const MISSING_SCHEMA = (e: any): boolean =>
+  e?.code === '42P01' || e?.code === '42703' || e?.code === 'PGRST205' ||
+  /does not exist|could not find the/i.test(e?.message ?? '');
+
+export const SITES_MIGRATION_HINT =
+  'This workspace’s database doesn’t have the sites table yet. Run ' +
+  'scripts/fix/add-sites-and-department-codes.sql in the Supabase SQL editor, then reload.';
+
+/** Reads back everything ONB-03 shows. */
+export async function loadSitesStep(
+  companyId: string | null | undefined,
+): Promise<SitesStepState> {
+  const empty: SitesStepState = {
+    sites: [], departments: [], productCategories: [], sitesUnavailable: false,
+  };
+  if (!companyId) return empty;
+
+  const [sites, departments, company] = await Promise.all([
+    (supabase as any).from('sites')
+      .select('id, name, site_type, address, product_categories, notes')
+      .eq('company_id', companyId).order('created_at'),
+    (supabase as any).from('departments')
+      .select('id, name, code').eq('company_id', companyId).order('name'),
+    (supabase as any).from('companies')
+      .select('product_categories').eq('id', companyId).maybeSingle(),
+  ]);
+
+  if (sites?.error) logger.warn('[setup] sites lookup failed', sites.error.message);
+  if (departments?.error) logger.warn('[setup] departments lookup failed', departments.error.message);
+
+  //  A department list read without the code column still has names, so
+  //  fall back rather than losing the whole card.
+  const deptRows = departments?.error
+    ? ((await (supabase as any).from('departments').select('id, name')
+        .eq('company_id', companyId).order('name'))?.data ?? [])
+    : (departments?.data ?? []);
+
+  return {
+    sites: ((sites?.data as any[]) ?? []).map((s) => ({
+      id: s.id,
+      name: s.name ?? '',
+      siteType: s.site_type ?? 'manufacturing',
+      address: s.address ?? '',
+      productCategories: Array.isArray(s.product_categories) ? s.product_categories : [],
+      notes: s.notes ?? '',
+    })),
+    departments: (deptRows as any[]).map((d) => ({
+      id: d.id, name: d.name ?? '', code: d.code ?? '',
+    })),
+    productCategories: Array.isArray((company?.data as any)?.product_categories)
+      ? (company!.data as any).product_categories
+      : [],
+    sitesUnavailable: Boolean(sites?.error && MISSING_SCHEMA(sites.error)),
+  };
+}
+
+/**
+ * Saves ONB-03 in one act.
+ *
+ * The screen holds the whole list while it is being edited — adding a
+ * site, changing its type, removing one — and writes the result on
+ * Continue. So this RECONCILES rather than appends: rows the person
+ * removed are deleted, rows they changed are updated, new rows are
+ * inserted.
+ *
+ * A reconcile is the right shape here because the alternative, saving
+ * each edit as it happens, leaves half a site in the database when
+ * someone closes the tab mid-form — and a site is the axis that batch
+ * records hang off, so a half-made one is worse than none.
+ *
+ * Departments are the same list, with one difference: a department that
+ * already exists is never deleted here. It may already have issued
+ * document numbers, and deleting it would orphan them. Unticking a
+ * suggested chip that was never saved simply does not create it.
+ */
+export async function saveSitesStep(
+  companyId: string,
+  sites: SiteInput[],
+  departments: DepartmentInput[],
+  productCategories: string[],
+  existing: SitesStepState,
+): Promise<SaveResult> {
+  const named = sites.filter((s) => s.name.trim().length > 0);
+
+  // ── sites ──────────────────────────────────────────────────────────
+  const keptIds = new Set(named.map((s) => s.id).filter(Boolean) as string[]);
+  const removed = existing.sites
+    .map((s) => s.id)
+    .filter((id): id is string => typeof id === 'string' && !keptIds.has(id));
+
+  if (removed.length > 0) {
+    const { error } = await (supabase as any).from('sites').delete().in('id', removed);
+    if (error) return failed('saveSitesStep.delete', error);
+  }
+
+  for (const site of named) {
+    const row = {
+      company_id: companyId,
+      name: site.name.trim(),
+      site_type: site.siteType,
+      address: site.address.trim() || null,
+      product_categories: site.productCategories,
+      notes: site.notes.trim() || null,
+    };
+    const { error } = site.id
+      ? await (supabase as any).from('sites').update(row).eq('id', site.id)
+      : await (supabase as any).from('sites').insert(row);
+
+    if (error) {
+      if (MISSING_SCHEMA(error)) return { ok: false, message: SITES_MIGRATION_HINT };
+      if (error.code === '23505') {
+        return { ok: false, message: `You already have a site called “${row.name}”.` };
+      }
+      return failed('saveSitesStep.site', error);
+    }
+  }
+
+  // ── departments ────────────────────────────────────────────────────
+  const known = new Map(existing.departments.map((d) => [d.name.trim().toLowerCase(), d]));
+
+  for (const dept of departments) {
+    const name = dept.name.trim();
+    if (!name) continue;
+    const code = dept.code.trim().toUpperCase();
+    const already = known.get(name.toLowerCase());
+
+    const { error } = already?.id
+      ? await (supabase as any).from('departments').update({ code: code || null }).eq('id', already.id)
+      : await (supabase as any).from('departments')
+          .insert({ company_id: companyId, name, code: code || null });
+
+    if (error) {
+      //  A database without departments.code: the department itself is
+      //  what matters, so store it with the name alone and carry on.
+      if (MISSING_SCHEMA(error)) {
+        if (!already?.id) {
+          const retry = await (supabase as any).from('departments')
+            .insert({ company_id: companyId, name });
+          if (retry.error && retry.error.code !== '23505') {
+            return failed('saveSitesStep.department', retry.error);
+          }
+        }
+        logger.warn('[setup] department code not stored', error.message);
+        continue;
+      }
+      if (error.code === '23505') continue;  // already there, nothing to do
+      return failed('saveSitesStep.department', error);
+    }
+  }
+
+  // ── what the company makes ─────────────────────────────────────────
+  const categories = await (supabase as any).from('companies')
+    .update({ product_categories: productCategories }).eq('id', companyId);
+
+  if (categories.error) {
+    if (MISSING_SCHEMA(categories.error)) {
+      //  Not fatal: the sites and departments, which is what the next
+      //  steps read, are stored.
+      logger.warn('[setup] product categories not stored', categories.error.message);
+    } else {
+      return failed('saveSitesStep.categories', categories.error);
+    }
   }
 
   return { ok: true };
