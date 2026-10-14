@@ -46,6 +46,11 @@ export interface SetupState {
   siteCount: number;
   modules: string[];
   memberCount: number;
+  /** Invitations sent and not yet accepted. ONB-05 says people who
+   *  haven't accepted "show as pending", so a sent invitation is what
+   *  completes the step — waiting on someone else's inbox is not an
+   *  unfinished setup task. */
+  pendingInviteCount: number;
 }
 
 export const EMPTY_SETUP_STATE: SetupState = {
@@ -56,6 +61,7 @@ export const EMPTY_SETUP_STATE: SetupState = {
   siteCount: 0,
   modules: [],
   memberCount: 0,
+  pendingInviteCount: 0,
 };
 
 /**
@@ -70,7 +76,7 @@ export async function loadSetupState(
 ): Promise<SetupState> {
   if (!companyId) return EMPTY_SETUP_STATE;
 
-  const [company, profile, departments, members, membership, sites] = await Promise.all([
+  const [company, profile, departments, members, membership, sites, invites] = await Promise.all([
     (supabase as any).from('companies').select('name').eq('id', companyId).maybeSingle(),
     userId
       ? (supabase as any)
@@ -103,11 +109,18 @@ export async function loadSetupState(
       .from('sites')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId),
+    (supabase as any)
+      .from('company_invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .is('accepted_at', null)
+      .is('revoked_at', null),
   ]);
 
   for (const [what, r] of [
     ['company', company], ['profile', profile], ['departments', departments],
     ['members', members], ['membership', membership], ['sites', sites],
+    ['invites', invites],
   ] as const) {
     if (r?.error) logger.warn(`[setup] ${what} lookup failed`, r.error.message);
   }
@@ -122,6 +135,7 @@ export async function loadSetupState(
     siteCount: sites?.count ?? 0,
     modules: Array.isArray(rawModules) ? rawModules : [],
     memberCount: members?.count ?? 0,
+    pendingInviteCount: invites?.count ?? 0,
   };
 }
 
@@ -142,7 +156,10 @@ export function completedFromState(state: SetupState): Record<string, boolean> {
     //  for a workspace that has entered nothing.
     'sites-departments': state.siteCount > 0,
     'modules': state.modules.length > 0,
-    'invite-team': state.memberCount > 1,
+    //  A sent invitation counts. Someone else accepting it is not a
+    //  setup task this person can finish, and leaving the row unticked
+    //  until they do would read as "your invitation did not send".
+    'invite-team': state.memberCount > 1 || state.pendingInviteCount > 0,
     //  Reviewing the pre-loaded records is an act, not a stored fact.
     //  Nothing in the database distinguishes "read and kept" from "never
     //  opened", so this one is never ticked automatically.
@@ -644,4 +661,275 @@ export async function saveSitesStep(
   }
 
   return { ok: true };
+}
+
+// ── ONB-04 · Choose what you'll manage ───────────────────────────────
+
+/**
+ * Saves ONB-04.
+ *
+ * TWO COLUMNS, NOT ONE. `module_access` is what the permission system
+ * reads (moduleAccessToPermissions); `onboarding_areas` is what the
+ * person actually ticked. They are not the same list and neither can be
+ * derived from the other — several areas grant quality_operations, so a
+ * screen rebuilt from module_access would tick areas nobody chose.
+ *
+ * A database without onboarding_areas still gets the permissions, which
+ * is the half that changes what the product does. The ticks are what is
+ * lost, and they are recoverable by opening the step again.
+ */
+export async function saveAreas(
+  companyId: string,
+  userId: string,
+  areaIds: string[],
+  moduleKeys: string[],
+): Promise<SaveResult> {
+  if (areaIds.length === 0) {
+    return { ok: false, message: 'Switch on at least one area.' };
+  }
+
+  const { error } = await (supabase as any)
+    .from('company_members')
+    .update({ module_access: moduleKeys })
+    .eq('company_id', companyId)
+    .eq('user_id', userId);
+
+  if (error) return failed('saveAreas.modules', error);
+
+  const areas = await (supabase as any)
+    .from('company_members')
+    .update({ onboarding_areas: areaIds })
+    .eq('company_id', companyId)
+    .eq('user_id', userId);
+
+  if (areas.error) {
+    if (MISSING_SCHEMA(areas.error)) {
+      logger.warn('[setup] onboarding_areas not stored', areas.error.message);
+    } else {
+      return failed('saveAreas.areas', areas.error);
+    }
+  }
+
+  return { ok: true };
+}
+
+/** Reads back which areas are ticked, or null where nothing is stored. */
+export async function loadAreas(
+  companyId: string | null | undefined,
+  userId: string | null | undefined,
+): Promise<string[] | null> {
+  if (!companyId || !userId) return null;
+
+  const { data, error } = await (supabase as any)
+    .from('company_members')
+    .select('onboarding_areas')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    //  Missing column, or no membership row to read. Either way the
+    //  screen falls back to the industry's defaults, which is the right
+    //  starting point for someone who has not been here before.
+    logger.warn('[setup] areas lookup failed', error.message);
+    return null;
+  }
+
+  const raw = (data as any)?.onboarding_areas;
+  return Array.isArray(raw) && raw.length > 0 ? raw : null;
+}
+
+// ── ONB-05 · Invite your team ────────────────────────────────────────
+
+export interface TeamInviteInput {
+  email: string;
+  /** The PRD job title shown on the screen — "QC Analyst". */
+  jobTitle: string;
+  /** Empty means every site, which is what "All sites" means. */
+  siteIds: string[];
+  signsApplications: boolean;
+}
+
+export interface TeamInviteResult {
+  email: string;
+  ok: boolean;
+  /** Present when the workspace has no mail configured, so the link is
+   *  the only way the invitation reaches anybody. */
+  link?: string;
+  message?: string;
+}
+
+/**
+ * Sends the invitations ONB-05 collected.
+ *
+ * EACH PERSON IS SENT INDEPENDENTLY AND REPORTED INDEPENDENTLY. One bad
+ * address, or an admin seat limit reached on the third invitee, must not
+ * discard the two that worked — the screen shows which went and which
+ * did not, and the ones that went are not sent twice when the person
+ * fixes the failure and presses the button again.
+ *
+ * The role passed to create_company_invite is the PERMISSION level, and
+ * it is derived from the job title rather than taken from the screen:
+ * nothing a person types in a form should decide what they may approve.
+ */
+export async function sendTeamInvites(
+  companyId: string,
+  people: TeamInviteInput[],
+  moduleKeys: string[],
+  permissionRoleFor: (jobTitle: string) => string,
+): Promise<TeamInviteResult[]> {
+  const results: TeamInviteResult[] = [];
+
+  for (const person of people) {
+    const email = person.email.trim().toLowerCase();
+    if (!email) continue;
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      results.push({ email, ok: false, message: 'That doesn’t look like an email address.' });
+      continue;
+    }
+    if (!person.jobTitle) {
+      results.push({ email, ok: false, message: 'Choose a role for this person.' });
+      continue;
+    }
+
+    const { data, error } = await (supabase as any).rpc('create_company_invite', {
+      p_company_id: companyId,
+      p_email: email,
+      p_role: permissionRoleFor(person.jobTitle),
+      p_module_access: moduleKeys,
+      p_department_id: null,
+      p_expires_in_hours: 72,
+    });
+
+    if (error) {
+      logger.error('[setup] invite failed', error);
+      results.push({
+        email, ok: false,
+        message: error.code === '23505'
+          ? 'This person has already been invited.'
+          : (error.message ?? 'The invitation could not be created.'),
+      });
+      continue;
+    }
+
+    const row = (Array.isArray(data) ? data[0] : data) ?? {};
+    const inviteId = (row as any).invite_id;
+    const token = (row as any).raw_token;
+
+    //  The sites, the job title and the signatory flag are not
+    //  parameters of create_company_invite. They are written onto the
+    //  invite it just made, and a trigger carries them onto the
+    //  membership when the person accepts.
+    if (inviteId) {
+      const extras = await (supabase as any)
+        .from('company_invites')
+        .update({
+          site_ids: person.siteIds,
+          job_title: person.jobTitle,
+          signs_applications: person.signsApplications,
+        })
+        .eq('id', inviteId);
+
+      if (extras.error) {
+        logger.warn('[setup] invite extras not stored', extras.error.message);
+      }
+    }
+
+    results.push({
+      email, ok: true,
+      link: token
+        ? `${window.location.origin}${appUrl('/invite/accept')}?token=${token}`
+        : undefined,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * The admin's own row on ONB-05 — "Ada Okafor (you) · admin".
+ *
+ * They are already a member, so there is nothing to invite. What the row
+ * holds is their sites and whether they sign applications, and the
+ * second of those is a real control: the signatory register decides
+ * whose signature a submission will accept.
+ *
+ * Adding themselves is allowed because they are an admin, which is the
+ * same check the register's own policy makes. Taking themselves off is
+ * `removed_at`, never a delete — a register that forgets cannot answer
+ * "was this letter signed by someone authorised at the time".
+ */
+export async function saveOwnTeamRow(
+  companyId: string,
+  userId: string,
+  email: string,
+  fullName: string,
+  jobTitle: string,
+  siteIds: string[],
+  signsApplications: boolean,
+): Promise<SaveResult> {
+  const member = await (supabase as any)
+    .from('company_members')
+    .update({ site_ids: siteIds, job_title: jobTitle || null })
+    .eq('company_id', companyId)
+    .eq('user_id', userId);
+
+  if (member.error && !MISSING_SCHEMA(member.error)) {
+    return failed('saveOwnTeamRow.member', member.error);
+  }
+
+  const existing = await (supabase as any)
+    .from('authorised_signatories')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .is('removed_at', null)
+    .maybeSingle();
+
+  if (existing.error) {
+    if (MISSING_SCHEMA(existing.error)) {
+      logger.warn('[setup] signatory register unavailable', existing.error.message);
+      return { ok: true };
+    }
+    return failed('saveOwnTeamRow.read', existing.error);
+  }
+
+  const onRegister = Boolean((existing.data as any)?.id);
+
+  if (signsApplications && !onRegister) {
+    const { error } = await (supabase as any).from('authorised_signatories').insert({
+      company_id: companyId,
+      user_id: userId,
+      email: email.trim().toLowerCase(),
+      full_name: fullName.trim() || null,
+      job_title: jobTitle || null,
+      added_by: userId,
+    });
+    if (error) return failed('saveOwnTeamRow.add', error);
+  }
+
+  if (!signsApplications && onRegister) {
+    const { error } = await (supabase as any)
+      .from('authorised_signatories')
+      .update({ removed_at: new Date().toISOString(), removed_by: userId })
+      .eq('id', (existing.data as any).id);
+    if (error) return failed('saveOwnTeamRow.remove', error);
+  }
+
+  return { ok: true };
+}
+
+/** The sites ONB-05's dropdown offers, newest last. */
+export async function loadSiteOptions(
+  companyId: string | null | undefined,
+): Promise<{ id: string; name: string }[]> {
+  if (!companyId) return [];
+  const { data, error } = await (supabase as any)
+    .from('sites').select('id, name').eq('company_id', companyId).order('created_at');
+  if (error) {
+    logger.warn('[setup] site options unavailable', error.message);
+    return [];
+  }
+  return ((data as any[]) ?? []).map((s) => ({ id: s.id, name: s.name }));
 }

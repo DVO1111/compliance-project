@@ -21,13 +21,16 @@ import { logger } from '../../../lib/logger';
 import { appPath, appUrl } from '../../../lib/routing';
 import {
   loadSetupState, completedFromState, markOnboardingComplete, loadCompanyDetails,
-  loadSitesStep,
+  loadSitesStep, loadAreas, loadSiteOptions,
   EMPTY_SETUP_STATE, type SetupState, type CompanyDetailsInput, type SitesStepState,
 } from '../../../lib/onboarding/setupSteps';
 import { INDUSTRIES } from '../../../lib/onboarding/onboardingData';
+import { defaultAreasFor, modulesForAreas } from '../../../lib/onboarding/onboardingAreas';
 import StepCompanyDetails from './StepCompanyDetails';
 import StepIndustryRegion from './StepIndustryRegion';
 import StepSites from './StepSites';
+import StepModules from './StepModules';
+import StepInviteTeam, { type SiteOption } from './StepInviteTeam';
 import SetupHub, { SETUP_STEPS } from './SetupHub';
 import BrandSplash from '../../BrandSplash';
 import StepPanel from './StepPanel';
@@ -35,11 +38,13 @@ import StepPanel from './StepPanel';
 export interface SetupHubGateProps {
   companyId: string | null | undefined;
   userId: string | null | undefined;
+  /** The signed-in person, for ONB-05's "(you)" row. */
+  me?: { email: string; fullName: string; jobTitle: string };
   /** Dismisses the hub and opens the workspace, optionally on a page. */
   onFinish: (navigateTo?: string) => void;
 }
 
-export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGateProps) {
+export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupHubGateProps) {
   const [state, setState] = useState<SetupState>(EMPTY_SETUP_STATE);
   const [openStep, setOpenStep] = useState<string | null>(null);
   //  ONB-01 reads its own fields, several of which the hub has no use
@@ -48,6 +53,11 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
   //  ONB-03 reads sites, department codes and the company's product
   //  categories — three queries the hub itself has no use for.
   const [sitesState, setSitesState] = useState<SitesStepState | null>(null);
+  //  ONB-04 reads back which areas are ticked; null means "nothing
+  //  stored", which is the industry's defaults rather than an empty set.
+  const [areas, setAreas] = useState<string[] | null | undefined>(undefined);
+  //  ONB-05 needs the sites from step 3 for its SITES column.
+  const [siteOptions, setSiteOptions] = useState<SiteOption[] | null>(null);
 
   const refresh = useCallback(() => {
     if (!companyId) return;
@@ -88,14 +98,36 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
       }));
   }, [companyId]);
 
+  const openModules = useCallback(() => {
+    setAreas(undefined);
+    setOpenStep('modules');
+    loadAreas(companyId, userId).then(setAreas).catch(() => setAreas(null));
+  }, [companyId, userId]);
+
+  const openTeam = useCallback(() => {
+    setSiteOptions(null);
+    setAreas(undefined);
+    setOpenStep('invite-team');
+    //  Both: the SITES column comes from step 3, and the areas decide
+    //  what an invited person can reach.
+    loadSiteOptions(companyId).then(setSiteOptions).catch(() => setSiteOptions([]));
+    loadAreas(companyId, userId).then(setAreas).catch(() => setAreas(null));
+  }, [companyId, userId]);
+
   const openStepById = useCallback((id: string) => {
     if (id === 'sites-departments') { openSites(); return; }
+    if (id === 'modules') { openModules(); return; }
+    if (id === 'invite-team') { openTeam(); return; }
     if (id === 'company-details') {
       setCompanyDetails(null);
       loadCompanyDetails(companyId, userId).then(setCompanyDetails).catch(() => setCompanyDetails({}));
     }
     setOpenStep(id);
-  }, [companyId, userId, openSites]);
+  }, [companyId, userId, openSites, openModules, openTeam]);
+
+  //  ONB-04 and ONB-05 both need to know the industry: it decides which
+  //  areas exist at all, and the areas decide what an invitee can reach.
+  const industryId = INDUSTRIES.find((i) => i.value === state.industryType)?.id ?? 'pharma';
 
   //  THE FIRST TWO STEPS ARE FULL PAGES, not panels over the hub.
   //  ONB-01 and ONB-02 are designed as their own screens — their own
@@ -139,6 +171,36 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
         companyId={companyId}
         initial={sitesState}
         onBack={() => setOpenStep('industry-region')}
+        onDone={() => { refresh(); openModules(); }}
+      />
+    );
+  }
+
+  if (openStep === 'modules' && companyId && userId) {
+    if (areas === undefined) return <BrandSplash />;
+    return (
+      <StepModules
+        companyId={companyId}
+        userId={userId}
+        industryId={industryId}
+        initialAreas={areas ?? defaultAreasFor(industryId)}
+        onBack={openSites}
+        onDone={() => { refresh(); openTeam(); }}
+      />
+    );
+  }
+
+  if (openStep === 'invite-team' && companyId && userId) {
+    if (areas === undefined || siteOptions === null) return <BrandSplash />;
+    const chosen = areas ?? defaultAreasFor(industryId);
+    return (
+      <StepInviteTeam
+        companyId={companyId}
+        userId={userId}
+        me={me ?? { email: '', fullName: '', jobTitle: '' }}
+        sites={siteOptions}
+        moduleKeys={modulesForAreas(chosen)}
+        onBack={openModules}
         onDone={() => { refresh(); setOpenStep(null); }}
       />
     );

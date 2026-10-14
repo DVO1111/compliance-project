@@ -32,6 +32,10 @@ export interface IndustryOption {
   iconName: string;
   /** False for "Other regulated manufacturer", which seeds nothing. */
   hasTemplate: boolean;
+  /** How the people in this industry are named, for headings such as
+   *  ONB-04's "Recommended for pharmaceutical manufacturers". Written
+   *  out rather than derived: "manufacturing" + "s" is not a word. */
+  plural: string;
 }
 
 /**
@@ -46,6 +50,7 @@ export const INDUSTRIES: readonly IndustryOption[] = [
     description: 'Drugs, herbal and nutraceutical products made under NAFDAC GMP.',
     iconName: 'regulatory/product',
     hasTemplate: true,
+    plural: 'pharmaceutical manufacturers',
   },
   {
     id: 'food',
@@ -54,6 +59,7 @@ export const INDUSTRIES: readonly IndustryOption[] = [
     description: 'Food, drinks and packaged water under NAFDAC and SON.',
     iconName: 'quality/water',
     hasTemplate: true,
+    plural: 'food and beverage manufacturers',
   },
   {
     id: 'importer',
@@ -62,6 +68,7 @@ export const INDUSTRIES: readonly IndustryOption[] = [
     description: 'You hold marketing authorisations for products made elsewhere.',
     iconName: 'regulatory/import-permit',
     hasTemplate: true,
+    plural: 'importers and distributors',
   },
   {
     id: 'other',
@@ -70,6 +77,7 @@ export const INDUSTRIES: readonly IndustryOption[] = [
     description: 'Cosmetics, devices, agro-chemicals. No starter template yet, so you start empty.',
     iconName: 'quality/master-formula',
     hasTemplate: false,
+    plural: 'regulated manufacturers',
   },
 ];
 

@@ -36,11 +36,20 @@ export interface OnboardingShellProps {
   onContinue: () => void;
   continueLabel?: string;
   continueBusy?: boolean;
+  /** A second low-emphasis action beside Continue — ONB-05's "Skip for
+   *  now", which is a way past the step, not a way back from it, so it
+   *  belongs on the right with the primary rather than on the left. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  /** One line under the footer. ONB-04 counts what is switched on
+   *  there, where it stays true as the ticks change. */
+  footnote?: string;
 }
 
 export default function OnboardingShell({
   step, totalSteps = 6, stepLabel, title, subtitle, children,
   backLabel, onBack, onContinue, continueLabel = 'Continue', continueBusy = false,
+  secondaryLabel, onSecondary, footnote,
 }: OnboardingShellProps) {
   //  0% on step 1, 17% on step 2 — progress through the flow, not
   //  including the step being filled in.
@@ -127,13 +136,25 @@ export default function OnboardingShell({
       {/* ── Footer: low emphasis left, primary right ───────────────── */}
       <footer style={{
         width: '100%', maxWidth: 680,
-        display: 'flex', alignItems: 'center', gap: 16,
+        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
         marginTop: 28,
       }}>
         <NavyButton variant="ghost" onClick={onBack}>{backLabel}</NavyButton>
         <div style={{ flex: '1 1 0' }} />
+        {secondaryLabel && onSecondary && (
+          <NavyButton variant="ghost" onClick={onSecondary}>{secondaryLabel}</NavyButton>
+        )}
         <NavyButton onClick={onContinue} loading={continueBusy}>{continueLabel}</NavyButton>
       </footer>
+
+      {footnote && (
+        <p style={{
+          width: '100%', maxWidth: 680, margin: '16px 0 0', textAlign: 'center',
+          fontSize: 13, lineHeight: '19px', color: 'var(--nv-text-tertiary)',
+        }}>
+          {footnote}
+        </p>
+      )}
     </div>
   );
 }
