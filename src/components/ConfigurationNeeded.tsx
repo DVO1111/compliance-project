@@ -56,9 +56,18 @@ export default function ConfigurationNeeded() {
           fontSize: 14, lineHeight: '22px',
           color: 'var(--nv-text-secondary)',
         }}>
-          <li>Netlify → Site configuration → Environment variables → Add a variable</li>
-          <li>Add both keys, scoped to all deploy contexts</li>
-          <li>Deploys → Trigger deploy → Clear cache and deploy site</li>
+          {/*  Two hosts, because this site is published from both and
+              the person reading this screen has no way to tell which
+              deploy they are looking at.  */}
+          <li>
+            GitHub → Settings → Secrets and variables → Actions → add both as
+            repository secrets, then Actions → GitHub Pages → Run workflow
+          </li>
+          <li>
+            or Netlify → Site configuration → Environment variables → add both,
+            scoped to all deploy contexts, then Deploys → Trigger deploy →
+            Clear cache and deploy site
+          </li>
         </ol>
         <p style={{
           margin: '20px 0 0',
