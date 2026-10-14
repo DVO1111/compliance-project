@@ -18,7 +18,6 @@ import type { MarketingPage } from './pages/landing/shell';
 import LoginPage from './components/Auth/LoginPage';
 import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import SignupPage from './components/Auth/SignupPage';
-import OnboardingWizard from './components/Onboarding/OnboardingWizard';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
 import BrandSplash from './components/BrandSplash';
 import ConfigurationNeeded from './components/ConfigurationNeeded';
@@ -770,12 +769,6 @@ function AppContent() {
         }}
       />
     );
-  }
-
-  //  The old wizard. Reachable only for someone who is not being sent
-  //  to the hub — the hub above supersedes it for new accounts.
-  if (profile && !profile.onboarding_completed) {
-    return <OnboardingWizard onComplete={async () => refreshProfile()} />;
   }
 
   const renderPage = () => {
