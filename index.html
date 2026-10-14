@@ -95,12 +95,24 @@
 
         var config = /Missing Supabase environment variables/i.test(String(firstError));
 
+        //  WHERE THE SITE IS SERVED FROM, worked out rather than assumed.
+        //  This script is a string inside index.html, so Vite does not
+        //  rewrite the paths in it the way it rewrites a real href — and
+        //  on a GitHub Pages project site the app lives under /<repo>/,
+        //  where a leading-slash path points at the wrong host root and
+        //  the logo silently fails to load. The favicon link above IS
+        //  rewritten at build time, so it is the one reliable witness to
+        //  the base this build was given.
+        var iconHref = (document.querySelector('link[rel=\"icon\"]') || {}).getAttribute
+          ? document.querySelector('link[rel=\"icon\"]').getAttribute('href') : '';
+        var base = iconHref ? iconHref.replace(/favicon[^/]*$/, '') : '/';
+
         root.innerHTML =
           '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
           'padding:24px;background:#0d1933;color:#fbf9f5;' +
           'font-family:system-ui,-apple-system,Segoe UI,sans-serif;text-align:left">' +
             '<div style="max-width:560px">' +
-              '<img src="/criateur-logo-ondark.svg" alt="Criateur" style="width:132px;height:auto;margin-bottom:28px">' +
+              '<img src="' + base + 'criateur-logo-ondark.svg" alt="Criateur" style="width:132px;height:auto;margin-bottom:28px">' +
               '<h1 style="margin:0 0 12px;font-size:20px;line-height:28px;font-weight:600">' +
                 (config ? 'This build is missing its configuration' : 'This page could not start') +
               '</h1>' +

@@ -23,6 +23,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { appUrl } from '../lib/routing';
 
 export interface BrandSplashProps {
   /** Shown under the spinner. Omitted on the plain loading state, where
@@ -50,7 +51,7 @@ export default function BrandSplash({ message, action }: BrandSplashProps) {
       }}
     >
       <img
-        src="/criateur-logo-ondark.svg"
+        src={appUrl("/criateur-logo-ondark.svg")}
         alt="Criateur"
         style={{ width: 140, height: 'auto' }}
       />

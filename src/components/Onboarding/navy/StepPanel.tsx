@@ -18,7 +18,7 @@ import { INDUSTRY_OPTIONS, JURISDICTION_IDS, JURISDICTION_LABELS } from '../../.
 import { MODULE_DEFINITIONS } from '../../../lib/moduleAccess';
 import {
   addDepartment, removeDepartment, saveCompanyName, saveIndustryRegion, saveModules,
-  type SetupState,
+  inviteTeammate, INVITE_ROLES, type SetupState,
 } from '../../../lib/onboarding/setupSteps';
 import NavyButton from './NavyButton';
 
@@ -64,6 +64,9 @@ export default function StepPanel(props: StepPanelProps) {
   const [jurisdiction, setJurisdiction] = useState(state.jurisdiction ?? '');
   const [deptName, setDeptName] = useState('');
   const [modules, setModules] = useState<string[]>(state.modules);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<string>('viewer');
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -266,16 +269,103 @@ export default function StepPanel(props: StepPanelProps) {
         );
 
       case 'invite-team':
+        //  Invites are issued HERE rather than by sending the person to
+        //  the team screen. Bouncing out of onboarding into another
+        //  part of the product, mid-flow, is how a setup gets abandoned
+        //  — and the screen it landed on is the old design, which makes
+        //  the new one look like a shell over it.
         return (
           <>
             <p style={help}>
-              Invitations are sent from the team screen, where you set each person’s role
-              and site.
+              Add a colleague. Their role decides what they can approve, sign and release;
+              the modules decide what they see. Both can be changed later.
             </p>
+
+            <label style={label} htmlFor="onb-invite-email">Work email</label>
+            <input
+              id="onb-invite-email"
+              type="email"
+              style={field}
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="colleague@company.com"
+              autoFocus
+            />
+
+            <div style={{ height: 16 }} />
+            <label style={label} htmlFor="onb-invite-role">Role</label>
+            <select id="onb-invite-role" style={field} value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}>
+              {INVITE_ROLES.map((r) => (
+                <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>
+              ))}
+            </select>
+
+            <div style={{ height: 16 }} />
+            <p style={{ ...label, marginBottom: 8 }}>What they can see</p>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {MODULE_DEFINITIONS.map((m) => {
+                const on = modules.includes(m.key);
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setModules((cur) =>
+                      cur.includes(m.key) ? cur.filter((k) => k !== m.key) : [...cur, m.key])}
+                    style={{
+                      display: 'flex', gap: 10, alignItems: 'center', textAlign: 'left',
+                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                      background: on ? 'var(--nv-surface-hover)' : 'var(--nv-surface-recessed)',
+                      border: on
+                        ? '1.5px solid var(--nv-action-primary-bg)'
+                        : '1px solid var(--nv-border-default)',
+                      color: 'var(--nv-text-primary)',
+                      fontFamily: 'var(--nv-font-body)', fontSize: 13,
+                    }}
+                  >
+                    <span aria-hidden="true" style={{
+                      width: 16, height: 16, borderRadius: 4, flex: 'none',
+                      display: 'grid', placeItems: 'center',
+                      background: on ? 'var(--nv-action-primary-bg)' : 'transparent',
+                      border: on ? 'none' : '1px solid var(--nv-border-strong)',
+                      color: 'var(--nv-action-primary-text)', fontSize: 11, fontWeight: 700,
+                    }}>{on ? '✓' : ''}</span>
+                    {m.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/*  The link is shown because a workspace with no mail set up
+                has no other way to deliver the invitation.  */}
+            {inviteLink && (
+              <div style={{ marginTop: 16 }}>
+                <p style={{ ...help, margin: '0 0 6px' }}>
+                  Invitation created. Send them this link — it expires in 72 hours.
+                </p>
+                <input
+                  readOnly
+                  value={inviteLink}
+                  onFocus={(e) => e.currentTarget.select()}
+                  style={{ ...field, fontFamily: 'var(--nv-font-mono)', fontSize: 12 }}
+                />
+              </div>
+            )}
+
             <Actions
               busy={busy}
-              doneLabel="Open the team screen"
-              onSave={() => onNavigate('company-invites')}
+              doneLabel="Send invitation"
+              onSave={() => {
+                setBusy(true);
+                setError(null);
+                inviteTeammate(companyId, inviteEmail, inviteRole, modules).then((r) => {
+                  setBusy(false);
+                  if (!r.ok) { setError(r.message); return; }
+                  setInviteLink(r.link ?? null);
+                  setInviteEmail('');
+                  onSaved();
+                });
+              }}
               onClose={onClose}
             />
           </>

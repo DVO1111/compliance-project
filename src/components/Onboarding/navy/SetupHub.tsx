@@ -44,6 +44,7 @@
  */
 
 import { useMemo } from 'react';
+import { appUrl } from '../../../lib/routing';
 import { ICONS, iconProps } from '../../../lib/design/icons';
 import StepRow, { type StepState } from './StepRow';
 import NavyButton from './NavyButton';
@@ -197,7 +198,7 @@ export default function SetupHub({
       {/* ── Header ─────────────────────────────────────────────────── */}
       <header style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', maxWidth: 680, width: '100%' }}>
         <img
-          src="/criateur-logo-ondark.svg"
+          src={appUrl("/criateur-logo-ondark.svg")}
           alt="Criateur"
           /*  140 px on onboarding, per the logo component's description;
               120 px on mobile, per the adaptation rules. Both stay above
