@@ -23,7 +23,27 @@
 #      enough for people, not for crawlers.
 #    - A project site lives under /<repo>/, so the build sets
 #      VITE_BASE_PATH and the app strips that prefix when it reads the
-#      route. With a custom domain the base would be '/' instead.
+#      route. With a custom domain the base is '/' instead.
+#
+#  SERVING criateur.com FROM HERE
+#  ------------------------------
+#  Set a repository VARIABLE — Settings → Secrets and variables →
+#  Actions → Variables — named PAGES_CUSTOM_DOMAIN, with the bare
+#  domain as its value:
+#
+#      PAGES_CUSTOM_DOMAIN = criateur.com
+#
+#  With it set, this builds for the domain root and writes a CNAME
+#  file into the artifact. With it unset, nothing changes and the site
+#  stays at <user>.github.io/<repo>/.
+#
+#  IT IS A VARIABLE AND NOT A HARD-CODED VALUE so that the switch can
+#  be made, and unmade, without a commit. Flipping the base path in
+#  code before the DNS records resolve would take down the working
+#  github.io URL and leave nothing serving in its place.
+#
+#  The DNS records and the Settings → Pages → Custom domain field are
+#  the other half, and neither can be done from a workflow.
 
 name: GitHub Pages
 
@@ -61,10 +81,19 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          #  A project site is served under /<repo>/. The trailing slash
-          #  matters to Vite.
-          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          #  A custom domain serves the site at its root; a project site
+          #  is served under /<repo>/. The trailing slash matters to
+          #  Vite either way.
+          VITE_BASE_PATH: ${{ vars.PAGES_CUSTOM_DOMAIN != '' && '/' || format('/{0}/', github.event.repository.name) }}
         run: npm run build
+
+      - name: Custom domain
+        #  Pages stores the domain in its own settings, but a deploy that
+        #  carries no CNAME has been known to clear it. Writing the file
+        #  costs nothing and makes the artifact self-describing: whatever
+        #  is serving it knows which name it answers to.
+        if: vars.PAGES_CUSTOM_DOMAIN != ''
+        run: echo "${{ vars.PAGES_CUSTOM_DOMAIN }}" > dist/CNAME
 
       - name: Fail if the build has no Supabase configuration
         #  Without the two secrets the bundle still builds and the site
