@@ -85,70 +85,13 @@ export default function StepPanel(props: StepPanelProps) {
 
   const body = () => {
     switch (stepId) {
-      case 'company-details':
-        return (
-          <>
-            <p style={help}>
-              This is the name that appears on certificates of analysis and regulatory
-              applications.
-            </p>
-            <label style={label} htmlFor="onb-company">Legal company name</label>
-            <input
-              id="onb-company"
-              style={field}
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Criateur Pharmaceuticals Limited"
-              autoFocus
-            />
-            {/*  Said plainly rather than offered and discarded: there is
-                nowhere to store either field yet.  */}
-            <p style={{ ...help, marginTop: 12 }}>
-              CAC registration number and head office are not stored yet — the company
-              record holds a name only. They arrive with the schema change that adds them.
-            </p>
-            <Actions
-              busy={busy}
-              onSave={() => run(() => saveCompanyName(companyId, companyName))}
-              onClose={onClose}
-            />
-          </>
-        );
-
-      case 'industry-region':
-        return (
-          <>
-            <p style={help}>
-              We pre-load the regulators, obligations, policies and risks that apply to
-              this choice.
-            </p>
-            <label style={label} htmlFor="onb-industry">Industry</label>
-            <select id="onb-industry" style={field} value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}>
-              <option value="">Choose an industry…</option>
-              {INDUSTRY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-
-            <div style={{ height: 16 }} />
-            <label style={label} htmlFor="onb-region">Where you operate</label>
-            <select id="onb-region" style={field} value={jurisdiction}
-                    onChange={(e) => setJurisdiction(e.target.value)}>
-              <option value="">Choose a region…</option>
-              {JURISDICTION_IDS.map((j) => (
-                <option key={j} value={j}>{JURISDICTION_LABELS[j]}</option>
-              ))}
-            </select>
-
-            <Actions
-              busy={busy}
-              onSave={() => run(() => saveIndustryRegion(userId, industry, jurisdiction))}
-              onClose={onClose}
-            />
-          </>
-        );
-
+      //  'company-details' and 'industry-region' are NOT here. They are
+      //  ONB-01 and ONB-02, full screens of their own with their own
+      //  step counters and footers, routed before this panel is ever
+      //  reached (see SetupHubGate). Leaving stubs for them here would
+      //  be a second, worse definition of the same two steps — which is
+      //  exactly the duplication that put the old wizard in front of
+      //  the new hub.
       case 'sites-departments':
         return (
           <>

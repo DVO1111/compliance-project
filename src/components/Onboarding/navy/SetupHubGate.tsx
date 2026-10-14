@@ -20,10 +20,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { logger } from '../../../lib/logger';
 import { appPath, appUrl } from '../../../lib/routing';
 import {
-  loadSetupState, completedFromState, markOnboardingComplete,
-  EMPTY_SETUP_STATE, type SetupState,
+  loadSetupState, completedFromState, markOnboardingComplete, loadCompanyDetails,
+  EMPTY_SETUP_STATE, type SetupState, type CompanyDetailsInput,
 } from '../../../lib/onboarding/setupSteps';
+import { INDUSTRIES } from '../../../lib/onboarding/onboardingData';
+import StepCompanyDetails from './StepCompanyDetails';
+import StepIndustryRegion from './StepIndustryRegion';
 import SetupHub, { SETUP_STEPS } from './SetupHub';
+import BrandSplash from '../../BrandSplash';
 import StepPanel from './StepPanel';
 
 export interface SetupHubGateProps {
@@ -36,6 +40,9 @@ export interface SetupHubGateProps {
 export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGateProps) {
   const [state, setState] = useState<SetupState>(EMPTY_SETUP_STATE);
   const [openStep, setOpenStep] = useState<string | null>(null);
+  //  ONB-01 reads its own fields, several of which the hub has no use
+  //  for. Loaded when the step opens rather than on every hub render.
+  const [companyDetails, setCompanyDetails] = useState<Partial<CompanyDetailsInput> | null>(null);
 
   const refresh = useCallback(() => {
     if (!companyId) return;
@@ -63,12 +70,57 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
   const completed = completedFromState(state);
   const firstOpen = SETUP_STEPS.find((s) => completed[s.id] !== true);
 
+  //  THE FIRST TWO STEPS ARE FULL PAGES, not panels over the hub.
+  //  ONB-01 and ONB-02 are designed as their own screens — their own
+  //  title, their own step counter, their own footer — and squeezing
+  //  them into the dialog the other steps use would be redrawing the
+  //  design rather than building it.
+  if (openStep === 'company-details' && companyId && userId) {
+    //  Held until the current values are in hand, so the fields do not
+    //  render empty and then fill in under the person's cursor.
+    if (companyDetails === null) return <BrandSplash />;
+    return (
+      <StepCompanyDetails
+        companyId={companyId}
+        userId={userId}
+        initial={companyDetails}
+        onBack={() => setOpenStep(null)}
+        onDone={() => { refresh(); setOpenStep('industry-region'); }}
+      />
+    );
+  }
+
+  if (openStep === 'industry-region' && userId) {
+    const current = INDUSTRIES.find((i) => i.value === state.industryType)?.id;
+    return (
+      <StepIndustryRegion
+        userId={userId}
+        initialIndustryId={current}
+        onBack={() => setOpenStep('company-details')}
+        onDone={() => { refresh(); setOpenStep(null); }}
+      />
+    );
+  }
+
   return (
     <>
       <SetupHub
         completed={completed}
-        onOpenStep={(id) => setOpenStep(id)}
-        onStartSetup={() => setOpenStep(firstOpen?.id ?? SETUP_STEPS[0].id)}
+        onOpenStep={(id) => {
+          if (id === 'company-details') {
+            setCompanyDetails(null);
+            loadCompanyDetails(companyId, userId).then(setCompanyDetails).catch(() => setCompanyDetails({}));
+          }
+          setOpenStep(id);
+        }}
+        onStartSetup={() => {
+          const id = firstOpen?.id ?? SETUP_STEPS[0].id;
+          if (id === 'company-details') {
+            setCompanyDetails(null);
+            loadCompanyDetails(companyId, userId).then(setCompanyDetails).catch(() => setCompanyDetails({}));
+          }
+          setOpenStep(id);
+        }}
         onFinishLater={() => {
           //  Finishing here is finishing onboarding. Without this the
           //  older wizard would claim the next visit, since it is what
