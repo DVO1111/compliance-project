@@ -755,6 +755,14 @@ function AppContent() {
       <SetupHubGate
         companyId={profile?.company_id}
         userId={user?.id}
+        //  ONB-05 shows the signed-in person as the first row of the
+        //  team table — "Ada Okafor (you) · admin" — and their job
+        //  title comes from ONB-01, not from their permission level.
+        me={{
+          email: user?.email ?? '',
+          fullName: profile?.full_name ?? '',
+          jobTitle: (profile as any)?.job_title ?? '',
+        }}
         onFinish={(navigateTo?: string) => {
           localStorage.setItem(setupDoneKey, 'true');
           //  Leaving the hub has to leave its ADDRESS too. The route is

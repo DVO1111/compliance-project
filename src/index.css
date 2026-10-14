@@ -418,9 +418,18 @@ body {
    Native <select> dropdowns ignore CSS color inheritance in most
    browsers, so we force background and text explicitly.
    ────────────────────────────────────────────────────────── */
-select {
+select:not(.nv-field) {
   background-color: var(--color-surface);
   color: var(--color-text-primary);
+}
+
+/*  The onboarding select keeps the navy field colours. Its OPTIONS are
+    still painted below: a native dropdown list is drawn by the
+    operating system, and leaving it unstyled gives white-on-white in
+    some browsers. */
+select.nv-field option {
+  background-color: var(--nv-field-bg);
+  color: var(--nv-text-primary);
 }
 
 select option {
@@ -430,15 +439,20 @@ select option {
 
 /* The marketing pages carry their own dark palette, so their fields opt out
    of this !important rule — it was otherwise repainting them white.
-   `.lp-input` is the icon-padded email field, `.lp-field` the plain ones. */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not(.lp-input):not(.lp-field),
-textarea:not(.lp-field) {
+   `.lp-input` is the icon-padded email field, `.lp-field` the plain ones.
+   `.nv-field` is the onboarding screens' input/text, which carries the
+   navy field colours from the design and was being repainted white the
+   same way. An !important rule that every dark surface has to opt out
+   of is the wrong shape, but narrowing it is a change to ~220 screens
+   and not something to do inside an onboarding ticket. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not(.lp-input):not(.lp-field):not(.nv-field),
+textarea:not(.lp-field):not(.nv-field) {
   background-color: var(--color-surface) !important;
   color: var(--color-text-primary) !important;
 }
 
-input:not(.lp-input):not(.lp-field)::placeholder,
-textarea:not(.lp-field)::placeholder {
+input:not(.lp-input):not(.lp-field):not(.nv-field)::placeholder,
+textarea:not(.lp-field):not(.nv-field)::placeholder {
   color: var(--color-text-tertiary) !important;
   opacity: 1;
 }
@@ -885,4 +899,41 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .print-only {
   display: none;
+}
+/* ──────────────────────────────────────────────────────────
+   ONB-05 · the people table.
+
+   Four columns — EMAIL, ROLE, SITES, SIGNS — that have to become one
+   on a phone, which an inline style cannot express. The column heads
+   are hidden when the row stacks, because "EMAIL / ROLE / SITES /
+   SIGNS" sitting above a single-column list labels nothing.
+   ────────────────────────────────────────────────────────── */
+.onb-people-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) minmax(0, 1fr) 52px;
+  gap: 10px;
+  align-items: center;
+}
+
+/*  The switch is labelled by its column head at desk width, so the words
+    beside it would be a second label saying the same thing in a 52px
+    cell. Below, where the head is gone, they are the only label there
+    is. */
+.onb-signs-text {
+  display: none;
+}
+
+@media (max-width: 599px) {
+  .onb-people-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .onb-people-head {
+    display: none;
+  }
+
+  .onb-signs-text {
+    display: inline;
+  }
 }
