@@ -21,8 +21,9 @@ import { logger } from '../../../lib/logger';
 import { appPath, appUrl } from '../../../lib/routing';
 import {
   loadSetupState, completedFromState, markOnboardingComplete, loadCompanyDetails,
-  loadSitesStep, loadAreas, loadSiteOptions,
+  loadSitesStep, loadAreas, loadSiteOptions, loadReadySummary,
   EMPTY_SETUP_STATE, type SetupState, type CompanyDetailsInput, type SitesStepState,
+  type ReadySummary,
 } from '../../../lib/onboarding/setupSteps';
 import { INDUSTRIES } from '../../../lib/onboarding/onboardingData';
 import { defaultAreasFor, modulesForAreas } from '../../../lib/onboarding/onboardingAreas';
@@ -31,9 +32,10 @@ import StepIndustryRegion from './StepIndustryRegion';
 import StepSites from './StepSites';
 import StepModules from './StepModules';
 import StepInviteTeam, { type SiteOption } from './StepInviteTeam';
+import StepStarterRecords from './StepStarterRecords';
+import StepReady from './StepReady';
 import SetupHub, { SETUP_STEPS } from './SetupHub';
 import BrandSplash from '../../BrandSplash';
-import StepPanel from './StepPanel';
 
 export interface SetupHubGateProps {
   companyId: string | null | undefined;
@@ -58,6 +60,10 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
   const [areas, setAreas] = useState<string[] | null | undefined>(undefined);
   //  ONB-05 needs the sites from step 3 for its SITES column.
   const [siteOptions, setSiteOptions] = useState<SiteOption[] | null>(null);
+  //  ONB-07 repeats back what the six steps stored, and how many
+  //  starter records step 6 just wrote — a number only step 6 knows.
+  const [summary, setSummary] = useState<Partial<ReadySummary> | null>(null);
+  const [starterKept, setStarterKept] = useState(0);
 
   const refresh = useCallback(() => {
     if (!companyId) return;
@@ -112,6 +118,13 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
     //  what an invited person can reach.
     loadSiteOptions(companyId).then(setSiteOptions).catch(() => setSiteOptions([]));
     loadAreas(companyId, userId).then(setAreas).catch(() => setAreas(null));
+  }, [companyId, userId]);
+
+  const openReady = useCallback((kept: number) => {
+    setStarterKept(kept);
+    setSummary(null);
+    setOpenStep('ready');
+    loadReadySummary(companyId, userId).then(setSummary).catch(() => setSummary({}));
   }, [companyId, userId]);
 
   const openStepById = useCallback((id: string) => {
@@ -201,37 +214,57 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
         sites={siteOptions}
         moduleKeys={modulesForAreas(chosen)}
         onBack={openModules}
-        onDone={() => { refresh(); setOpenStep(null); }}
+        onDone={() => { refresh(); setOpenStep('review-records'); }}
+      />
+    );
+  }
+
+  if (openStep === 'review-records' && companyId && userId) {
+    return (
+      <StepStarterRecords
+        companyId={companyId}
+        userId={userId}
+        industryId={industryId}
+        onBack={openTeam}
+        onDone={(kept) => { refresh(); openReady(kept); }}
+      />
+    );
+  }
+
+  //  The last screen of setup, and the one that ends it: reaching it is
+  //  what marks onboarding complete, because every step before it can
+  //  still be gone back to.
+  if (openStep === 'ready' && companyId) {
+    if (summary === null) return <BrandSplash />;
+    const finish = (page?: string) => {
+      if (userId) void markOnboardingComplete(userId);
+      onFinish(page);
+    };
+    return (
+      <StepReady
+        summary={{ ...summary, starterRecordsKept: starterKept }}
+        onAddProduct={() => finish('products')}
+        onUploadProducts={() => finish('products')}
+        onGoToDashboard={() => finish()}
       />
     );
   }
 
   return (
-    <>
-      <SetupHub
-        completed={completed}
-        onOpenStep={openStepById}
-        onStartSetup={() => openStepById(firstOpen?.id ?? SETUP_STEPS[0].id)}
-        onFinishLater={() => {
-          //  Finishing here is finishing onboarding. Without this the
-          //  older wizard would claim the next visit, since it is what
-          //  used to set the flag.
-          if (userId) void markOnboardingComplete(userId);
-          onFinish();
-        }}
-      />
-
-      {openStep && companyId && userId && (
-        <StepPanel
-          stepId={openStep}
-          state={state}
-          companyId={companyId}
-          userId={userId}
-          onSaved={refresh}
-          onClose={() => setOpenStep(null)}
-          onNavigate={(page) => onFinish(page)}
-        />
-      )}
-    </>
+    //  No panel underneath any more: ALL SIX STEPS ARE FULL SCREENS.
+    //  Every branch above returns one, so reaching here means the hub
+    //  itself — the list of six rows — is what is showing.
+    <SetupHub
+      completed={completed}
+      onOpenStep={openStepById}
+      onStartSetup={() => openStepById(firstOpen?.id ?? SETUP_STEPS[0].id)}
+      onFinishLater={() => {
+        //  Finishing here is finishing onboarding. Without this the
+        //  older wizard would claim the next visit, since it is what
+        //  used to set the flag.
+        if (userId) void markOnboardingComplete(userId);
+        onFinish();
+      }}
+    />
   );
 }

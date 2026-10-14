@@ -19,7 +19,7 @@
 
 import type { ReactNode } from 'react';
 import { appUrl } from '../../../lib/routing';
-import NavyButton from './NavyButton';
+import NavyButton, { type NavyButtonVariant } from './NavyButton';
 
 export interface OnboardingShellProps {
   /** 1-based, as the screen says it. */
@@ -36,6 +36,9 @@ export interface OnboardingShellProps {
   onContinue: () => void;
   continueLabel?: string;
   continueBusy?: boolean;
+  /** ONB-07's "Go to dashboard" is low-emphasis: the primary action on
+   *  that screen is adding a product, not leaving. */
+  continueVariant?: NavyButtonVariant;
   /** A second low-emphasis action beside Continue — ONB-05's "Skip for
    *  now", which is a way past the step, not a way back from it, so it
    *  belongs on the right with the primary rather than on the left. */
@@ -44,16 +47,24 @@ export interface OnboardingShellProps {
   /** One line under the footer. ONB-04 counts what is switched on
    *  there, where it stays true as the ticks change. */
   footnote?: string;
+  /** ONB-07. The bar is full and the counter reads "6 OF 6 COMPLETED"
+   *  rather than naming a step, because there is no step left. */
+  completed?: boolean;
+  /** ONB-07 has nowhere to go back to: setup is done, and a Back button
+   *  that reopened the last step would undo that claim. */
+  hideBack?: boolean;
 }
 
 export default function OnboardingShell({
   step, totalSteps = 6, stepLabel, title, subtitle, children,
   backLabel, onBack, onContinue, continueLabel = 'Continue', continueBusy = false,
-  secondaryLabel, onSecondary, footnote,
+  continueVariant = 'primary',
+  secondaryLabel, onSecondary, footnote, completed = false, hideBack = false,
 }: OnboardingShellProps) {
   //  0% on step 1, 17% on step 2 — progress through the flow, not
-  //  including the step being filled in.
-  const pct = Math.round(((step - 1) / totalSteps) * 100);
+  //  including the step being filled in. On the final screen there is
+  //  no step being filled in, so it is 100.
+  const pct = completed ? 100 : Math.round(((step - 1) / totalSteps) * 100);
 
   return (
     <div
@@ -104,13 +115,15 @@ export default function OnboardingShell({
           color: 'var(--nv-text-secondary)',
         }}>
           <span style={{ flex: '1 1 0' }}>
-            STEP {step} OF {totalSteps} · {stepLabel.toUpperCase()}
+            {completed
+              ? `${totalSteps} OF ${totalSteps} COMPLETED`
+              : `STEP ${step} OF ${totalSteps} · ${stepLabel.toUpperCase()}`}
           </span>
           <span style={{ fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
         </div>
         <div
           role="progressbar"
-          aria-valuenow={step - 1}
+          aria-valuenow={completed ? totalSteps : step - 1}
           aria-valuemin={0}
           aria-valuemax={totalSteps}
           aria-label="Onboarding progress"
@@ -139,12 +152,16 @@ export default function OnboardingShell({
         display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
         marginTop: 28,
       }}>
-        <NavyButton variant="ghost" onClick={onBack}>{backLabel}</NavyButton>
+        {!hideBack && (
+          <NavyButton variant="ghost" onClick={onBack}>{backLabel}</NavyButton>
+        )}
         <div style={{ flex: '1 1 0' }} />
         {secondaryLabel && onSecondary && (
           <NavyButton variant="ghost" onClick={onSecondary}>{secondaryLabel}</NavyButton>
         )}
-        <NavyButton onClick={onContinue} loading={continueBusy}>{continueLabel}</NavyButton>
+        <NavyButton variant={continueVariant} onClick={onContinue} loading={continueBusy}>
+          {continueLabel}
+        </NavyButton>
       </footer>
 
       {footnote && (

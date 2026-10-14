@@ -933,3 +933,169 @@ export async function loadSiteOptions(
   }
   return ((data as any[]) ?? []).map((s) => ({ id: s.id, name: s.name }));
 }
+
+// ── ONB-06 · Review your starting records ────────────────────────────
+
+/**
+ * Writes the starter records the person kept.
+ *
+ * INTO THE ORDINARY TABLES, as ordinary rows. "Seeded records are a
+ * starting point, not a constraint: editable and deletable (J3.5)" —
+ * so there is no seeded flag, no protection and nothing that
+ * re-creates them. Once written they are indistinguishable from
+ * records someone typed, which is the point.
+ *
+ * Each tab is written separately and a failure on one is reported
+ * without discarding the others: a workspace whose risk register is
+ * missing a column should still get its obligations.
+ *
+ * NOTHING IS WRITTEN TWICE. The caller passes the ids the person kept
+ * and this runs once, on Finish setup. Re-running it would duplicate
+ * every row, because these are ordinary records with no natural key.
+ */
+export async function createStarterRecords(
+  companyId: string,
+  userId: string,
+  records: { tab: string; title: string; write: Record<string, unknown> }[],
+): Promise<SaveResult & { written: number }> {
+  if (records.length === 0) return { ok: true, written: 0 };
+
+  const byTable = new Map<string, Record<string, unknown>[]>();
+
+  for (const r of records) {
+    const table = STARTER_TABLES[r.tab];
+    if (!table) continue;
+
+    const row: Record<string, unknown> = { company_id: companyId, ...r.write };
+
+    //  The title column differs by table, and so does whether the table
+    //  records who created the row.
+    row.title = r.title;
+    if (table === 'regulatory_licences') {
+      delete row.title;
+      row.name = r.title;
+      row.created_by = userId;
+    }
+    if (table === 'risks') row.created_by = userId;
+
+    byTable.set(table, [...(byTable.get(table) ?? []), row]);
+  }
+
+  let written = 0;
+  const problems: string[] = [];
+
+  for (const [table, rows] of byTable) {
+    const { error } = await (supabase as any).from(table).insert(rows);
+    if (error) {
+      logger.error(`[setup] starter ${table} failed`, error);
+      problems.push(table);
+      continue;
+    }
+    written += rows.length;
+  }
+
+  if (problems.length > 0 && written === 0) {
+    return {
+      ok: false, written: 0,
+      message: 'None of the starter records could be saved. You can add them later '
+        + 'from the dashboard — nothing else in your setup is affected.',
+    };
+  }
+
+  if (problems.length > 0) {
+    logger.warn('[setup] some starter tables were skipped', problems.join(', '));
+  }
+
+  return { ok: true, written };
+}
+
+/** Tab → table. Kept here so the data file holds no database names. */
+const STARTER_TABLES: Record<string, string> = {
+  obligations: 'regulatory_obligations',
+  licences:    'regulatory_licences',
+  policies:    'policies',
+  risks:       'risks',
+};
+
+// ── ONB-07 · Your workspace is ready ─────────────────────────────────
+
+export interface ReadySummary {
+  companyName: string;
+  industryTitle: string;
+  country: string;
+  regulators: string[];
+  siteCount: number;
+  departmentCount: number;
+  productCategoryCount: number;
+  areaCount: number;
+  starterRecordsKept: number;
+  invitesSent: number;
+}
+
+/**
+ * What ONB-07 says.
+ *
+ * "No metrics are shown. The summary repeats only what the user
+ * entered." So every number here is a count of something the person
+ * typed or ticked on one of the six steps. Nothing is computed about
+ * their compliance, because they have not used the product yet and any
+ * such number would be made up.
+ *
+ * A failed read leaves its line at zero rather than taking the screen
+ * down: this is the last page of setup, and refusing to show it because
+ * a count did not come back would be the worst possible moment to fail.
+ */
+export async function loadReadySummary(
+  companyId: string | null | undefined,
+  userId: string | null | undefined,
+): Promise<Partial<ReadySummary>> {
+  if (!companyId) return {};
+
+  const [company, profile, departments, sites, invites, membership] = await Promise.all([
+    (supabase as any).from('companies')
+      .select('name, country, product_categories').eq('id', companyId).maybeSingle(),
+    userId
+      ? (supabase as any).from('profiles')
+          .select('industry_type, default_jurisdiction, regulators').eq('id', userId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    (supabase as any).from('departments')
+      .select('id', { count: 'exact', head: true }).eq('company_id', companyId),
+    (supabase as any).from('sites')
+      .select('id', { count: 'exact', head: true }).eq('company_id', companyId),
+    (supabase as any).from('company_invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId).is('accepted_at', null).is('revoked_at', null),
+    userId
+      ? (supabase as any).from('company_members')
+          .select('onboarding_areas, module_access')
+          .eq('company_id', companyId).eq('user_id', userId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  for (const [what, r] of [
+    ['company', company], ['profile', profile], ['departments', departments],
+    ['sites', sites], ['invites', invites], ['membership', membership],
+  ] as const) {
+    if (r?.error) logger.warn(`[setup] ready summary: ${what} unavailable`, r.error.message);
+  }
+
+  const c = (company?.data as any) ?? {};
+  const p = (profile?.data as any) ?? {};
+  const m = (membership?.data as any) ?? {};
+
+  const areas = Array.isArray(m.onboarding_areas) && m.onboarding_areas.length > 0
+    ? m.onboarding_areas
+    : (Array.isArray(m.module_access) ? m.module_access : []);
+
+  return {
+    companyName: c.name ?? '',
+    industryTitle: p.industry_type ?? '',
+    country: c.country ?? p.default_jurisdiction ?? '',
+    regulators: Array.isArray(p.regulators) ? p.regulators : [],
+    siteCount: sites?.count ?? 0,
+    departmentCount: departments?.count ?? 0,
+    productCategoryCount: Array.isArray(c.product_categories) ? c.product_categories.length : 0,
+    areaCount: areas.length,
+    invitesSent: invites?.count ?? 0,
+  };
+}
