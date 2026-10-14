@@ -581,6 +581,25 @@ function AppContent() {
   //  Who it's for, About, Contact — are state rather than addresses, so
   //  they are served from inside this block too; routing "/" straight to
   //  the landing component would have made them unreachable.
+  //  /login IS THE LOGIN SCREEN. ALWAYS.
+  //  It used to be "the login screen, unless a session happens to exist,
+  //  in which case the product" — so asking for /login while signed in
+  //  gave whatever the app decided to show, which is the opposite of
+  //  what the address says. An address that means one thing only is
+  //  worth more than the convenience of skipping it.
+  if (wantsLogin) {
+    return (
+      <LoginPage
+        onToggleSignup={() => setUnauthView('signup')}
+        onRequestAccess={() => setUnauthView('contact')}
+        onBackToLanding={() => {
+          try { window.history.replaceState({}, '', appUrl('/')); } catch { /* no history */ }
+          setUnauthView('landing');
+        }}
+      />
+    );
+  }
+
   if (!user || wantsLandingPage) {
     //  Leaving the sign-in screen for the marketing site has to drop the
     //  /onboarding address with it. Otherwise the landing page renders
