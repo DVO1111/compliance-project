@@ -192,3 +192,21 @@ export async function saveModules(
     .eq('user_id', userId);
   return error ? failed('saveModules', error) : { ok: true };
 }
+
+/**
+ * Marks onboarding as finished for this user.
+ *
+ * The hub replaces the older wizard, and the wizard is what used to set
+ * this flag. Without it, leaving the hub would drop the person straight
+ * into "Welcome aboard" — the screen the hub exists to replace — on
+ * their next visit.
+ *
+ * A failure is logged and swallowed: the flag is a routing convenience,
+ * and refusing to open the workspace because it could not be written
+ * would be a worse outcome than seeing the wizard once.
+ */
+export async function markOnboardingComplete(userId: string): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('profiles').update({ onboarding_completed: true }).eq('id', userId);
+  if (error) logger.warn('[setup] could not mark onboarding complete', error.message);
+}
