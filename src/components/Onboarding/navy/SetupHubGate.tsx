@@ -20,7 +20,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { logger } from '../../../lib/logger';
 import { appPath, appUrl } from '../../../lib/routing';
 import {
-  loadSetupState, completedFromState, EMPTY_SETUP_STATE, type SetupState,
+  loadSetupState, completedFromState, markOnboardingComplete,
+  EMPTY_SETUP_STATE, type SetupState,
 } from '../../../lib/onboarding/setupSteps';
 import SetupHub, { SETUP_STEPS } from './SetupHub';
 import StepPanel from './StepPanel';
@@ -68,7 +69,13 @@ export default function SetupHubGate({ companyId, userId, onFinish }: SetupHubGa
         completed={completed}
         onOpenStep={(id) => setOpenStep(id)}
         onStartSetup={() => setOpenStep(firstOpen?.id ?? SETUP_STEPS[0].id)}
-        onFinishLater={() => onFinish()}
+        onFinishLater={() => {
+          //  Finishing here is finishing onboarding. Without this the
+          //  older wizard would claim the next visit, since it is what
+          //  used to set the flag.
+          if (userId) void markOnboardingComplete(userId);
+          onFinish();
+        }}
       />
 
       {openStep && companyId && userId && (

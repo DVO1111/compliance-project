@@ -681,26 +681,31 @@ function AppContent() {
     return <OnboardingCompany onDone={async () => refreshProfile()} />;
   }
 
-  if (profile && !profile.onboarding_completed) {
-    return <OnboardingWizard onComplete={async () => refreshProfile()} />;
-  }
-
   const setupDoneKey = `setup_done_${user?.id}`;
+  //  No longer requires onboarding_completed: the hub is now what sets
+  //  it, so requiring it here would mean the hub only appeared for
+  //  people who had already been through the wizard it replaces.
   const needsSetup =
     profile &&
-    profile.onboarding_completed &&
     !localStorage.getItem(setupDoneKey) &&
     ['Admin', 'Executive', 'Compliance'].includes(profile.role ?? '');
 
-  //  LOG IN → ONBOARDING. The hub from the Product Design file (ONB-00)
-  //  is what you land on after signing in, in the slot
-  //  CompanySetupChecklist used to hold. It never blocks: "Finish later"
-  //  opens the workspace and is remembered, so it does not reappear on
-  //  every sign-in. See SetupHubGate for which steps can be ticked and
-  //  why the other three cannot be yet.
-  //  /onboarding while signed in: the real hub, not the viewer. Shown
-  //  even once setup has been dismissed, so the address can be opened
-  //  deliberately — to demonstrate it, or to pick the setup back up.
+  //  LOG IN → ONBOARDING. The v2 hub (ONB-00) is what you land on after
+  //  signing in, and it is what /onboarding serves.
+  //
+  //  IT IS CHECKED BEFORE THE OLD WIZARD, which is the whole point.
+  //  provision_profile writes onboarding_completed = false, so a brand
+  //  new account matched the wizard's branch first and the hub was
+  //  never reached — someone who asked for /onboarding got "Welcome
+  //  aboard" instead, with no clue why.
+  //
+  //  The wizard still exists below for anyone mid-flow in it, but the
+  //  hub now takes precedence: it collects the same industry and
+  //  region, plus the four things the wizard never did, and finishing
+  //  it marks onboarding complete so the wizard does not reappear.
+  //
+  //  It never blocks: "Finish later" opens the workspace and is
+  //  remembered, so the hub does not return on every sign-in.
   if (wantsOnboardingHub || needsSetup) {
     return (
       <SetupHubGate
@@ -720,6 +725,12 @@ function AppContent() {
         }}
       />
     );
+  }
+
+  //  The old wizard. Reachable only for someone who is not being sent
+  //  to the hub — the hub above supersedes it for new accounts.
+  if (profile && !profile.onboarding_completed) {
+    return <OnboardingWizard onComplete={async () => refreshProfile()} />;
   }
 
   const renderPage = () => {
