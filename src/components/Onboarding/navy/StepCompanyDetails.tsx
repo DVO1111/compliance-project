@@ -27,9 +27,10 @@
  *      filling a form faster is a person who knows it is not final.
  */
 
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { ADMIN_ROLES, COUNTRY } from '../../../lib/onboarding/onboardingData';
 import { saveCompanyDetails, type CompanyDetailsInput } from '../../../lib/onboarding/setupSteps';
+import { supabase } from '../../../lib/supabase';
 import OnboardingShell, { OnboardingCard, FieldRow } from './OnboardingShell';
 import NavyField, { NavySelect } from './NavyField';
 import { ICONS, iconProps } from '../../../lib/design/icons';
@@ -44,6 +45,12 @@ export interface StepCompanyDetailsProps {
 
 type Errors = Partial<Record<keyof CompanyDetailsInput, string>>;
 
+const LOGO_FILE_TYPES: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/svg+xml': 'svg',
+};
+
 export default function StepCompanyDetails({
   companyId, userId, initial, onBack, onDone,
 }: StepCompanyDetailsProps) {
@@ -55,10 +62,14 @@ export default function StepCompanyDetails({
   const [phone, setPhone] = useState(initial.phone ?? '');
   const [fullName, setFullName] = useState(initial.fullName ?? '');
   const [jobTitle, setJobTitle] = useState(initial.jobTitle ?? '');
+  const [logoUrl, setLogoUrl] = useState(initial.logoUrl ?? '');
 
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   //  One message per field, and each says what to do rather than what
   //  went wrong. "Required" tells a person nothing they cannot see.
@@ -86,11 +97,48 @@ export default function StepCompanyDetails({
     setBusy(true);
     setSaveError(null);
     const r = await saveCompanyDetails(companyId, userId, {
-      legalName, tradingName, cacNumber, headOffice, country, phone, fullName, jobTitle,
+      legalName, tradingName, cacNumber, headOffice, country, phone, fullName, jobTitle, logoUrl,
     });
     setBusy(false);
     if (!r.ok) { setSaveError(r.message); return; }
     onDone();
+  };
+
+  const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const extension = LOGO_FILE_TYPES[file.type];
+    if (!extension) {
+      setLogoError('Choose a PNG, JPG or SVG image.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError('Choose an image smaller than 2 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    setLogoUploading(true);
+    setLogoError(null);
+    try {
+      const path = `company-logos/${companyId}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      // Re-uploading uses the same path. The timestamp prevents a browser
+      // cache from showing the previous logo in the preview or on documents.
+      setLogoUrl(`${data.publicUrl}?t=${Date.now()}`);
+    } catch (error) {
+      setLogoError((error as Error).message || 'The logo could not be uploaded. Try again.');
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
   };
 
   const Upload = ICONS['action/upload'];
@@ -164,11 +212,6 @@ export default function StepCompanyDetails({
           />
         </FieldRow>
 
-        {/*  THE LOGO IS NOT UPLOADED HERE YET, and the control says so
-            rather than accepting a file and dropping it. Storing it
-            needs a bucket and a column that do not exist; the same
-            upload lives in Company Settings › Brand Identity, which is
-            where it is carried over from.  */}
         <div style={{
           display: 'flex', gap: 12, alignItems: 'flex-start',
           padding: 16, borderRadius: 10,
@@ -192,13 +235,50 @@ export default function StepCompanyDetails({
               PNG, JPG or SVG, up to 2 MB. Used in the header of generated certificates of
               analysis.
             </p>
-            <p style={{
-              margin: '8px 0 0', fontSize: 12, lineHeight: '18px',
-              color: 'var(--nv-text-tertiary)',
-            }}>
-              Upload it in Company Settings › Brand Identity — there is nowhere to store it
-              from here yet, and a control that took your file and lost it would be worse
-              than one that says so.
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg"
+              onChange={handleLogoUpload}
+              style={{ display: 'none' }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+              {logoUrl && (
+                <img
+                  src={logoUrl}
+                  alt="Company logo preview"
+                  style={{ width: 42, height: 42, objectFit: 'contain', borderRadius: 6, background: 'white' }}
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={logoUploading}
+                style={{
+                  border: '1px solid var(--nv-border-strong)', borderRadius: 7, padding: '8px 10px',
+                  background: 'var(--nv-surface-raised)', color: 'var(--nv-text-primary)', cursor: 'pointer',
+                  font: 'inherit', fontSize: 13, opacity: logoUploading ? 0.65 : 1,
+                }}
+              >
+                {logoUploading ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+              </button>
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => { setLogoUrl(''); setLogoError(null); }}
+                  style={{ border: 'none', padding: 0, background: 'transparent', color: 'var(--nv-text-secondary)', cursor: 'pointer', font: 'inherit', fontSize: 13 }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {logoError && (
+              <p role="alert" style={{ margin: '8px 0 0', fontSize: 12, lineHeight: '18px', color: '#ffb4a6' }}>
+                {logoError}
+              </p>
+            )}
+            <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: '18px', color: 'var(--nv-text-tertiary)' }}>
+              Your logo is saved with the company details when you continue.
             </p>
           </div>
         </div>

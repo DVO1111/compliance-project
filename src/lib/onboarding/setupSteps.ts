@@ -308,6 +308,8 @@ export interface CompanyDetailsInput {
   phone: string;
   fullName: string;
   jobTitle: string;
+  /** Public URL of the company logo stored in the avatars bucket. */
+  logoUrl?: string;
 }
 
 /**
@@ -356,6 +358,7 @@ export async function saveCompanyDetails(
       head_office_address: input.headOffice.trim(),
       country: input.country,
       phone: input.phone.trim() || null,
+      logo_url: input.logoUrl || null,
     })
     .eq('id', companyId);
 
@@ -380,6 +383,19 @@ export async function saveCompanyDetails(
     return failed('saveCompanyDetails.extended', e);
   }
 
+  // Company Settings is the other place that displays this logo. Keep its
+  // existing record in sync, but do not make onboarding fail if an older
+  // database does not have that settings table yet: the company profile is
+  // still the source used by generated company documents.
+  const { error: settingsError } = await (supabase as any)
+    .from('company_settings')
+    .upsert({
+      company_id: companyId,
+      logo_url: input.logoUrl || null,
+      updated_at: new Date().toISOString(),
+    });
+  if (settingsError) logger.warn('[setup] company settings logo mirror failed', settingsError.message);
+
   return { ok: true };
 }
 
@@ -390,12 +406,14 @@ export async function loadCompanyDetails(
 ): Promise<Partial<CompanyDetailsInput>> {
   if (!companyId || !userId) return {};
 
-  const [wide, profile] = await Promise.all([
+  const [wide, profile, settings] = await Promise.all([
     (supabase as any).from('companies')
-      .select('name, trading_name, cac_registration_number, head_office_address, country, phone')
+      .select('name, trading_name, cac_registration_number, head_office_address, country, phone, logo_url')
       .eq('id', companyId).maybeSingle(),
     (supabase as any).from('profiles')
       .select('full_name, job_title, phone').eq('id', userId).maybeSingle(),
+    (supabase as any).from('company_settings')
+      .select('logo_url').eq('company_id', companyId).maybeSingle(),
   ]);
 
   //  A database without the migration rejects the whole select, so fall
@@ -416,6 +434,7 @@ export async function loadCompanyDetails(
     phone: (company as any)?.phone ?? (p as any)?.phone ?? '',
     fullName: (p as any)?.full_name ?? '',
     jobTitle: (p as any)?.job_title ?? '',
+    logoUrl: (company as any)?.logo_url ?? (settings?.data as any)?.logo_url ?? '',
   };
 }
 
