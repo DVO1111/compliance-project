@@ -71,9 +71,9 @@ export default function AuthShell({
         style={{
           position: 'relative',
           overflow: 'hidden',
-          background:
-            'radial-gradient(120% 90% at 0% 0%, rgba(71,141,75,0.38) 0%, rgba(30,86,32,0.12) 42%, rgba(8,19,26,0) 74%), ' +
-            'linear-gradient(165deg, #0B1E1D 0%, #0A1722 55%, #0B1626 100%)',
+          //  The same token the loading splash uses, so the screen that
+          //  precedes this one cannot drift to a different palette.
+          background: 'var(--auth-glow)',
           borderRight: '1px solid var(--lp-line-soft)',
           display: 'flex',
           flexDirection: 'column',
