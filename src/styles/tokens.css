@@ -278,6 +278,28 @@
   --onboarding-glow:
     linear-gradient(137.57deg, #0d1933 0%, #1f336c 83.333%);
 
+  /* ── The auth glow ────────────────────────────────────────────
+     The ground behind the brand panel on sign-in, and behind the
+     loading splash. Two layers: a green radial bloom from the top-left
+     corner, over a near-black diagonal that cools from green through to
+     blue.
+
+     IT IS THE FIRST THING ANYONE SEES. The splash renders while the
+     session is restored, and it used to carry the navy onboarding glow
+     — so the product opened in one palette and then switched to another
+     the moment the sign-in screen drew. Same token now, so the splash
+     and the screen it hands over to cannot drift apart.
+
+     The radial sits at 0% 0% because that is where it sits on the
+     sign-in panel; moving it to the centre for the full-screen splash
+     would make them two gradients that merely resemble each other. */
+  --auth-glow:
+    radial-gradient(120% 90% at 0% 0%,
+      rgba(71, 141, 75, 0.38) 0%,
+      rgba(30, 86, 32, 0.12) 42%,
+      rgba(8, 19, 26, 0) 74%),
+    linear-gradient(165deg, #0B1E1D 0%, #0A1722 55%, #0B1626 100%);
+
   /* ── Navy: type, per the design and the mobile adaptation rules ──
       title    Bricolage 32/38 desktop, 24/30 mobile
       body     Sora 15/22 desktop, 14/20 mobile

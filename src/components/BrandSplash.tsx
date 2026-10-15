@@ -15,8 +15,17 @@
  * #00A86B is 20° around the wheel from the mark's #478d4b and far more
  * saturated; #002D62 is a different navy from the asset's #0d1933. So
  * the first screen of the product was the one place it did not look like
- * itself. The ground here is the onboarding glow, which starts at the
- * asset's own #0d1933, and the spinner is the mark's own green.
+ * itself. The spinner is the mark's own green.
+ *
+ * THE GROUND IS THE SIGN-IN SCREEN'S, not the onboarding one. This is
+ * what shows while the session is restored, and the screen it hands
+ * over to is almost always sign-in — so carrying the navy onboarding
+ * glow meant the product opened in one palette and switched to another
+ * the moment the form drew. Both now read --auth-glow.
+ *
+ * `tone` exists for the one case where that is wrong: the holds BETWEEN
+ * onboarding steps, which sit navy-to-navy. Flashing green in the
+ * middle of the flow would be the same mismatch in reverse.
  *
  * The logo is rendered at 140 px with its intrinsic ratio, above the
  * Primary Logo minimum of 76 px.
@@ -31,14 +40,17 @@ export interface BrandSplashProps {
   message?: ReactNode;
   /** An escape hatch, e.g. "Sign out and try again". */
   action?: ReactNode;
+  /** 'auth' (the default) for the way in; 'onboarding' for a hold
+   *  between two onboarding steps, which are navy on both sides. */
+  tone?: 'auth' | 'onboarding';
 }
 
-export default function BrandSplash({ message, action }: BrandSplashProps) {
+export default function BrandSplash({ message, action, tone = 'auth' }: BrandSplashProps) {
   return (
     <div
       style={{
         minHeight: '100vh',
-        background: 'var(--onboarding-glow)',
+        background: tone === 'onboarding' ? 'var(--onboarding-glow)' : 'var(--auth-glow)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
