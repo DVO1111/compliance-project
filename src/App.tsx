@@ -17,6 +17,7 @@ import ContactPage from './pages/ContactPage';
 import type { MarketingPage } from './pages/landing/shell';
 import LoginPage from './components/Auth/LoginPage';
 import ResetPasswordPage from './components/Auth/ResetPasswordPage';
+import AccessRequestsPage from './components/Auth/AccessRequestsPage';
 import SignupPage from './components/Auth/SignupPage';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
 import BrandSplash from './components/BrandSplash';
@@ -344,6 +345,18 @@ function AppContent() {
     }
   })();
 
+  const setupPasswordLink = (() => {
+    try {
+      return new URLSearchParams(window.location.search).get('setup') === '1';
+    } catch {
+      return false;
+    }
+  })();
+
+  const accessRequestsPath = (() => {
+    try { return appPath() === '/access-requests'; } catch { return false; }
+  })();
+
   /* The marketing nav no longer offers Sign In — the public site is a
      lead-generation site, not a product front door. Existing users get in at
      /portal, which netlify.toml's SPA fallback already serves. Without this
@@ -530,8 +543,28 @@ function AppContent() {
   //  password, so this gate sits ABOVE every other branch — including the
   //  invite flow and the authenticated app. Anything lower would render the
   //  product to whoever opened the mailbox.
+  if (setupPasswordLink) {
+    return user
+      ? <ResetPasswordPage initialSetup />
+      : <LoginPage
+          onToggleSignup={() => setUnauthView('signup')}
+          onRequestAccess={() => setUnauthView('contact')}
+          onBackToLanding={() => setUnauthView('landing')}
+        />;
+  }
+
   if (isRecoveringPassword) {
     return <ResetPasswordPage />;
+  }
+
+  if (accessRequestsPath) {
+    return user
+      ? <AccessRequestsPage />
+      : <LoginPage
+          onToggleSignup={() => setUnauthView('signup')}
+          onRequestAccess={() => setUnauthView('contact')}
+          onBackToLanding={() => setUnauthView('landing')}
+        />;
   }
 
   if (inviteTokenFromUrl !== null) {

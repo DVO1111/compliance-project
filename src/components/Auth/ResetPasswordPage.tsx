@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import AuthShell, { AuthNotice, AuthField } from './AuthShell';
+import { appUrl } from '../../lib/routing';
 
 /**
  * Where the emailed reset link lands.
@@ -23,7 +24,7 @@ import AuthShell, { AuthNotice, AuthField } from './AuthShell';
  * they sign out. Rendering the product behind the form would hand out
  * access to anyone with one look at the mailbox.
  */
-export default function ResetPasswordPage() {
+export default function ResetPasswordPage({ initialSetup = false }: { initialSetup?: boolean }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -60,6 +61,8 @@ export default function ResetPasswordPage() {
           ? 'That reset link has expired. Request a new one from the sign-in page.'
           : error.message
       );
+    } else if (initialSetup) {
+      window.location.replace(appUrl('/portal'));
     }
     //  On success the flag clears in the context and the app renders
     //  normally — there is nothing to navigate to.
@@ -67,9 +70,11 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthShell
-      kicker="Reset password"
-      heading="Choose a new password."
-      description="You followed a reset link, so set a password to finish signing in."
+      kicker={initialSetup ? 'Account setup' : 'Reset password'}
+      heading={initialSetup ? 'Choose your password.' : 'Choose a new password.'}
+      description={initialSetup
+        ? 'Set a password to finish creating your account. You will continue to workspace setup next.'
+        : 'You followed a reset link, so set a password to finish signing in.'}
     >
       {error && <AuthNotice tone="error">{error}</AuthNotice>}
 
@@ -137,7 +142,7 @@ export default function ResetPasswordPage() {
           className="lp-btn lp-btn--primary lp-btn--block"
           style={{ marginTop: 6, minHeight: 50, ...(loading ? { opacity: 0.7 } : null) }}
         >
-          {loading ? 'Saving…' : 'Save password and continue'}
+          {loading ? 'Saving…' : initialSetup ? 'Set password and continue' : 'Save password and continue'}
         </button>
       </form>
 

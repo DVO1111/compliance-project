@@ -197,6 +197,17 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+    if (payload.intent === "waitlist") {
+      const { error: requestError } = await db.from("access_requests").upsert({
+        email: payload.email.toLowerCase(),
+        full_name: payload.fullName,
+        company: payload.company,
+        role: payload.role,
+        industry: payload.industry,
+        notes: payload.notes,
+      }, { onConflict: "email", ignoreDuplicates: true });
+      if (requestError) throw requestError;
+    }
     const { error } = await db.from("waitlist_signups").insert({
       source: payload.source,
       intent: payload.intent,
