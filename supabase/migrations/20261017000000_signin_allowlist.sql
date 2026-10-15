@@ -80,7 +80,9 @@ COMMENT ON FUNCTION public.app_signin_is_allowed(text) IS
 -- person applying it out of their own product.
 
 INSERT INTO public.allowed_signins (email, note)
-VALUES ('ayomideelijah1@gmail.com', 'Owner. Added with the allowlist itself.')
+VALUES
+  ('ayomideelijah1@gmail.com', 'Owner. Added with the allowlist itself.'),
+  ('fmuyiwa15@gmail.com', 'Approved user. Added with the allowlist itself.')
 ON CONFLICT (email) DO NOTHING;
 
 -- ============================================================================
