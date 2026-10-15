@@ -495,7 +495,11 @@ function AppContent() {
         localStorage.removeItem('pending_invite_token');
         await refreshProfile();
 
-        window.history.replaceState({}, '', appUrl('/'));
+        //  /dashboard rather than "/": the invite has just been
+        //  accepted and setCurrentPage says dashboard, but "/" renders
+        //  the marketing site for everyone — so the address and the
+        //  screen would have disagreed.
+        window.history.replaceState({}, '', appUrl('/dashboard'));
         setCurrentPage('dashboard');
       } catch {
         // keep token for retry
@@ -503,6 +507,33 @@ function AppContent() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  /*  SIGNING IN LEAVES THE SIGN-IN SCREEN.
+
+      /login shows the form and nothing else — but only while there is
+      no session. "The login screen, always" was written to stop a
+      signed-in visitor being shown the product under an address that
+      says login; taken literally it also meant a SUCCESSFUL sign-in
+      re-rendered the form, because the address was still /login and
+      the branch never looked at `user`. You signed in and nothing
+      happened.
+
+      So the address moves with the screen, to the same place the
+      `needsSetup` branch below would send you: onboarding until it is
+      finished, the workspace after. Without this the product would
+      render under /login and a reload would put the form back. */
+  useEffect(() => {
+    if (!user || !wantsLogin) return;
+
+    const finished =
+      Boolean((profile as any)?.onboarding_completed) ||
+      Boolean(localStorage.getItem(`setup_done_${user.id}`));
+
+    try {
+      window.history.replaceState({}, '', appUrl(finished ? '/dashboard' : '/onboarding'));
+    } catch { /* history is unavailable in some embedded views */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, wantsLogin, profile]);
 
   /*  THERE IS ONE ONBOARDING SCREEN AND IT IS THE REAL ONE.
       /design/onboarding used to serve a viewer with a demonstration
@@ -586,7 +617,10 @@ function AppContent() {
   //  gave whatever the app decided to show, which is the opposite of
   //  what the address says. An address that means one thing only is
   //  worth more than the convenience of skipping it.
-  if (wantsLogin) {
+  //  …AND ONLY WHILE THERE IS NO SESSION. With a session this falls
+  //  through to onboarding or the workspace; the effect above moves the
+  //  address to match.
+  if (wantsLogin && !user) {
     return (
       <LoginPage
         onToggleSignup={() => setUnauthView('signup')}
@@ -769,7 +803,14 @@ function AppContent() {
           //  read from window.location on every render, so finishing
           //  while the bar still says /onboarding would land straight
           //  back on the hub.
-          if (wantsOnboardingHub) window.history.replaceState({}, '', appUrl('/'));
+          //
+          //  TO /dashboard, NOT "/". "/" is the marketing site for
+          //  everyone, signed in or not — so sending someone there on
+          //  "Go to dashboard" showed them the home page of the website
+          //  instead of the workspace they had just finished setting up.
+          if (wantsOnboardingHub) {
+            try { window.history.replaceState({}, '', appUrl('/dashboard')); } catch { /* no history */ }
+          }
           if (navigateTo) {
             window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: navigateTo } }));
           }
