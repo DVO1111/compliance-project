@@ -1,42 +1,31 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-DO $helpers$
-BEGIN
-  IF to_regprocedure('public.app_is_company_member(uuid, uuid)') IS NULL THEN
-    EXECUTE $fn$
-      CREATE FUNCTION public.app_is_company_member(
-        p_company_id uuid, p_user_id uuid DEFAULT auth.uid())
-      RETURNS boolean
-      LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
-      AS $body$
-        SELECT EXISTS (
-          SELECT 1 FROM company_members
-          WHERE company_id = p_company_id
-            AND user_id = p_user_id
-            AND status = 'active'
-        );
-      $body$;
-    $fn$;
-  END IF;
+CREATE OR REPLACE FUNCTION public.app_is_company_member(
+  p_company_id uuid, p_user_id uuid DEFAULT auth.uid())
+RETURNS boolean
+LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM company_members
+    WHERE company_id = p_company_id
+      AND user_id = p_user_id
+      AND status = 'active'
+  );
+$$;
 
-  IF to_regprocedure('public.app_has_company_role(uuid, text[], uuid)') IS NULL THEN
-    EXECUTE $fn$
-      CREATE FUNCTION public.app_has_company_role(
-        p_company_id uuid, p_roles text[], p_user_id uuid DEFAULT auth.uid())
-      RETURNS boolean
-      LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
-      AS $body$
-        SELECT EXISTS (
-          SELECT 1 FROM company_members
-          WHERE company_id = p_company_id
-            AND user_id = p_user_id
-            AND status = 'active'
-            AND role = ANY (p_roles)
-        );
-      $body$;
-    $fn$;
-  END IF;
-END $helpers$;
+CREATE OR REPLACE FUNCTION public.app_has_company_role(
+  p_company_id uuid, p_roles text[], p_user_id uuid DEFAULT auth.uid())
+RETURNS boolean
+LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM company_members
+    WHERE company_id = p_company_id
+      AND user_id = p_user_id
+      AND status = 'active'
+      AND role = ANY (p_roles)
+  );
+$$;
 
 ALTER TABLE public.companies
   ADD COLUMN IF NOT EXISTS trading_name            text,
@@ -54,7 +43,7 @@ ALTER TABLE public.profiles
 ALTER TABLE public.departments
   ADD COLUMN IF NOT EXISTS code text;
 
-DO $deptcode$
+DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
                  WHERE conname = 'departments_code_shape_chk'
@@ -63,14 +52,13 @@ BEGIN
       ADD CONSTRAINT departments_code_shape_chk
       CHECK (code IS NULL OR code ~ '^[A-Z0-9]{2,8}$');
   END IF;
-
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
                  WHERE conname = 'departments_code_unique_per_company'
                    AND conrelid = 'public.departments'::regclass) THEN
     ALTER TABLE public.departments
       ADD CONSTRAINT departments_code_unique_per_company UNIQUE (company_id, code);
   END IF;
-END $deptcode$;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.sites (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -93,11 +81,13 @@ CREATE INDEX IF NOT EXISTS sites_company_idx ON public.sites (company_id);
 ALTER TABLE public.sites ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS sites_company_read ON public.sites;
+
 CREATE POLICY sites_company_read ON public.sites
   FOR SELECT TO authenticated
   USING (public.app_is_company_member(company_id));
 
 DROP POLICY IF EXISTS sites_company_write ON public.sites;
+
 CREATE POLICY sites_company_write ON public.sites
   FOR ALL TO authenticated
   USING (public.app_is_company_member(company_id))
@@ -108,15 +98,10 @@ ALTER TABLE public.company_members
   ADD COLUMN IF NOT EXISTS site_ids         uuid[] NOT NULL DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS job_title        text;
 
-DO $invites$
-BEGIN
-  IF to_regclass('public.company_invites') IS NOT NULL THEN
-    ALTER TABLE public.company_invites
-      ADD COLUMN IF NOT EXISTS site_ids           uuid[]  NOT NULL DEFAULT '{}',
-      ADD COLUMN IF NOT EXISTS job_title          text,
-      ADD COLUMN IF NOT EXISTS signs_applications boolean NOT NULL DEFAULT false;
-  END IF;
-END $invites$;
+ALTER TABLE public.company_invites
+  ADD COLUMN IF NOT EXISTS site_ids           uuid[]  NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS job_title          text,
+  ADD COLUMN IF NOT EXISTS signs_applications boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS public.authorised_signatories (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -144,118 +129,112 @@ CREATE UNIQUE INDEX IF NOT EXISTS authorised_signatories_active_email_idx
 ALTER TABLE public.authorised_signatories ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS authorised_signatories_read ON public.authorised_signatories;
+
 CREATE POLICY authorised_signatories_read ON public.authorised_signatories
   FOR SELECT TO authenticated
   USING (public.app_is_company_member(company_id));
 
 DROP POLICY IF EXISTS authorised_signatories_write ON public.authorised_signatories;
+
 CREATE POLICY authorised_signatories_write ON public.authorised_signatories
   FOR ALL TO authenticated
   USING (public.app_has_company_role(company_id, ARRAY['owner','admin']))
   WITH CHECK (public.app_has_company_role(company_id, ARRAY['owner','admin']));
 
-DO $siglog$
+CREATE OR REPLACE FUNCTION public.fn_log_signatory_change()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $$
+DECLARE
+  v_action text;
 BEGIN
-  IF to_regprocedure('public.licence_audit_step(uuid, text, text, uuid, jsonb)') IS NOT NULL THEN
-    EXECUTE $fn$
-      CREATE OR REPLACE FUNCTION public.fn_log_signatory_change()
-      RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-      SET search_path TO 'public', 'extensions', 'pg_temp'
-      AS $body$
-      DECLARE
-        v_action text;
-      BEGIN
-        IF TG_OP = 'INSERT' THEN
-          v_action := 'signatory_added';
-        ELSIF NEW.removed_at IS NOT NULL AND OLD.removed_at IS NULL THEN
-          v_action := 'signatory_removed';
-        ELSE
-          v_action := 'signatory_updated';
-        END IF;
-        PERFORM public.licence_audit_step(
-          NEW.company_id, v_action, 'authorised_signatory', NEW.id,
-          jsonb_build_object('email', NEW.email, 'full_name', NEW.full_name,
-                             'job_title', NEW.job_title));
-        RETURN NEW;
-      END $body$;
-    $fn$;
-
-    DROP TRIGGER IF EXISTS trg_log_signatory_change ON public.authorised_signatories;
-    CREATE TRIGGER trg_log_signatory_change
-      AFTER INSERT OR UPDATE ON public.authorised_signatories
-      FOR EACH ROW EXECUTE FUNCTION public.fn_log_signatory_change();
+  IF TG_OP = 'INSERT' THEN
+    v_action := 'signatory_added';
+  ELSIF NEW.removed_at IS NOT NULL AND OLD.removed_at IS NULL THEN
+    v_action := 'signatory_removed';
+  ELSE
+    v_action := 'signatory_updated';
   END IF;
-END $siglog$;
+  PERFORM public.licence_audit_step(
+    NEW.company_id, v_action, 'authorised_signatory', NEW.id,
+    jsonb_build_object('email', NEW.email, 'full_name', NEW.full_name,
+                       'job_title', NEW.job_title));
+  RETURN NEW;
+END
+$$;
 
-DO $inviteextras$
+CREATE OR REPLACE FUNCTION public.fn_apply_invite_extras()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $$
+DECLARE
+  v_user uuid;
+  v_name text;
 BEGIN
-  IF to_regclass('public.company_invites') IS NOT NULL THEN
-    EXECUTE $fn$
-      CREATE OR REPLACE FUNCTION public.fn_apply_invite_extras()
-      RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-      SET search_path TO 'public', 'extensions', 'pg_temp'
-      AS $body$
-      DECLARE
-        v_user uuid;
-        v_name text;
-      BEGIN
-        IF OLD.accepted_at IS NOT NULL OR NEW.accepted_at IS NULL THEN
-          RETURN NEW;
-        END IF;
-        SELECT user_id INTO v_user
-        FROM public.company_members
-        WHERE company_id = NEW.company_id AND user_id = auth.uid()
-        LIMIT 1;
-        IF v_user IS NULL THEN
-          RETURN NEW;
-        END IF;
-        UPDATE public.company_members
-        SET site_ids  = NEW.site_ids,
-            job_title = coalesce(NEW.job_title, job_title)
-        WHERE company_id = NEW.company_id AND user_id = v_user;
-        IF NEW.signs_applications THEN
-          SELECT full_name INTO v_name FROM public.profiles WHERE id = v_user;
-          INSERT INTO public.authorised_signatories
-            (company_id, user_id, email, full_name, job_title, added_by)
-          VALUES
-            (NEW.company_id, v_user, NEW.email, v_name, NEW.job_title, NEW.created_by)
-          ON CONFLICT DO NOTHING;
-        END IF;
-        RETURN NEW;
-      END $body$;
-    $fn$;
-
-    DROP TRIGGER IF EXISTS trg_apply_invite_extras ON public.company_invites;
-    CREATE TRIGGER trg_apply_invite_extras
-      AFTER UPDATE OF accepted_at ON public.company_invites
-      FOR EACH ROW EXECUTE FUNCTION public.fn_apply_invite_extras();
+  IF OLD.accepted_at IS NOT NULL OR NEW.accepted_at IS NULL THEN
+    RETURN NEW;
   END IF;
-END $inviteextras$;
+  SELECT user_id INTO v_user
+  FROM public.company_members
+  WHERE company_id = NEW.company_id AND user_id = auth.uid()
+  LIMIT 1;
+  IF v_user IS NULL THEN
+    RETURN NEW;
+  END IF;
+  UPDATE public.company_members
+  SET site_ids  = NEW.site_ids,
+      job_title = coalesce(NEW.job_title, job_title)
+  WHERE company_id = NEW.company_id AND user_id = v_user;
+  IF NEW.signs_applications THEN
+    SELECT full_name INTO v_name FROM public.profiles WHERE id = v_user;
+    INSERT INTO public.authorised_signatories
+      (company_id, user_id, email, full_name, job_title, added_by)
+    VALUES
+      (NEW.company_id, v_user, NEW.email, v_name, NEW.job_title, NEW.created_by)
+    ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NEW;
+END
+$$;
 
-DO $obligations$
+DO $$
+BEGIN
+  DROP TRIGGER IF EXISTS trg_log_signatory_change ON public.authorised_signatories;
+  IF to_regprocedure('public.licence_audit_step(uuid, text, text, uuid, jsonb)') IS NULL THEN
+    RAISE NOTICE 'licence_audit_step absent, signatory changes will not be logged';
+    RETURN;
+  END IF;
+  CREATE TRIGGER trg_log_signatory_change
+    AFTER INSERT OR UPDATE ON public.authorised_signatories
+    FOR EACH ROW EXECUTE FUNCTION public.fn_log_signatory_change();
+END $$;
+
+DROP TRIGGER IF EXISTS trg_apply_invite_extras ON public.company_invites;
+
+CREATE TRIGGER trg_apply_invite_extras
+  AFTER UPDATE OF accepted_at ON public.company_invites
+  FOR EACH ROW EXECUTE FUNCTION public.fn_apply_invite_extras();
+
+DO $$
 DECLARE
   v_stranded bigint;
 BEGIN
   IF to_regclass('public.regulatory_obligations') IS NULL THEN
-    RAISE NOTICE 'regulatory_obligations absent; skipping its tenancy repair.';
+    RAISE NOTICE 'regulatory_obligations absent, skipping its tenancy repair';
     RETURN;
   END IF;
-
   SELECT count(*) INTO v_stranded
   FROM public.regulatory_obligations o
   WHERE NOT EXISTS (SELECT 1 FROM public.companies c WHERE c.id = o.company_id);
-
   IF v_stranded > 0 THEN
-    RAISE NOTICE 'SKIPPED obligations repair: % rows reference a non-company id.', v_stranded;
+    RAISE NOTICE 'skipped obligations repair, % rows reference a non company id', v_stranded;
     RETURN;
   END IF;
-
   ALTER TABLE public.regulatory_obligations
     DROP CONSTRAINT IF EXISTS regulatory_obligations_company_id_fkey;
   ALTER TABLE public.regulatory_obligations
     ADD CONSTRAINT regulatory_obligations_company_id_fkey
     FOREIGN KEY (company_id) REFERENCES public.companies (id) ON DELETE CASCADE;
-
   DROP POLICY IF EXISTS "Regulatory obligations are company scoped"
     ON public.regulatory_obligations;
   DROP POLICY IF EXISTS regulatory_obligations_company_scoped
@@ -265,15 +244,14 @@ BEGIN
     FOR ALL TO authenticated
     USING (public.app_is_company_member(company_id))
     WITH CHECK (public.app_is_company_member(company_id));
-END $obligations$;
+END $$;
 
-DO $risks$
+DO $$
 BEGIN
   IF to_regclass('public.risks') IS NULL THEN
-    RAISE NOTICE 'risks absent; skipping its policy repair.';
+    RAISE NOTICE 'risks absent, skipping its policy repair';
     RETURN;
   END IF;
-
   DROP POLICY IF EXISTS risks_manage ON public.risks;
   CREATE POLICY risks_manage ON public.risks
     FOR ALL TO authenticated
@@ -289,7 +267,7 @@ BEGIN
         SELECT profiles.company_id FROM public.profiles
         WHERE profiles.id = auth.uid()
           AND profiles.role = ANY (ARRAY['admin','compliance_officer','compliance','executive'])));
-END $risks$;
+END $$;
 
 SELECT 'app_is_company_member' AS item,
        to_regprocedure('public.app_is_company_member(uuid, uuid)') IS NOT NULL AS ok
