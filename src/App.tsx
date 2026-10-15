@@ -580,13 +580,11 @@ function AppContent() {
   //  Who it's for, About, Contact — are state rather than addresses, so
   //  they are served from inside this block too; routing "/" straight to
   //  the landing component would have made them unreachable.
-  //  /login IS THE LOGIN SCREEN. ALWAYS.
-  //  It used to be "the login screen, unless a session happens to exist,
-  //  in which case the product" — so asking for /login while signed in
-  //  gave whatever the app decided to show, which is the opposite of
-  //  what the address says. An address that means one thing only is
-  //  worth more than the convenience of skipping it.
-  if (wantsLogin) {
+  //  /login and /portal are sign-in entry points while the visitor is signed out.
+  //  After sign-in, profile loading determines the destination: incomplete
+  //  setup opens onboarding, while an already configured workspace opens the
+  //  product. This avoids trapping a valid session on its entry form.
+  if (wantsLogin && !user) {
     return (
       <LoginPage
         onToggleSignup={() => setUnauthView('signup')}
