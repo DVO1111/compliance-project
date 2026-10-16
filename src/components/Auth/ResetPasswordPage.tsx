@@ -92,9 +92,11 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
         ? 'Set a password to finish creating your account. You will continue to workspace setup next.'
         : 'You followed a reset link, so set a password to finish signing in.'}
     >
-      {initialSetup && !user ? (
+      {!user ? (
         <>
-          <AuthNotice tone="error">This invitation link has already been used or did not establish a session. You can request a fresh password link for your account below.</AuthNotice>
+          <AuthNotice tone="error">{initialSetup
+            ? 'This invitation link has already been used or did not establish a session. Request a fresh password link below.'
+            : 'This password link did not establish a session. Request a fresh link below.'}</AuthNotice>
           {recoverySent ? (
             <AuthNotice tone="info">If that address has an account, a password link is on its way. Check your inbox and spam folder.</AuthNotice>
           ) : (
@@ -119,7 +121,7 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
       ) : null}
       {error && <AuthNotice tone="error">{error}</AuthNotice>}
 
-      {(!initialSetup || user) && <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {user && <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <AuthField id="new-password" label="New password">
           <span style={{ position: 'relative', display: 'block' }}>
             <input

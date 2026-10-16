@@ -1,11 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
-import { isInviteCallback } from './auth/inviteCallback';
+import { isInviteCallback, isPasswordRecoveryCallback } from './auth/inviteCallback';
 
 // Supabase can consume the auth callback fragment during client initialization.
 // Capture the invite marker first so the app still knows why this page opened.
 export const INITIAL_AUTH_CALLBACK_IS_INVITE = typeof window !== 'undefined'
   && isInviteCallback(window.location.search, window.location.hash);
+export const INITIAL_AUTH_CALLBACK_IS_RECOVERY = typeof window !== 'undefined'
+  && isPasswordRecoveryCallback(window.location.search, window.location.hash);
 
 // Support both Vite (import.meta.env) and Node.js (process.env) environments
 const env: Record<string, string | undefined> =

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isInviteCallback } from '../lib/auth/inviteCallback';
+import { isInviteCallback, isPasswordRecoveryCallback } from '../lib/auth/inviteCallback';
 
 describe('isInviteCallback', () => {
   it('recognizes an invite callback in the auth URL fragment', () => {
@@ -17,5 +17,19 @@ describe('isInviteCallback', () => {
   it('does not treat recovery or ordinary URLs as an invite', () => {
     expect(isInviteCallback('?type=recovery', '#access_token=abc')).toBe(false);
     expect(isInviteCallback('', '')).toBe(false);
+  });
+});
+
+describe('isPasswordRecoveryCallback', () => {
+  it('recognizes the configured recovery redirect marker', () => {
+    expect(isPasswordRecoveryCallback('?recovery=1', '')).toBe(true);
+  });
+
+  it('recognizes Supabase recovery tokens in the URL fragment', () => {
+    expect(isPasswordRecoveryCallback('', '#access_token=abc&type=recovery')).toBe(true);
+  });
+
+  it('does not treat invite callbacks as password recovery', () => {
+    expect(isPasswordRecoveryCallback('?setup=1&type=invite', '#type=invite')).toBe(false);
   });
 });

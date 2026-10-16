@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured, INITIAL_AUTH_CALLBACK_IS_INVITE } from '../lib/supabase';
+import {
+  supabase, isSupabaseConfigured, INITIAL_AUTH_CALLBACK_IS_INVITE,
+  INITIAL_AUTH_CALLBACK_IS_RECOVERY,
+} from '../lib/supabase';
 import { useJurisdictionStore } from '../stores/jurisdictionStore';
 import { toJurisdictionId } from '../lib/regulatoryProfile';
 import type { Database } from '../lib/database.types';
@@ -95,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
-  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(INITIAL_AUTH_CALLBACK_IS_RECOVERY);
   const [isInitialPasswordSetup, setIsInitialPasswordSetup] = useState(
     () => INITIAL_AUTH_CALLBACK_IS_INVITE || hasInviteCallback()
   );
