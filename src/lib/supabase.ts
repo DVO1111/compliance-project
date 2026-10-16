@@ -61,5 +61,11 @@ function unconfiguredClient(): ReturnType<typeof createClient<Database>> {
 }
 
 export const supabase = isSupabaseConfigured
-  ? createClient<Database>(supabaseUrl as string, supabaseAnonKey as string)
+  ? createClient<Database>(supabaseUrl as string, supabaseAnonKey as string, {
+      auth: {
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        persistSession: true,
+      },
+    })
   : unconfiguredClient();

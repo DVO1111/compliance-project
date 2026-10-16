@@ -25,6 +25,10 @@ describe('isPasswordRecoveryCallback', () => {
     expect(isPasswordRecoveryCallback('?recovery=1', '')).toBe(true);
   });
 
+  it('recognizes a PKCE recovery callback carrying an authorization code', () => {
+    expect(isPasswordRecoveryCallback('?recovery=1&code=auth-code', '')).toBe(true);
+  });
+
   it('recognizes Supabase recovery tokens in the URL fragment', () => {
     expect(isPasswordRecoveryCallback('', '#access_token=abc&type=recovery')).toBe(true);
   });

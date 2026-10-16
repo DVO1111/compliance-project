@@ -353,6 +353,11 @@ function AppContent() {
     }
   })();
 
+  const passwordPreview = import.meta.env.DEV && (() => {
+    try { return new URLSearchParams(window.location.search).get('preview-password') === '1'; }
+    catch { return false; }
+  })();
+
   const accessRequestsPath = (() => {
     try { return appPath() === '/access-requests'; } catch { return false; }
   })();
@@ -533,6 +538,10 @@ function AppContent() {
       The hub above is served first because it needs no database. */
   if (!isSupabaseConfigured) {
     return <ConfigurationNeeded />;
+  }
+
+  if (passwordPreview) {
+    return <ResetPasswordPage initialSetup preview />;
   }
 
   if (loading) {

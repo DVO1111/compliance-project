@@ -24,7 +24,10 @@ import { appUrl } from '../../lib/routing';
  * they sign out. Rendering the product behind the form would hand out
  * access to anyone with one look at the mailbox.
  */
-export default function ResetPasswordPage({ initialSetup = false }: { initialSetup?: boolean }) {
+export default function ResetPasswordPage({
+  initialSetup = false,
+  preview = false,
+}: { initialSetup?: boolean; preview?: boolean }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -92,7 +95,7 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
         ? 'Set a password to finish creating your account. You will continue to workspace setup next.'
         : 'You followed a reset link, so set a password to finish signing in.'}
     >
-      {!user ? (
+      {!user && !preview ? (
         <>
           <AuthNotice tone="error">{initialSetup
             ? 'This invitation link has already been used or did not establish a session. Request a fresh password link below.'
@@ -119,9 +122,10 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
           )}
         </>
       ) : null}
+      {preview && <AuthNotice tone="info">UI preview only. Password submission is disabled here.</AuthNotice>}
       {error && <AuthNotice tone="error">{error}</AuthNotice>}
 
-      {user && <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {(user || preview) && <form onSubmit={(event) => { event.preventDefault(); if (!preview) void handleSubmit(event); }} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <AuthField id="new-password" label="New password">
           <span style={{ position: 'relative', display: 'block' }}>
             <input
@@ -181,18 +185,18 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || preview}
           className="lp-btn lp-btn--primary lp-btn--block"
           style={{ marginTop: 6, minHeight: 50, ...(loading ? { opacity: 0.7 } : null) }}
         >
-          {loading ? 'Saving…' : initialSetup ? 'Set password and continue' : 'Save password and continue'}
+          {preview ? 'Set password and continue' : loading ? 'Saving…' : initialSetup ? 'Set password and continue' : 'Save password and continue'}
         </button>
       </form>}
 
       {/*  The only way out that does not set a password. Signing out drops
           the recovery session, which is the correct exit — leaving it open
           would leave the account reachable from the mailbox. */}
-      {user && <button
+      {user && !preview && <button
         type="button"
         onClick={() => void signOut()}
         className="transition hover:opacity-80"
