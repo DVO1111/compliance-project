@@ -11,5 +11,6 @@ export function isPasswordRecoveryCallback(search: string, hash: string): boolea
   const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
   return queryParams.get('recovery') === '1'
     || (queryParams.has('code') && queryParams.get('recovery') === '1')
+    || queryParams.get('type') === 'recovery'
     || hashParams.get('type') === 'recovery';
 }

@@ -10,6 +10,10 @@ describe('isInviteCallback', () => {
     expect(isInviteCallback('?type=invite&code=abc', '')).toBe(true);
   });
 
+  it('recognizes an invite callback when the type remains in the query string', () => {
+    expect(isInviteCallback('?type=invite', '')).toBe(true);
+  });
+
   it('recognizes the configured setup redirect before Supabase exchanges the callback', () => {
     expect(isInviteCallback('?setup=1&code=abc', '')).toBe(true);
   });
@@ -23,6 +27,10 @@ describe('isInviteCallback', () => {
 describe('isPasswordRecoveryCallback', () => {
   it('recognizes the configured recovery redirect marker', () => {
     expect(isPasswordRecoveryCallback('?recovery=1', '')).toBe(true);
+  });
+
+  it('recognizes Supabase recovery redirects when type remains in the query string', () => {
+    expect(isPasswordRecoveryCallback('?type=recovery&code=auth-code', '')).toBe(true);
   });
 
   it('recognizes a PKCE recovery callback carrying an authorization code', () => {

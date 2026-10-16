@@ -63,6 +63,9 @@ function unconfiguredClient(): ReturnType<typeof createClient<Database>> {
 export const supabase = isSupabaseConfigured
   ? createClient<Database>(supabaseUrl as string, supabaseAnonKey as string, {
       auth: {
+        // Recovery and invitation links are Supabase PKCE callbacks. Using the
+        // legacy implicit flow makes the app miss the auth code exchange and
+        // leaves the user stranded on the sign-in or landing page.
         flowType: 'pkce',
         detectSessionInUrl: true,
         persistSession: true,
