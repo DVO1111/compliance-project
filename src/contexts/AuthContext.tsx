@@ -9,6 +9,7 @@ import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
 import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
 import { isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
+import { isInviteCallback } from '../lib/auth/inviteCallback';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -19,6 +20,14 @@ type Profile = ProfileRow & {
   module_access?: string[] | null;     // module keys assigned at invite time
   customPermissions?: Partial<Permissions> | null; // from custom_roles JSONB
 };
+
+function hasInviteCallback(): boolean {
+  try {
+    return isInviteCallback(window.location.search, window.location.hash);
+  } catch {
+    return false;
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -87,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
-    const [isInitialPasswordSetup, setIsInitialPasswordSetup] = useState(false);
+  const [isInitialPasswordSetup, setIsInitialPasswordSetup] = useState(hasInviteCallback);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Track whether the initial profile load has completed. After that,
   // background refreshes (token refresh, window focus) must NEVER set
@@ -166,8 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
 
-        const callbackParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        if (event === 'SIGNED_IN' && callbackParams.get('type') === 'invite') {
+        if (event === 'SIGNED_IN' && hasInviteCallback()) {
           setIsInitialPasswordSetup(true);
         }
 
