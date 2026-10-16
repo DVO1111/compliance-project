@@ -333,7 +333,7 @@ function PageLoading() {
 }
 
 function AppContent() {
-  const { user, profile, loading, isRecoveringPassword, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isRecoveringPassword, isInitialPasswordSetup, refreshProfile, signOut } = useAuth();
 
   const inviteTokenFromUrl = (() => {
     try {
@@ -543,7 +543,7 @@ function AppContent() {
   //  password, so this gate sits ABOVE every other branch — including the
   //  invite flow and the authenticated app. Anything lower would render the
   //  product to whoever opened the mailbox.
-  if (setupPasswordLink) {
+  if (setupPasswordLink || isInitialPasswordSetup) {
     return user
       ? <ResetPasswordPage initialSetup />
       : <LoginPage
