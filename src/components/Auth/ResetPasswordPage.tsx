@@ -30,7 +30,10 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { completePasswordReset, signOut, user } = useAuth();
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoverySent, setRecoverySent] = useState(false);
+  const [recoverySending, setRecoverySending] = useState(false);
+  const { completePasswordReset, requestPasswordReset, signOut, user } = useAuth();
 
   //  Supabase's own default minimum. Checked here so the failure is
   //  immediate and next to the field, rather than a round trip.
@@ -68,6 +71,19 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
     //  normally — there is nothing to navigate to.
   };
 
+  const handleSendRecovery = async (e: FormEvent) => {
+    e.preventDefault();
+    setRecoverySending(true);
+    setError('');
+    const { error: recoveryError } = await requestPasswordReset(recoveryEmail.trim());
+    setRecoverySending(false);
+    if (recoveryError) {
+      setError('We could not send a password link. Please try again or contact your administrator.');
+      return;
+    }
+    setRecoverySent(true);
+  };
+
   return (
     <AuthShell
       kicker={initialSetup ? 'Account setup' : 'Reset password'}
@@ -76,9 +92,31 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
         ? 'Set a password to finish creating your account. You will continue to workspace setup next.'
         : 'You followed a reset link, so set a password to finish signing in.'}
     >
-      {initialSetup && !user
-        ? <AuthNotice tone="error">This page opened without a verified invitation session. Go back to the latest invitation email and click its Accept invitation button to continue.</AuthNotice>
-        : null}
+      {initialSetup && !user ? (
+        <>
+          <AuthNotice tone="error">This invitation link has already been used or did not establish a session. You can request a fresh password link for your account below.</AuthNotice>
+          {recoverySent ? (
+            <AuthNotice tone="info">If that address has an account, a password link is on its way. Check your inbox and spam folder.</AuthNotice>
+          ) : (
+            <form onSubmit={handleSendRecovery} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <AuthField id="setup-recovery-email" label="Email address used for the invitation">
+                <input
+                  type="email"
+                  id="setup-recovery-email"
+                  value={recoveryEmail}
+                  onChange={(event) => setRecoveryEmail(event.target.value)}
+                  className="lp-field lp-field--sunken"
+                  autoComplete="email"
+                  required
+                />
+              </AuthField>
+              <button type="submit" disabled={recoverySending} className="lp-btn lp-btn--primary lp-btn--block" style={{ minHeight: 50 }}>
+                {recoverySending ? 'Sending…' : 'Email me a password link'}
+              </button>
+            </form>
+          )}
+        </>
+      ) : null}
       {error && <AuthNotice tone="error">{error}</AuthNotice>}
 
       {(!initialSetup || user) && <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
