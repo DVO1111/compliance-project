@@ -544,13 +544,7 @@ function AppContent() {
   //  invite flow and the authenticated app. Anything lower would render the
   //  product to whoever opened the mailbox.
   if (setupPasswordLink || isInitialPasswordSetup) {
-    return user
-      ? <ResetPasswordPage initialSetup />
-      : <LoginPage
-          onToggleSignup={() => setUnauthView('signup')}
-          onRequestAccess={() => setUnauthView('contact')}
-          onBackToLanding={() => setUnauthView('landing')}
-        />;
+    return <ResetPasswordPage initialSetup />;
   }
 
   if (isRecoveringPassword) {

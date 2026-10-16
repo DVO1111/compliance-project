@@ -30,7 +30,7 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { completePasswordReset, signOut } = useAuth();
+  const { completePasswordReset, signOut, user } = useAuth();
 
   //  Supabase's own default minimum. Checked here so the failure is
   //  immediate and next to the field, rather than a round trip.
@@ -76,9 +76,12 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
         ? 'Set a password to finish creating your account. You will continue to workspace setup next.'
         : 'You followed a reset link, so set a password to finish signing in.'}
     >
+      {initialSetup && !user
+        ? <AuthNotice tone="error">This page opened without a verified invitation session. Go back to the latest invitation email and click its Accept invitation button to continue.</AuthNotice>
+        : null}
       {error && <AuthNotice tone="error">{error}</AuthNotice>}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {(!initialSetup || user) && <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <AuthField id="new-password" label="New password">
           <span style={{ position: 'relative', display: 'block' }}>
             <input
@@ -144,12 +147,12 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
         >
           {loading ? 'Saving…' : initialSetup ? 'Set password and continue' : 'Save password and continue'}
         </button>
-      </form>
+      </form>}
 
       {/*  The only way out that does not set a password. Signing out drops
           the recovery session, which is the correct exit — leaving it open
           would leave the account reachable from the mailbox. */}
-      <button
+      {user && <button
         type="button"
         onClick={() => void signOut()}
         className="transition hover:opacity-80"
@@ -164,7 +167,7 @@ export default function ResetPasswordPage({ initialSetup = false }: { initialSet
         }}
       >
         ← Cancel and sign out
-      </button>
+      </button>}
     </AuthShell>
   );
 }

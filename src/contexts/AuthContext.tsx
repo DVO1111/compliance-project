@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, INITIAL_AUTH_CALLBACK_IS_INVITE } from '../lib/supabase';
 import { useJurisdictionStore } from '../stores/jurisdictionStore';
 import { toJurisdictionId } from '../lib/regulatoryProfile';
 import type { Database } from '../lib/database.types';
@@ -96,7 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
-  const [isInitialPasswordSetup, setIsInitialPasswordSetup] = useState(hasInviteCallback);
+  const [isInitialPasswordSetup, setIsInitialPasswordSetup] = useState(
+    () => INITIAL_AUTH_CALLBACK_IS_INVITE || hasInviteCallback()
+  );
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Track whether the initial profile load has completed. After that,
   // background refreshes (token refresh, window focus) must NEVER set
@@ -175,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
 
-        if (event === 'SIGNED_IN' && hasInviteCallback()) {
+        if (event === 'SIGNED_IN' && (INITIAL_AUTH_CALLBACK_IS_INVITE || hasInviteCallback())) {
           setIsInitialPasswordSetup(true);
         }
 
