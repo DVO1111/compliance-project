@@ -37,17 +37,39 @@ export default function DashboardSection({
             className={`space-y-3 ${className}`}
         >
             {title && (
-                <div className="flex items-end justify-between gap-4 flex-wrap">
-                    <div>
-                        {/* heading-02 / body-short-01 */}
-                        <h3 className="type-heading-02 dash-text">
-                            {title}
-                        </h3>
+                //  The Criateur Dashboard design sets the subtitle BESIDE the
+                //  heading on a shared baseline, not stacked under it: the
+                //  heading names the tier and the subtitle qualifies it from
+                //  the far edge ("Needs attention … Where quality is slipping
+                //  today"). Stacked, the two read as a title and a
+                //  description of the same weight; side by side, the heading
+                //  carries and the subtitle annotates.
+                //
+                //  It wraps on narrow viewports, where the subtitle drops
+                //  under the heading and the stacked reading returns —
+                //  which is the right fallback rather than truncating it.
+                <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                    <h3
+                        className="dash-text"
+                        style={{
+                            fontFamily: 'var(--font-display)',
+                            fontSize: 19,
+                            fontWeight: 600,
+                            fontStretch: '94%',
+                            lineHeight: 1.2,
+                            margin: 0,
+                        }}
+                    >
+                        {title}
+                    </h3>
+                    <div className="flex items-baseline gap-3 flex-wrap">
                         {subtitle && (
-                            <p className="type-body-short-01 dash-text-secondary mt-0.5">{subtitle}</p>
+                            <span className="dash-text-secondary" style={{ fontSize: 13 }}>
+                                {subtitle}
+                            </span>
                         )}
+                        {actions && <div className="flex items-center gap-2">{actions}</div>}
                     </div>
-                    {actions && <div className="flex items-center gap-2">{actions}</div>}
                 </div>
             )}
 
