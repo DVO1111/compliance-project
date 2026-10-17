@@ -10,6 +10,7 @@ import {
   ALLOWED_SIGNIN_EMAILS,
   SIGNIN_ALLOWLIST_ACTIVE,
   SIGNIN_NOT_ALLOWED_MESSAGE,
+  canRestoreAuthSession,
   isEmailAllowedToSignIn,
 } from '../lib/auth/allowlist';
 
@@ -59,6 +60,18 @@ describe('isEmailAllowedToSignIn', () => {
   //  records the decision so a later "fix" has to argue with it.
   it('does not silently treat Gmail dot variants as the same address', () => {
     expect(isEmailAllowedToSignIn('ayomide.elijah1@gmail.com')).toBe(false);
+  });
+});
+
+describe('canRestoreAuthSession', () => {
+  it('keeps the closed allowlist for ordinary sessions', () => {
+    expect(canRestoreAuthSession('aeoladehinde@sterlinglams.com', false)).toBe(false);
+    expect(canRestoreAuthSession('fmuyiwa15@gmail.com', false)).toBe(true);
+  });
+
+  it('allows an unlisted recovery session only so its password can be changed', () => {
+    expect(canRestoreAuthSession('aeoladehinde@sterlinglams.com', true)).toBe(true);
+    expect(canRestoreAuthSession(null, true)).toBe(true);
   });
 });
 

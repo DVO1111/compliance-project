@@ -11,7 +11,7 @@ import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
 import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
-import { isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
+import { canRestoreAuthSession, isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
 import { isInviteCallback } from '../lib/auth/inviteCallback';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         //  keep walking back in until its token expired. Checked on
         //  restore as well as at sign-in, so the list governs who is
         //  inside and not merely who may knock.
-        if (session?.user && !isEmailAllowedToSignIn(session.user.email)) {
+        if (session?.user && !canRestoreAuthSession(session.user.email, INITIAL_AUTH_CALLBACK_IS_RECOVERY)) {
           logger.warn('restored session is not on the sign-in allowlist — signing out');
           void supabase.auth.signOut();
           setSession(null);

@@ -60,3 +60,11 @@ export function isEmailAllowedToSignIn(email: string | null | undefined): boolea
   const normalised = email.trim().toLowerCase();
   return ALLOWED_SIGNIN_EMAILS.some((allowed) => allowed.trim().toLowerCase() === normalised);
 }
+
+/** Recovery sessions may set a password, but do not grant normal app access. */
+export function canRestoreAuthSession(
+  email: string | null | undefined,
+  isPasswordRecoveryCallback: boolean,
+): boolean {
+  return isPasswordRecoveryCallback || isEmailAllowedToSignIn(email);
+}
