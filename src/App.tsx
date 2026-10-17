@@ -541,6 +541,11 @@ function AppContent() {
     return <ConfigurationNeeded />;
   }
 
+  // Verify invitation and password-recovery links.
+  if (appPath() === '/auth/callback') {
+    return <AuthCallbackPage />;
+  }
+
   if (passwordPreview) {
     return <ResetPasswordPage initialSetup preview />;
   }
