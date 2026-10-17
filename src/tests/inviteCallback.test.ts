@@ -29,6 +29,10 @@ describe('isPasswordRecoveryCallback', () => {
     expect(isPasswordRecoveryCallback('?recovery=1', '')).toBe(true);
   });
 
+  it('keeps recovery routing recognizable when Supabase returns an expired-token error', () => {
+    expect(isPasswordRecoveryCallback('?error=access_denied&error_code=otp_expired&recovery=1', '')).toBe(true);
+  });
+
   it('recognizes Supabase recovery redirects when type remains in the query string', () => {
     expect(isPasswordRecoveryCallback('?type=recovery&code=auth-code', '')).toBe(true);
   });

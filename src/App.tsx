@@ -333,7 +333,7 @@ function PageLoading() {
 }
 
 function AppContent() {
-  const { user, profile, loading, isRecoveringPassword, isInitialPasswordSetup, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isRecoveringPassword, isRecoveryCallback, isInitialPasswordSetup, refreshProfile, signOut } = useAuth();
 
   const inviteTokenFromUrl = (() => {
     try {
@@ -556,7 +556,7 @@ function AppContent() {
     return <ResetPasswordPage initialSetup />;
   }
 
-  if (isRecoveringPassword) {
+  if (isRecoveringPassword || isRecoveryCallback) {
     return <ResetPasswordPage />;
   }
 

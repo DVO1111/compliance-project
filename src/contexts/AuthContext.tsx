@@ -71,6 +71,8 @@ interface AuthContextType {
    * without a password.
    */
   isRecoveringPassword: boolean;
+  /** Recovery callback URL was opened, even if Supabase rejects its token. */
+  isRecoveryCallback: boolean;
   /** True when Supabase redirects an invited user back to create a password. */
   isInitialPasswordSetup: boolean;
   refreshProfile: () => Promise<void>;
@@ -99,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(INITIAL_AUTH_CALLBACK_IS_RECOVERY);
+  const isRecoveryCallback = INITIAL_AUTH_CALLBACK_IS_RECOVERY;
   const [isInitialPasswordSetup, setIsInitialPasswordSetup] = useState(
     () => INITIAL_AUTH_CALLBACK_IS_INVITE || hasInviteCallback()
   );
@@ -724,7 +727,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, isInitialPasswordSetup, refreshProfile, switchBrand, profileLoadError, provisionWorkspace }}
+      value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, isRecoveryCallback, isInitialPasswordSetup, refreshProfile, switchBrand, profileLoadError, provisionWorkspace }}
     >
       {children}
     </AuthContext.Provider>
