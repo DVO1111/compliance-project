@@ -67,7 +67,8 @@ export default function ResetPasswordPage({
           ? 'That reset link has expired. Request a new one from the sign-in page.'
           : error.message
       );
-    } else if (initialSetup) {
+    } else {
+      await signOut();
       window.location.replace(appUrl('/portal'));
     }
     //  On success the flag clears in the context and the app renders
