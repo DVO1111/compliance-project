@@ -9,7 +9,7 @@ AS $$
     SELECT 1 FROM company_members
     WHERE company_id = p_company_id
       AND user_id = p_user_id
-      AND status = 'active'
+      AND status::text = 'active'
   );
 $$;
 
@@ -22,8 +22,8 @@ AS $$
     SELECT 1 FROM company_members
     WHERE company_id = p_company_id
       AND user_id = p_user_id
-      AND status = 'active'
-      AND role = ANY (p_roles)
+      AND status::text = 'active'
+      AND role::text = ANY (p_roles)
   );
 $$;
 
@@ -260,13 +260,47 @@ BEGIN
       OR company_id IN (
         SELECT profiles.company_id FROM public.profiles
         WHERE profiles.id = auth.uid()
-          AND profiles.role = ANY (ARRAY['admin','compliance_officer','compliance','executive'])))
+          AND profiles.role::text = ANY (ARRAY['admin','compliance_officer','compliance','executive'])))
     WITH CHECK (
       public.app_has_company_role(company_id, ARRAY['owner','admin'])
       OR company_id IN (
         SELECT profiles.company_id FROM public.profiles
         WHERE profiles.id = auth.uid()
-          AND profiles.role = ANY (ARRAY['admin','compliance_officer','compliance','executive'])));
+          AND profiles.role::text = ANY (ARRAY['admin','compliance_officer','compliance','executive'])));
+END $$;
+
+CREATE OR REPLACE FUNCTION public.fn_allowlist_invited_email()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+BEGIN
+  IF to_regclass('public.allowed_signins') IS NULL THEN
+    RETURN NEW;
+  END IF;
+  INSERT INTO public.allowed_signins (email, note)
+  VALUES (lower(btrim(NEW.email)), 'invited to a company')
+  ON CONFLICT (email) DO NOTHING;
+  RETURN NEW;
+END
+$$;
+
+DO $$
+BEGIN
+  DROP TRIGGER IF EXISTS trg_allowlist_invited_email ON public.company_invites;
+  IF to_regclass('public.allowed_signins') IS NULL THEN
+    RAISE NOTICE 'allowed_signins absent, invited addresses are not allowlisted';
+    RETURN;
+  END IF;
+  CREATE TRIGGER trg_allowlist_invited_email
+    AFTER INSERT ON public.company_invites
+    FOR EACH ROW EXECUTE FUNCTION public.fn_allowlist_invited_email();
+  INSERT INTO public.allowed_signins (email, note)
+  SELECT DISTINCT lower(btrim(i.email)), 'invited to a company'
+  FROM public.company_invites i
+  WHERE i.accepted_at IS NULL
+    AND i.revoked_at IS NULL
+    AND btrim(coalesce(i.email, '')) <> ''
+  ON CONFLICT (email) DO NOTHING;
 END $$;
 
 SELECT 'app_is_company_member' AS item,
@@ -320,4 +354,8 @@ UNION ALL SELECT 'workspace owner can add a risk',
        EXISTS (SELECT 1 FROM pg_policies
                WHERE schemaname='public' AND tablename='risks'
                  AND policyname='risks_manage' AND qual LIKE '%app_has_company_role%')
+UNION ALL SELECT 'invited addresses are allowlisted',
+       (to_regclass('public.allowed_signins') IS NULL)
+       OR EXISTS (SELECT 1 FROM pg_trigger
+                  WHERE tgname='trg_allowlist_invited_email' AND NOT tgisinternal)
 ORDER BY 1;
