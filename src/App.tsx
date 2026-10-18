@@ -1,9 +1,9 @@
 import * as Sentry from '@sentry/react';
 import { getPermissions } from './lib/permissions';
-import { appPath, appUrl } from './lib/routing';
+import { appPath, appUrl, SIGN_IN_PATHS } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
-import { useEffect, useState, lazy, Suspense, type ComponentType } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
 import OnboardingCompany from './pages/OnboardingCompany';
@@ -394,11 +394,9 @@ function AppContent() {
      the first path anyone guesses, and it may already have been shared — a
      404-looking landing page for someone trying to sign in is not worth the
      tidiness of retiring it. */
-  const SIGN_IN_PATHS = ['/portal', '/login'];
-
   const wantsLogin = (() => {
     try {
-      return SIGN_IN_PATHS.includes(appPath());
+      return (SIGN_IN_PATHS as readonly string[]).includes(appPath());
     } catch {
       return false;
     }
@@ -447,6 +445,34 @@ function AppContent() {
     wantsLogin || wantsOnboardingHub ? 'login' : 'landing',
   );
   const [currentPage, setCurrentPage] = useRoutePersistence<PageId>('dashboard', isValidPageId);
+
+  //  SIGNING OUT LANDS ON SIGN IN, not on the marketing home page.
+  //
+  //  unauthView is seeded ONCE, from the address at mount. Nobody signs
+  //  out from /login — they sign out from /dashboard — so that seed was
+  //  'landing', and the person who had just asked to leave the product
+  //  was shown the front door of the website instead of the way back
+  //  in. Getting back to work then meant knowing to type /login.
+  //
+  //  Only a real transition counts. A visitor who ARRIVES signed out
+  //  still gets whatever their address asked for, which is what keeps
+  //  "/" the marketing site for everybody. The ref is what tells the two
+  //  apart: React cannot distinguish "signed out just now" from "was
+  //  never signed in" by looking at `user` alone, since both are null.
+  //
+  //  An expired session arrives here too, and the sign-in screen is the
+  //  right answer for that as well.
+  const hadSession = useRef(false);
+  useEffect(() => {
+    if (user) { hadSession.current = true; return; }
+    if (!hadSession.current) return;
+    hadSession.current = false;
+    setUnauthView('login');
+    //  The address too, so a reload stays on sign-in rather than
+    //  bouncing back to the landing page the old address still names.
+    try { window.history.replaceState({}, '', appUrl('/login')); }
+    catch { /* history is unavailable in some embedded views */ }
+  }, [user]);
   const [currentPolicyId, setCurrentPolicyId] = useState<string | null>(null);
   const [currentVendorId, setCurrentVendorId] = useState<string | null>(null);
   const [currentAuditSessionId, setCurrentAuditSessionId] = useState<string | null>(null);

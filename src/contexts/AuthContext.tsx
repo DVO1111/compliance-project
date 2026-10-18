@@ -13,6 +13,7 @@ import { logger } from '../lib/logger';
 import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
 import { canRestoreAuthSession, isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
 import { isInviteCallback } from '../lib/auth/inviteCallback';
+import { appUrl, SIGN_OUT_DESTINATION } from '../lib/routing';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -548,6 +549,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    //  THE ADDRESS CHANGES BEFORE THE SESSION DOES, and the order is the
+    //  whole point. App decides what a signed-out visitor sees from
+    //  window.location, so clearing `user` first would render one frame
+    //  at the old address — /dashboard, which is not a sign-in path —
+    //  and that frame is the marketing landing page. Setting /login
+    //  first means the render in which the session disappears is already
+    //  the sign-in screen, with no flash of the website in between.
+    //
+    //  Signing out is a request to leave the product, not a request to
+    //  read about it. The way back in is the screen it should land on.
+    try { window.history.replaceState({}, '', appUrl(SIGN_OUT_DESTINATION)); }
+    catch { /* history is unavailable in some embedded views */ }
     setUser(null);
     setProfile(null);
     setSession(null);

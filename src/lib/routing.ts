@@ -48,6 +48,23 @@ export function appPath(pathname?: string): string {
   return trimmed === '' ? '/' : trimmed;
 }
 
+/**
+ * The addresses that show the sign-in screen to a signed-out visitor.
+ *
+ * DECLARED HERE because two files have to agree about it and neither
+ * owns the other: App chooses what a signed-out visitor sees by testing
+ * the address against this list, and signOut sets the address to
+ * SIGN_OUT_DESTINATION on the way out. When those two drifted apart the
+ * failure was silent — signing out put people on the marketing landing
+ * page, with nothing logged and nothing to suggest the way back in was
+ * a URL they had to know to type.
+ */
+export const SIGN_IN_PATHS = ['/portal', '/login'] as const;
+
+/** Where signing out leaves you. It must be one of SIGN_IN_PATHS, which
+ *  is asserted in the routing tests rather than left to a reviewer. */
+export const SIGN_OUT_DESTINATION = '/login';
+
 /** An in-app path as a URL the browser can be sent to, base included. */
 export function appUrl(path: string): string {
   const base = basePath();

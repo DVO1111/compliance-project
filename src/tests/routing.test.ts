@@ -8,7 +8,38 @@
  * route not existing.
  */
 import { describe, it, expect } from 'vitest';
-import { appPath, appUrl, basePath } from '../lib/routing';
+import {
+  appPath, appUrl, basePath, SIGN_IN_PATHS, SIGN_OUT_DESTINATION,
+} from '../lib/routing';
+
+describe('where signing out leaves you', () => {
+  //  THE INVARIANT THAT MAKES SIGNING OUT WORK. AuthContext sets the
+  //  address to SIGN_OUT_DESTINATION; App decides what a signed-out
+  //  visitor sees by testing the address against SIGN_IN_PATHS. If the
+  //  two ever disagree, signing out puts people on the marketing
+  //  landing page and the way back into the product is a URL they have
+  //  to know to type. Nothing throws and nothing logs when that
+  //  happens, which is why it is asserted here.
+  it('is an address that shows the sign-in screen', () => {
+    expect(SIGN_IN_PATHS).toContain(SIGN_OUT_DESTINATION);
+  });
+
+  //  appPath lower-cases and strips trailing slashes before comparing,
+  //  so an entry that is not already in that form would never match the
+  //  address it is meant to describe.
+  it('lists its paths in the form appPath returns', () => {
+    for (const p of SIGN_IN_PATHS) {
+      expect(p).toBe(appPath(p));
+    }
+  });
+
+  //  signOut navigates to appUrl(SIGN_OUT_DESTINATION) and App reads the
+  //  result back with appPath. Those two have to be inverses of each
+  //  other for the destination to be recognised on arrival.
+  it('survives the round trip signOut and App make of it', () => {
+    expect(appPath(appUrl(SIGN_OUT_DESTINATION))).toBe(SIGN_OUT_DESTINATION);
+  });
+});
 
 describe('basePath', () => {
   //  Tests run with the default base, so this pins the root case. The
