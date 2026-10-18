@@ -65,6 +65,31 @@ export const SIGN_IN_PATHS = ['/portal', '/login'] as const;
  *  is asserted in the routing tests rather than left to a reviewer. */
 export const SIGN_OUT_DESTINATION = '/login';
 
+/**
+ * The workspace's own address, and where signing in leaves you.
+ *
+ * The app routes by state rather than by URL, so most pages have no
+ * address of their own. The workspace needs one anyway, for the same
+ * reason /onboarding does: without it, signing in left the bar reading
+ * /login while the dashboard was on screen — so the address named the
+ * screen you had just left, a reload looked like a sign-in page, and
+ * the one URL worth bookmarking did not exist.
+ */
+export const WORKSPACE_PATH = '/dashboard';
+
+/**
+ * Addresses that belong to the PRODUCT rather than to the website.
+ *
+ * A signed-out visitor at one of these is shown the sign-in screen, not
+ * the marketing page: they asked for the workspace, and the answer to
+ * "you need an account for that" is the way to get in, not a brochure.
+ * "/" is deliberately not here — the front door stays the website for
+ * everybody, signed in or not.
+ */
+export function isProductPath(path: string): boolean {
+  return (SIGN_IN_PATHS as readonly string[]).includes(path) || path === WORKSPACE_PATH;
+}
+
 /** An in-app path as a URL the browser can be sent to, base included. */
 export function appUrl(path: string): string {
   const base = basePath();

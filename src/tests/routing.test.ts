@@ -9,7 +9,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  appPath, appUrl, basePath, SIGN_IN_PATHS, SIGN_OUT_DESTINATION,
+  appPath, appUrl, basePath, isProductPath,
+  SIGN_IN_PATHS, SIGN_OUT_DESTINATION, WORKSPACE_PATH,
 } from '../lib/routing';
 
 describe('where signing out leaves you', () => {
@@ -38,6 +39,32 @@ describe('where signing out leaves you', () => {
   //  other for the destination to be recognised on arrival.
   it('survives the round trip signOut and App make of it', () => {
     expect(appPath(appUrl(SIGN_OUT_DESTINATION))).toBe(SIGN_OUT_DESTINATION);
+  });
+});
+
+describe('where signing in leaves you', () => {
+  //  The same invariant in the other direction: App navigates to
+  //  WORKSPACE_PATH on sign-in and reads the address back with appPath.
+  it('survives the round trip App makes of it', () => {
+    expect(appPath(appUrl(WORKSPACE_PATH))).toBe(WORKSPACE_PATH);
+  });
+
+  //  THE TWO DESTINATIONS MUST DIFFER. If the workspace address were
+  //  also a sign-in address, signing in would move you to a path that
+  //  renders the sign-in screen — a loop with no error in it.
+  it('is not an address that shows the sign-in screen', () => {
+    expect(SIGN_IN_PATHS).not.toContain(WORKSPACE_PATH);
+    expect(WORKSPACE_PATH).not.toBe(SIGN_OUT_DESTINATION);
+  });
+
+  //  Asking for the workspace signed out is a request to sign in. The
+  //  marketing root is deliberately NOT one of these: "/" stays the
+  //  website for everybody, signed in or not.
+  it('is a product address, and "/" is not', () => {
+    expect(isProductPath(WORKSPACE_PATH)).toBe(true);
+    expect(isProductPath(SIGN_OUT_DESTINATION)).toBe(true);
+    expect(isProductPath('/')).toBe(false);
+    expect(isProductPath('/about')).toBe(false);
   });
 });
 

@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/react';
 import { getPermissions } from './lib/permissions';
-import { appPath, appUrl, SIGN_IN_PATHS } from './lib/routing';
+import { appPath, appUrl, SIGN_IN_PATHS, WORKSPACE_PATH } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
@@ -402,6 +402,22 @@ function AppContent() {
     }
   })();
 
+  //  /dashboard, the workspace's own address. A signed-out visitor who
+  //  asks for it gets the sign-in screen rather than the marketing page,
+  //  the same way /onboarding behaves: they asked for the product, and
+  //  the answer to "you need an account for that" is the way in.
+  //
+  //  This matters most the morning after. A bookmark on /dashboard, a
+  //  session that has since expired, and without this the first thing
+  //  the workspace shows its own user is an advertisement for itself.
+  const wantsWorkspace = (() => {
+    try {
+      return appPath() === WORKSPACE_PATH;
+    } catch {
+      return false;
+    }
+  })();
+
   /*  TWO ADDRESSES, AND THE DIFFERENCE IS WHO THEY ARE FOR.
 
       /onboarding          the product. It needs an account: a signed-out
@@ -442,7 +458,7 @@ function AppContent() {
   //  same as /portal does. "Take me to onboarding" and "take me to the
   //  product" are the same request when there is no session.
   const [unauthView, setUnauthView] = useState<UnauthView>(
-    wantsLogin || wantsOnboardingHub ? 'login' : 'landing',
+    wantsLogin || wantsOnboardingHub || wantsWorkspace ? 'login' : 'landing',
   );
   const [currentPage, setCurrentPage] = useRoutePersistence<PageId>('dashboard', isValidPageId);
 
@@ -462,7 +478,26 @@ function AppContent() {
   //
   //  An expired session arrives here too, and the sign-in screen is the
   //  right answer for that as well.
+  //  SIGNING IN MOVES THE ADDRESS TO THE WORKSPACE, which is the other
+  //  half of the same idea. Sign-in used to leave the bar reading
+  //  /login with the dashboard on screen: the address named the screen
+  //  you had just left, a reload looked like being signed out, and
+  //  there was no URL to bookmark or to send anyone.
+  //
+  //  Only from a sign-in address. Somebody who signed in on a password
+  //  recovery link, an invite acceptance or /onboarding is in the middle
+  //  of something at an address that means something, and moving them to
+  //  /dashboard would interrupt it. SetupHubGate sets /onboarding for
+  //  itself when it opens, so a workspace that still needs setup ends up
+  //  there regardless of this.
   const hadSession = useRef(false);
+  useEffect(() => {
+    if (!user) return;
+    if (!wantsLogin) return;
+    try { window.history.replaceState({}, '', appUrl(WORKSPACE_PATH)); }
+    catch { /* history is unavailable in some embedded views */ }
+  }, [user, wantsLogin]);
+
   useEffect(() => {
     if (user) { hadSession.current = true; return; }
     if (!hadSession.current) return;
@@ -566,7 +601,7 @@ function AppContent() {
         //  accepted an invite showed them the company home page while
         //  setCurrentPage said dashboard: the address and the screen
         //  disagreed, and a reload resolved it the wrong way.
-        window.history.replaceState({}, '', appUrl('/dashboard'));
+        window.history.replaceState({}, '', appUrl(WORKSPACE_PATH));
         setCurrentPage('dashboard');
       } catch {
         // keep token for retry
@@ -673,7 +708,9 @@ function AppContent() {
   //  After sign-in, profile loading determines the destination: incomplete
   //  setup opens onboarding, while an already configured workspace opens the
   //  product. This avoids trapping a valid session on its entry form.
-  if (wantsLogin && !user) {
+  //  /dashboard is included: asking for the workspace without a session
+  //  is a request to sign in, not a reason to be shown the website.
+  if ((wantsLogin || wantsWorkspace) && !user) {
     return (
       <LoginPage
         onToggleSignup={() => setUnauthView('signup')}
@@ -861,7 +898,7 @@ function AppContent() {
           //  page — the one screen in the flow that promises the
           //  workspace was the one that did not open it.
           if (wantsOnboardingHub) {
-            try { window.history.replaceState({}, '', appUrl('/dashboard')); }
+            try { window.history.replaceState({}, '', appUrl(WORKSPACE_PATH)); }
             catch { /* history is unavailable in some embedded views */ }
           }
           if (navigateTo) {
