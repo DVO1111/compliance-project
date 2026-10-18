@@ -62,3 +62,9 @@ tmp/
 #  entries that name one machine's paths and one session's ids, so it
 #  showed as modified on every status for everybody.
 .claude/settings.local.json
+
+#  The preview harness builds into its own folder and is regenerated on
+#  demand (scripts/preview/README.md). The screenshots taken from it are
+#  artefacts of a moment, not of the repository.
+scripts/preview/out/
+.preview/
