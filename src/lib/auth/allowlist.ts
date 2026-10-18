@@ -35,6 +35,10 @@
 export const ALLOWED_SIGNIN_EMAILS: readonly string[] = [
   'ayomideelijah1@gmail.com',
   'fmuyiwa15@gmail.com',
+  //  A SEPARATE ADDRESS from fmuyiwa15 above, not a correction of it.
+  //  The two differ only in two digits, so an edit that "tidied" one
+  //  into the other would lock somebody out and look like a typo fix.
+  'fmuyiwa58@gmail.com',
   'aeoladehinde@sterlinglams.com',
 ];
 

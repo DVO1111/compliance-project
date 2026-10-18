@@ -112,6 +112,7 @@ function lazyPage<T extends ComponentType<any>>(
 const DepartmentsPage           = lazyPage(() => import('./components/company/DepartmentsPage'));
 const AIDashboardPage           = lazyPage(() => import('./components/Governance/AI/AIDashboardPage'));
 const FirstRunDashboard         = lazyPage(() => import('./components/Dashboard/FirstRunDashboard'));
+const ProductsPage              = lazyPage(() => import('./components/Products/ProductsPage'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
 const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
 const RegulationsPage           = lazyPage(() => import('./components/Regulations/RegulationsPage'));
@@ -229,6 +230,7 @@ const FINISH_ROW_PAGES: Record<'invitations' | 'licence-details' | 'starter-reco
 function isValidPageId(value: any): value is PageId {
   return (
     value === 'dashboard' ||
+    value === 'products' ||
     value === 'upload' ||
     value === 'archive' ||
     value === 'regulations' ||
@@ -936,12 +938,10 @@ function AppContent() {
     <FirstRunDashboard
       companyId={profile?.company_id}
       userId={user?.id}
-      //  There is no product registry screen yet. Registrations and
-      //  licences — the reason the design names products as the first
-      //  step — live on Regulatory Affairs, so that is where the
-      //  button goes. It is the nearest true destination, and it is
-      //  better than the dead 'products' page this used to point at.
-      onAddProduct={() => setCurrentPage('regulatory-affairs')}
+      //  The registry, at last. For as long as no products page existed
+      //  this pointed at Regulatory Affairs — the nearest true
+      //  destination, but a licence register and not this.
+      onAddProduct={() => setCurrentPage('products')}
       onImportSpreadsheet={() => downloadImportTemplate()}
       onOpenRow={(key) => {
         if (key === 'import') { downloadImportTemplate(); return; }
@@ -954,6 +954,17 @@ function AppContent() {
     switch (currentPage) {
       case 'dashboard':
         return dashboard();
+
+      //  The product registry, which ONB-08's first action opens.
+      case 'products':
+        return (
+          <ProductsPage
+            companyId={profile?.company_id}
+            userId={user?.id}
+            onOpenRegistrations={() => setCurrentPage('regulatory-affairs')}
+            onImportSpreadsheet={() => downloadImportTemplate()}
+          />
+        );
 
       case 'upload':
         return perms.canUpload ? <UploadPage /> : <AccessDenied />;
