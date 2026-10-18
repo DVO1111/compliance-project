@@ -33,7 +33,27 @@ function builder(table: string): any {
   });
   return self;
 }
-export const supabase: any = { from: (t: string) => builder(t) };
+//  Realtime and auth are no-ops: the preview has no session and nothing
+//  to subscribe to, but components that call them must not throw.
+const channel: any = new Proxy({}, {
+  get(_t, prop) {
+    if (prop === 'subscribe') return () => channel;
+    return () => channel;
+  },
+});
+
+export const supabase: any = {
+  from: (t: string) => builder(t),
+  channel: () => channel,
+  removeChannel: () => {},
+  rpc: () => Promise.resolve({ data: null, error: null }),
+  auth: {
+    getUser: () => Promise.resolve({ data: { user: { id: 'u1' } }, error: null }),
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+    signOut: () => Promise.resolve({ error: null }),
+  },
+};
 export const isSupabaseConfigured = true;
 export const INITIAL_AUTH_CALLBACK_IS_INVITE = false;
 export const INITIAL_AUTH_CALLBACK_IS_RECOVERY = false;

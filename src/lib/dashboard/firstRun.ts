@@ -313,10 +313,15 @@ export function finishRowsFrom(counts: WorkspaceCounts): FinishRow[] {
       detail: 'Add your licences and their expiry dates so renewals can be tracked.',
     });
   } else if (withExpiry < licences) {
+    //  The design's wording — "Add certificate numbers and expiry dates
+    //  to your starter licences" — says what to do; the count says how
+    //  much is left. Both, because the first alone leaves you guessing
+    //  whether you have finished.
     rows.push({
       key: 'licence-details', label: 'Licence details', badge: 'To do',
-      detail: `${licences - withExpiry} of ${licences} still need an expiry date. `
-        + 'Renewal alerts are worked out from that date.',
+      detail: `Add certificate numbers and expiry dates to your starter licences. `
+        + `${licences - withExpiry} of ${licences} still needs one, and renewal alerts `
+        + 'are worked out from that date.',
     });
   } else {
     rows.push({
