@@ -1008,46 +1008,56 @@ export async function createStarterRecords(
 
   let written = 0;
   const problems: string[] = [];
+  //  WHY it failed, not just that it did. The message used to assert
+  //  "that part of the database isn't set up yet" for every failure,
+  //  which is a diagnosis the code had not made: a permission denial or
+  //  a rejected value produced the same sentence, sending the person to
+  //  a script that would not have helped them. It happened to be right
+  //  about the missing licence columns, and that was luck.
+  let anyMissingSchema = false;
 
   for (const [table, rows] of byTable) {
     const { error } = await (supabase as any).from(table).insert(rows);
     if (error) {
       logger.error(`[setup] starter ${table} failed`, error);
       problems.push(table);
+      if (MISSING_SCHEMA(error)) anyMissingSchema = true;
       continue;
     }
     written += rows.length;
   }
 
-  if (problems.length > 0 && written === 0) {
-    return {
-      ok: false, written: 0,
-      message: 'None of the starter records could be saved. You can add them later '
-        + 'from the dashboard — nothing else in your setup is affected.',
-    };
-  }
+  if (problems.length === 0) return { ok: true, written };
 
-  if (problems.length > 0) {
-    //  SAY SO. This used to log a warning and return ok, so "Finish
-    //  setup" reported success while a whole tab's records went
-    //  nowhere — and the only sign was an empty list on the dashboard
-    //  days later. A partial save is not a success; it is a success and
-    //  a failure, and the person is entitled to both halves.
-    logger.warn('[setup] some starter tables were skipped', problems.join(', '));
-    const tabs = Object.entries(STARTER_TABLES)
-      .filter(([, table]) => problems.includes(table))
-      .map(([tab]) => tab);
-    return {
-      ok: false,
-      written,
-      message:
-        `Your ${tabs.join(' and ')} couldn’t be saved — that part of the database isn’t set up `
-        + 'yet. Everything else was kept. Run scripts/fix/onboarding-all.sql in the Supabase SQL '
-        + 'editor and you can add them from the dashboard afterwards.',
-    };
-  }
+  //  SAY SO. This used to log a warning and return ok, so "Finish
+  //  setup" reported success while a whole tab's records went nowhere —
+  //  and the only sign was an empty list on the dashboard days later. A
+  //  partial save is not a success; it is a success and a failure, and
+  //  the person is entitled to both halves.
+  logger.warn('[setup] some starter tables were skipped', problems.join(', '));
 
-  return { ok: true, written };
+  const tabs = Object.entries(STARTER_TABLES)
+    .filter(([, table]) => problems.includes(table))
+    .map(([tab]) => tab);
+
+  const what = written === 0
+    ? 'None of the starter records could be saved'
+    : `Your ${tabs.join(' and ')} couldn’t be saved`;
+
+  const kept = written === 0
+    ? 'Nothing else in your setup is affected.'
+    : 'Everything else was kept.';
+
+  //  Only the schema case names the script, because only the schema
+  //  case is one the script fixes.
+  const why = anyMissingSchema
+    ? ' — that part of the database isn’t set up yet. '
+      + `${kept} Run scripts/fix/onboarding-all.sql in the Supabase SQL editor and you `
+      + 'can add them from the dashboard afterwards.'
+    : `. ${kept} You can add them from the dashboard, and the reason is in the browser console `
+      + 'if somebody needs to look at it.';
+
+  return { ok: false, written, message: `${what}${why}` };
 }
 
 /** Tab → table. Kept here so the data file holds no database names. */

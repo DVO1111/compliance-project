@@ -390,6 +390,29 @@ END $$;
 CREATE INDEX IF NOT EXISTS regulatory_obligations_company_idx
   ON public.regulatory_obligations (company_id);
 
+DO $$
+BEGIN
+  IF to_regclass('public.regulatory_licences') IS NULL THEN
+    RAISE NOTICE 'regulatory_licences absent, skipping its lifecycle columns';
+    RETURN;
+  END IF;
+  EXECUTE 'ALTER TABLE public.regulatory_licences
+    ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT ''draft'',
+    ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS discontinued_at timestamptz,
+    ADD COLUMN IF NOT EXISTS superseded_by_licence_id uuid';
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'regulatory_licences_superseded_by_licence_id_fkey'
+      AND conrelid = to_regclass('public.regulatory_licences')
+  ) THEN
+    EXECUTE 'ALTER TABLE public.regulatory_licences
+      ADD CONSTRAINT regulatory_licences_superseded_by_licence_id_fkey
+      FOREIGN KEY (superseded_by_licence_id)
+      REFERENCES public.regulatory_licences (id) ON DELETE SET NULL';
+  END IF;
+END $$;
+
 ALTER TABLE public.regulatory_obligations ENABLE ROW LEVEL SECURITY;
 
 CREATE OR REPLACE FUNCTION public.fn_allowlist_invited_email()
@@ -470,6 +493,10 @@ UNION ALL SELECT 'signatory changes are logged',
 UNION ALL SELECT 'invite extras applied on acceptance',
        EXISTS (SELECT 1 FROM pg_trigger
                WHERE tgname='trg_apply_invite_extras' AND NOT tgisinternal)
+UNION ALL SELECT 'starter licences can be saved',
+       EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name='regulatory_licences'
+                 AND column_name='status')
 UNION ALL SELECT 'obligations point at companies',
        coalesce((SELECT confrelid::regclass::text = 'companies' FROM pg_constraint
                  WHERE conname='regulatory_obligations_company_id_fkey'), false)
