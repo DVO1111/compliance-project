@@ -269,6 +269,52 @@ BEGIN
           AND profiles.role::text = ANY (ARRAY['admin','compliance_officer','compliance','executive'])));
 END $$;
 
+CREATE TABLE IF NOT EXISTS public.regulatory_obligations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES public.companies (id) ON DELETE CASCADE,
+  regulation_id uuid,
+  title text NOT NULL,
+  description text NOT NULL,
+  jurisdiction text NOT NULL DEFAULT 'nigeria',
+  category text NOT NULL,
+  status text NOT NULL DEFAULT 'identified',
+  owner_id uuid,
+  due_date date,
+  is_recurring boolean NOT NULL DEFAULT false,
+  frequency text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.regulatory_obligations
+  ADD COLUMN IF NOT EXISTS due_date date,
+  ADD COLUMN IF NOT EXISTS is_recurring boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS frequency text;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'regulatory_obligations_status_chk'
+                   AND conrelid = 'public.regulatory_obligations'::regclass) THEN
+    ALTER TABLE public.regulatory_obligations
+      ADD CONSTRAINT regulatory_obligations_status_chk
+      CHECK (status IN ('identified', 'implemented', 'monitored'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'regulatory_obligations_frequency_chk'
+                   AND conrelid = 'public.regulatory_obligations'::regclass) THEN
+    ALTER TABLE public.regulatory_obligations
+      ADD CONSTRAINT regulatory_obligations_frequency_chk
+      CHECK (frequency IS NULL OR frequency IN
+             ('weekly', 'monthly', 'quarterly', 'biannual', 'annual'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS regulatory_obligations_company_idx
+  ON public.regulatory_obligations (company_id);
+
+ALTER TABLE public.regulatory_obligations ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION public.fn_allowlist_invited_email()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'public', 'pg_temp'

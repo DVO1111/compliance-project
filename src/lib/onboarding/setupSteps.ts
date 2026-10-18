@@ -1028,7 +1028,23 @@ export async function createStarterRecords(
   }
 
   if (problems.length > 0) {
+    //  SAY SO. This used to log a warning and return ok, so "Finish
+    //  setup" reported success while a whole tab's records went
+    //  nowhere — and the only sign was an empty list on the dashboard
+    //  days later. A partial save is not a success; it is a success and
+    //  a failure, and the person is entitled to both halves.
     logger.warn('[setup] some starter tables were skipped', problems.join(', '));
+    const tabs = Object.entries(STARTER_TABLES)
+      .filter(([, table]) => problems.includes(table))
+      .map(([tab]) => tab);
+    return {
+      ok: false,
+      written,
+      message:
+        `Your ${tabs.join(' and ')} couldn’t be saved — that part of the database isn’t set up `
+        + 'yet. Everything else was kept. Run scripts/fix/onboarding-all.sql in the Supabase SQL '
+        + 'editor and you can add them from the dashboard afterwards.',
+    };
   }
 
   return { ok: true, written };
