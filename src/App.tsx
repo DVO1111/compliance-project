@@ -513,7 +513,12 @@ function AppContent() {
         localStorage.removeItem('pending_invite_token');
         await refreshProfile();
 
-        window.history.replaceState({}, '', appUrl('/'));
+        //  /dashboard, not "/". The marketing site owns "/" for everyone,
+        //  signed in or not, so sending someone there right after they
+        //  accepted an invite showed them the company home page while
+        //  setCurrentPage said dashboard: the address and the screen
+        //  disagreed, and a reload resolved it the wrong way.
+        window.history.replaceState({}, '', appUrl('/dashboard'));
         setCurrentPage('dashboard');
       } catch {
         // keep token for retry
@@ -803,7 +808,14 @@ function AppContent() {
           //  read from window.location on every render, so finishing
           //  while the bar still says /onboarding would land straight
           //  back on the hub.
-          if (wantsOnboardingHub) window.history.replaceState({}, '', appUrl('/'));
+          //  TO /dashboard, for the same reason. "Go to dashboard" on the
+          //  last onboarding screen put people on the marketing home
+          //  page — the one screen in the flow that promises the
+          //  workspace was the one that did not open it.
+          if (wantsOnboardingHub) {
+            try { window.history.replaceState({}, '', appUrl('/dashboard')); }
+            catch { /* history is unavailable in some embedded views */ }
+          }
           if (navigateTo) {
             window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: navigateTo } }));
           }
