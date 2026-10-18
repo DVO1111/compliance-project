@@ -34,6 +34,24 @@ CREATE TABLE IF NOT EXISTS auth.users (
 );
 GRANT SELECT ON auth.users TO authenticated, service_role;
 
+--  THE OWNER ACCOUNT, because a migration now requires it to exist.
+--  20261022000000_access_requests.sql makes the product owner the first
+--  approver and then REFUSES TO INSTALL if that row is absent — a sound
+--  guard against a real project ending up with an approvals table and
+--  nobody able to approve. On a disposable database built from nothing
+--  there are no accounts at all, so the guard fired on every run and
+--  stopped the harness before a single suite executed.
+--
+--  Seeded here rather than pinned in expected-migration-failures.txt:
+--  listing it there would make the harness green again while leaving
+--  the access-request tables untested, which is the opposite of what
+--  that file is for. This is a shim for something a real Supabase
+--  project has and no migration creates, which is exactly this file's
+--  job. The id is fixed so a suite can refer to it.
+INSERT INTO auth.users (id, email)
+VALUES ('00000000-0000-4000-8000-00000000c0de', 'ayomideelijah1@gmail.com')
+ON CONFLICT (id) DO NOTHING;
+
 --  nullif() before the cast: the suites simulate an unauthenticated
 --  caller with request.jwt.claims = '', and ''::jsonb throws.
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
