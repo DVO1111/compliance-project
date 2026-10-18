@@ -243,15 +243,12 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
     return (
       <StepReady
         summary={{ ...summary, starterRecordsKept: starterKept }}
-        //  'products' is not a page. There is no product registry screen
-        //  yet, so both of these used to navigate to a PageId nothing
-        //  matches and land silently on the dashboard — the last click
-        //  of setup, doing nothing. Registrations and licences are the
-        //  reason the design names products as the first step, and they
-        //  live on Regulatory Affairs, so that is where it goes until a
-        //  registry exists.
-        onAddProduct={() => finish('regulatory-affairs')}
-        onUploadProducts={() => finish('regulatory-affairs')}
+        //  The last click of setup, and now it opens the registry it
+        //  always named. 'products' was a PageId nothing matched, so
+        //  this used to land silently on the dashboard — the one button
+        //  that promises a next step, doing nothing.
+        onAddProduct={() => finish('products')}
+        onUploadProducts={() => finish('products')}
         onGoToDashboard={() => finish()}
       />
     );

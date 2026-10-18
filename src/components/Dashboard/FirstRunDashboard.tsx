@@ -33,6 +33,10 @@ import {
 import { logger } from '../../lib/logger';
 import { STATUS_ICONS, iconProps } from '../../lib/design/icons';
 import { Clock, CircleDashed, MapPin, ChevronDown } from 'lucide-react';
+import {
+  lightPage, lightCard, lightNextCard, lightPageTitle, lightCardTitle,
+  lightBody, lightPrimaryButton, lightLinkButton, lightBadge, lightTwoColumns,
+} from '../../lib/design/lightSurface';
 
 export interface FirstRunDashboardProps {
   companyId: string | null | undefined;
@@ -254,35 +258,17 @@ function Badge({ badge }: { badge: FinishBadge }) {
 
 /* ─────────────────────────── Styles ─────────────────────────── */
 
-/**
- * The cream sheet. ONB-08 draws the whole content area on the light
- * ground with the navy sidebar beside it; MainLayout's shell is dark, so
- * the ground comes in as one panel that fills the content column rather
- * than as a body background the layout would have to know about. The
- * effect is the design's, and nothing outside this file changes colour.
- */
-const page: CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 20,
-  padding: 'clamp(16px, 3vw, 28px)',
-  borderRadius: 16,
-  background: 'var(--nv-light-ground)',
-  fontFamily: 'var(--nv-font-body)',
-  color: 'var(--nv-light-text-primary)',
-};
+//  The cream sheet, the cards, the type scale and the buttons are
+//  the shared light surface — see src/lib/design/lightSurface.ts for
+//  why they are a module rather than a convention.
+const page = lightPage;
 
 const header: CSSProperties = {
   display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
   gap: 16, flexWrap: 'wrap',
 };
 
-const title: CSSProperties = {
-  margin: 0,
-  fontFamily: 'var(--nv-font-display)', fontWeight: 600,
-  fontSize: 'clamp(24px, 4vw, 32px)', lineHeight: 1.2,
-  letterSpacing: '-0.01em',
-  color: 'var(--nv-light-text-primary)',
-  textWrap: 'balance',
-};
+const title = lightPageTitle;
 
 const subtitleStyle: CSSProperties = {
   margin: '6px 0 0',
@@ -309,45 +295,15 @@ const siteSelect: CSSProperties = {
   appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
 };
 
-/**
- * The two columns of the lower half. `1fr 1fr` only once there is room
- * for both to hold their content — below that they stack, which is the
- * same rule the tiles use and the reason neither needs a media query.
- */
-const twoColumns: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-  gap: 20,
-  alignItems: 'start',
-};
+const twoColumns = lightTwoColumns;
 
-const card: CSSProperties = {
-  padding: 'clamp(16px, 3vw, 24px)',
-  borderRadius: 'var(--nv-radius-card)',
-  background: 'var(--nv-light-surface)',
-  border: '1px solid var(--nv-light-border)',
-  display: 'flex', flexDirection: 'column', gap: 16,
-};
+const card = lightCard;
 
-const nextCard: CSSProperties = {
-  ...card,
-  background: 'var(--nv-light-next-fill)',
-  border: '1.5px solid var(--nv-light-next-border)',
-  gap: 14,
-};
+const nextCard = lightNextCard;
 
-const cardTitle: CSSProperties = {
-  margin: 0,
-  fontWeight: 600, fontSize: 16, lineHeight: '22px',
-  color: 'var(--nv-light-text-primary)',
-};
+const cardTitle = lightCardTitle;
 
-const bodyText: CSSProperties = {
-  margin: 0,
-  fontSize: 14, lineHeight: '21px',
-  color: 'var(--nv-light-text-secondary)',
-  maxWidth: '62ch',
-};
+const bodyText = lightBody;
 
 const caveatText: CSSProperties = {
   margin: '8px 0 0',
@@ -356,20 +312,9 @@ const caveatText: CSSProperties = {
   maxWidth: '62ch',
 };
 
-const primaryButton: CSSProperties = {
-  height: 'var(--nv-control-height)', padding: '0 18px',
-  borderRadius: 'var(--nv-radius-control)', border: 'none',
-  background: 'var(--nv-light-action-bg)', color: 'var(--nv-light-action-text)',
-  font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-};
+const primaryButton = lightPrimaryButton;
 
-const linkButton: CSSProperties = {
-  padding: 0, border: 'none', background: 'none',
-  font: 'inherit', fontSize: 14, fontWeight: 500,
-  color: 'var(--nv-light-text-secondary)',
-  textDecoration: 'underline', textUnderlineOffset: 3,
-  cursor: 'pointer',
-};
+const linkButton = lightLinkButton;
 
 const finishRow: CSSProperties = {
   borderTop: '1px solid var(--nv-light-border)',
@@ -395,16 +340,7 @@ const rowDetail: CSSProperties = {
   color: 'var(--nv-light-text-secondary)',
 };
 
-//  Title case and the body face, not upper-case mono. The design writes
-//  "Waiting", and an upper-cased "WAITING" beside it reads as a system
-//  code rather than as a state somebody is in.
-const badgeBase: CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  flexShrink: 0,
-  padding: '5px 12px', borderRadius: 999,
-  fontSize: 12, lineHeight: '16px', fontWeight: 600,
-  whiteSpace: 'nowrap',
-};
+const badgeBase = lightBadge;
 
 const tileGrid: CSSProperties = {
   display: 'grid',

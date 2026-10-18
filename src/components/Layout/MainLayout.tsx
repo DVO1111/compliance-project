@@ -68,6 +68,7 @@ import {
   Trash2,
   Lock,
   ChevronRight,
+  Boxes,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 import { appUrl } from '../../lib/routing';
@@ -163,6 +164,7 @@ export type PageId =
   // Tier 1 — Continuous Control Monitoring
   | 'control-monitoring'
   // Regulatory Affairs (NAPAMS + Licences + Labelling)
+  | 'products'
   | 'regulatory-affairs'
   // SON Compliance Tracker
   | 'son-compliance'
@@ -247,7 +249,8 @@ const ONB08_NAV: Record<string, { group: string; label?: string; order: number }
   //  not one of them, and two adjacent items both offering licences is
   //  how people end up filing the same certificate twice — so it sits
   //  under More with the rest until the design says otherwise.
-  'regulatory-affairs': { group: 'Regulatory', label: 'Registrations & Licences', order: 1 },
+  'products':           { group: 'Regulatory', order: 1 },
+  'regulatory-affairs': { group: 'Regulatory', label: 'Registrations & Licences', order: 2 },
 
   'obligations':        { group: 'Governance', order: 1 },
   'risk-register':      { group: 'Governance', order: 2 },
@@ -384,6 +387,7 @@ export default function MainLayout({
       // License Vault holds the company's own NAFDAC licences, so it belongs
       // here — it was previously filed under vendor management.
       { id: 'license-vault', label: 'Licences & Permits', icon: FileKey, category: 'Regulatory', hidden: !perms.canViewLicenseVault },
+      { id: 'products', label: 'Products', icon: Boxes, category: 'Regulatory', hidden: isLogisticsProfile },
       { id: 'regulatory-affairs', label: 'Regulatory Affairs', icon: FileSearch,  category: 'Regulatory', hidden: isLogisticsProfile },
       { id: 'son-compliance',     label: 'SON Compliance',     icon: Award,       category: 'Regulatory', hidden: isLogisticsProfile },
       { id: 'ctd-dossier',        label: 'CTD Dossier Tracker', icon: FileStack,  category: 'Regulatory', hidden: isLogisticsProfile },
