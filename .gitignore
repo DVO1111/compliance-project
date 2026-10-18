@@ -68,3 +68,7 @@ tmp/
 #  artefacts of a moment, not of the repository.
 scripts/preview/out/
 .preview/
+
+#  The preview serves the logo from public/ at build time; a second
+#  copy in here would be a brand asset that drifts.
+scripts/preview/criateur-logo-ondark.svg

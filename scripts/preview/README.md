@@ -1,9 +1,15 @@
 # Rendering a screen without a database
 
-Opens ONB-08 — `src/components/Dashboard/FirstRunDashboard.tsx` — in a
-browser with canned rows in place of Supabase, so the screen can be
-looked at, screenshotted, or shown to somebody without signing in,
-seeding a workspace, or deploying anything.
+Opens ONB-08 — `src/components/Dashboard/FirstRunDashboard.tsx`, inside
+the real `MainLayout` — in a browser with canned rows in place of
+Supabase, so the whole screen can be looked at, screenshotted, or shown
+to somebody without signing in, seeding a workspace, or deploying
+anything.
+
+The sidebar and top bar are included deliberately. The first version of
+this harness rendered only the content area, which was the half that was
+already correct; the half that was wrong was the chrome around it, and
+leaving it out of the picture is how it stayed wrong.
 
 ```sh
 npx vite build --config scripts/preview/vite.config.ts
@@ -28,15 +34,19 @@ up to the second.
 
 ## What is real and what is not
 
-The component, its data layer, the tokens and the fonts are the shipped
-ones. Exactly one module is replaced: `lib/supabase`, swapped at resolve
-time for `stub-supabase.ts`, which answers every query with fixed rows
-for one workspace — three unaccepted invitations, twelve starter
-records, one site, and nothing operational yet.
+The components, their data layer, the tokens and the fonts are the
+shipped ones. Three modules are replaced at resolve time:
 
-A resolver, not `resolve.alias`, because `firstRun.ts` imports the
-client as `'../supabase'` and an alias matches the import specifier as
-written rather than the file it resolves to.
+| Replaced | By | Why |
+|---|---|---|
+| `lib/supabase` | `stub-supabase.ts` | Fixed rows for one workspace — three unaccepted invitations, twelve starter records, one site, nothing operational yet. Realtime and auth are no-ops. |
+| `contexts/AuthContext` | `stub-auth.tsx` | A signed-in person with a job title, so the top bar has something to show. |
+| `hooks/usePlan` | `stub-plan.ts` | A plan, so the trial banner does not decide the layout. |
+
+A resolver, not `resolve.alias`, because these are imported by relative
+path from several depths — `firstRun.ts` asks for `'../supabase'` — and
+an alias matches the specifier as written rather than the file it
+resolves to.
 
 Change the counts in `stub-supabase.ts` to see other states. Setting
 `regulatory_licences` above zero, for instance, moves the Licence

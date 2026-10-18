@@ -1,9 +1,14 @@
 import { createRoot } from 'react-dom/client';
+import '../../src/index.css';
 import '../../src/styles/tokens.css';
+import MainLayout from '../../src/components/Layout/MainLayout';
 import FirstRunDashboard from '../../src/components/Dashboard/FirstRunDashboard';
 
+//  The whole screen: ONB-08's content area inside the real sidebar and
+//  top bar, which is the thing worth looking at. Only the session and
+//  the database are stubbed.
 createRoot(document.getElementById('root')!).render(
-  <div style={{ background: '#0d1933', minHeight: '100vh', padding: 24 }}>
+  <MainLayout currentPage="dashboard" onNavigate={() => {}}>
     <FirstRunDashboard
       companyId="c1"
       userId="u1"
@@ -11,5 +16,5 @@ createRoot(document.getElementById('root')!).render(
       onImportSpreadsheet={() => {}}
       onOpenRow={() => {}}
     />
-  </div>,
+  </MainLayout>,
 );

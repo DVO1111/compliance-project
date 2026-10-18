@@ -1,6 +1,6 @@
 import { getPermissions } from '../../lib/permissions';
 import { getIndustryCategory } from '../../lib/regulatoryProfile';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
 import OfflineBadge from "../Common/OfflineBadge";
@@ -70,6 +70,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
+import { appUrl } from '../../lib/routing';
 
 export type PageId =
   | 'dashboard'
@@ -201,22 +202,60 @@ const COLLAPSED_NAV_KEY = 'cc_collapsed_nav_categories';
  * otherwise pull their group to the top of the sidebar.
  */
 const CATEGORY_ORDER = [
-  'Home',
-  'Quality Operations',
-  'Logistics Operations',
-  'Controls & Frameworks',
-  'Risk',
+  'Overview',
+  'Manufacturing & Quality',
   'Regulatory',
-  'Policies',
-  'Audit & Evidence',
-  'Content Compliance',
-  'AI Governance',
-  'Administration',
-  'External Partners',
+  'Governance',
+  'More',
 ];
 
-/** Groups a user is unlikely to touch daily start collapsed. */
-const DEFAULT_COLLAPSED = ['Content Compliance', 'AI Governance', 'Administration'];
+/**
+ * ONB-08's sidebar, which is a SHORTER sidebar on purpose.
+ *
+ * The design draws four groups and a handful of items in each: the work
+ * a regulated manufacturer does, in the order a batch moves through it.
+ * This product has around ninety pages. Showing all of them, grouped by
+ * subsystem, made the sidebar a directory of the software rather than a
+ * description of the job — you scrolled it to find anything.
+ *
+ * So the pages the design names are lifted into its four groups, in its
+ * order, with its words: "Registrations & Licences" rather than
+ * "Regulatory Affairs", because that is what the person is looking for.
+ *
+ * EVERY OTHER PAGE IS STILL HERE, under "More" at the bottom, collapsed.
+ * Nothing became unreachable and no permission changed — the list below
+ * is untouched, including every `hidden` test, and this only decides
+ * which heading each surviving item sits under. A design that hides
+ * working pages is a design that loses them.
+ *
+ * FOUR OF THE DESIGN'S ITEMS ARE NOT HERE: My tasks, Materials, Batch
+ * Records and Products. No page exists for any of them yet. A nav item
+ * pointing at nothing is worse than its absence — it looks like a
+ * feature until you click it — so they arrive when their pages do.
+ */
+const ONB08_NAV: Record<string, { group: string; label?: string; order: number }> = {
+  'dashboard':          { group: 'Overview', order: 1 },
+
+  'batch-release':      { group: 'Manufacturing & Quality', order: 1 },
+  'capa-management':    { group: 'Manufacturing & Quality', order: 2 },
+  'change-control':     { group: 'Manufacturing & Quality', order: 3 },
+  'sop-library':        { group: 'Manufacturing & Quality', order: 4 },
+  'gmp-inspection':     { group: 'Manufacturing & Quality', order: 5 },
+
+  //  The design's Regulatory group holds Products and Registrations &
+  //  Licences, and nothing else. Licence Vault is a real page but it is
+  //  not one of them, and two adjacent items both offering licences is
+  //  how people end up filing the same certificate twice — so it sits
+  //  under More with the rest until the design says otherwise.
+  'regulatory-affairs': { group: 'Regulatory', label: 'Registrations & Licences', order: 1 },
+
+  'obligations':        { group: 'Governance', order: 1 },
+  'risk-register':      { group: 'Governance', order: 2 },
+  'policies':           { group: 'Governance', order: 3 },
+};
+
+/** Everything the design does not name starts collapsed. */
+const DEFAULT_COLLAPSED = ['More'];
 
 function loadCollapsedCategories(): string[] {
   try {
@@ -413,7 +452,25 @@ export default function MainLayout({
       { id: 'legal-partner-dashboard', label: 'Partner Console', icon: LayoutDashboard, category: 'External Partners', hidden: profile?.role !== 'legal_partner' },
     ];
 
-  const visibleNavItems = navItems.filter((item) => !item.hidden);
+  //  ONB-08's grouping, applied AFTER the list above rather than written
+  //  into it. Every `hidden` test has already run, so an item the person
+  //  may not see never reaches this and no permission is widened by it.
+  //  An item the design does not name keeps its own label and moves to
+  //  "More"; one it does name takes the design's group, order and words.
+  const regrouped = navItems.map((item) => {
+    const placed = ONB08_NAV[item.id];
+    return placed
+      ? { ...item, category: placed.group, label: placed.label ?? item.label, order: placed.order }
+      : { ...item, category: item.category === 'Hidden' ? 'Hidden' : 'More', order: 99 };
+  });
+
+  const visibleNavItems = regrouped.filter((item) => !item.hidden && item.category !== 'Hidden');
+
+  //  "Head of Quality", from ONB-01. An underscored permission role is
+  //  the fallback and is tidied on the way out, so `content_creator`
+  //  reads as "Content Creator" rather than as a database value.
+  const jobTitleLabel = ((profile as any)?.job_title as string | undefined)?.trim()
+    || (profile?.role ?? '').replace(/_/g, ' ');
 
   // Auditor portal mode: show only Audit Workspace
   const isAuditorPortal = (profile as any)?.role === 'auditor';
@@ -446,24 +503,49 @@ export default function MainLayout({
       )}
 
       {/* SIDEBAR AREA */}
-      <div className={`
+      {/*  ONB-08 draws the navigation on dark navy beside a cream
+          content area, and the two together are what make the screen
+          recognisable. Rather than rewrite forty utility classes, the
+          --color-* tokens they already read are REDEFINED on this
+          container, so everything inside inherits the navy palette and
+          nothing outside it changes. The classes stay exactly as they
+          were; only the values they resolve to differ in here.  */}
+      <div
+        style={{
+          '--color-surface': 'var(--nv-surface-raised)',
+          '--color-surface-alt': 'var(--nv-surface-hover)',
+          '--color-border': 'var(--nv-border-default)',
+          '--color-border-hover': 'var(--nv-border-strong)',
+          '--color-text-primary': 'var(--nv-text-primary)',
+          '--color-text-secondary': 'var(--nv-text-secondary)',
+          '--color-text-tertiary': 'var(--nv-text-tertiary)',
+          '--color-accent': 'var(--nv-action-primary-bg)',
+          '--color-card-shadow': 'none',
+          '--color-card-shadow-hover': 'none',
+          background: '#101931',
+        } as CSSProperties}
+        className={`
         fixed lg:sticky top-0 z-50 lg:z-auto
         w-[260px] flex-shrink-0 flex flex-col h-screen p-4 pr-0 gap-4
         transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Brand Card */}
-        <div className="h-16 dash-card border dash-border rounded-2xl flex items-center px-4 shrink-0 shadow-sm">
-          <div className="p-1.5 rounded-lg mr-3 shadow-md" style={{ background: 'var(--color-accent)' }}>
-            <ShieldCheck size={20} strokeWidth={1.5} className="text-white" />
-          </div>
-          <div className="flex-1">
-            <span className="font-bold text-lg text-[var(--color-text-primary)] tracking-tight leading-none block">Criateur</span>
-            <span className="text-[10px] block text-[var(--color-text-tertiary)] uppercase tracking-wider font-semibold">Compliance</span>
-          </div>
+        {/* Brand */}
+        {/*  THE WORDMARK, not a shield beside the word "Criateur". The
+            brand kit's on-dark artwork is the mark this product signs
+            everything else with — the splash, the sign-in panel, every
+            onboarding step — and the sidebar was the one place still
+            drawing a generic icon and setting the name in a system
+            font. Same asset as those screens, so they cannot drift.  */}
+        <div className="h-16 flex items-center px-2 shrink-0">
+          <img
+            src={appUrl('/criateur-logo-ondark.svg')}
+            alt="Criateur"
+            className="h-7 w-auto"
+          />
           {/* Close sidebar on mobile */}
           <button
-            className="lg:hidden p-1 rounded-lg hover:dash-surface-alt transition-colors dash-text-tertiary"
+            className="lg:hidden ml-auto p-1 rounded-lg hover:dash-surface-alt transition-colors dash-text-tertiary"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
           >
@@ -474,7 +556,12 @@ export default function MainLayout({
         {/* Navigation Categories - Each in its own card */}
         <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-4 scrollbar-hide">
           {categories.map(category => {
-            const items = displayNavItems.filter(item => item.category === category);
+            //  Sorted by the design's order within a group, so
+            //  Manufacturing & Quality reads the way a batch moves
+            //  rather than the way the array happens to be written.
+            const items = displayNavItems
+              .filter(item => item.category === category)
+              .sort((a, b) => a.order - b.order);
             if (items.length === 0) return null;
 
             // A collapsed group still opens itself when it holds the current page,
@@ -589,7 +676,7 @@ export default function MainLayout({
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 dash-text-tertiary transition-colors" />
               <input
                 type="text"
-                placeholder="Search documents, updates, regulations..."
+                placeholder="Search batches, lots, records…"
                 className="w-full bg-[var(--color-surface)] border dash-border rounded-xl pl-10 pr-4 py-2.5 text-sm dash-text placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 transition-all shadow-sm"
                 style={{ '--tw-ring-color': 'var(--color-accent)' } as any}
               />
@@ -610,7 +697,15 @@ export default function MainLayout({
               <button className="flex items-center gap-3 p-1 rounded-xl hover:dash-surface-alt transition-all cursor-pointer border border-transparent hover:border-[var(--color-border)] group/profile">
                 <div className="hidden sm:flex flex-col items-end">
                   <span className="text-xs font-bold dash-text">{profile?.full_name}</span>
-                  <span className="text-[9px] dash-text-tertiary uppercase tracking-widest font-bold">{profile?.role}</span>
+                  {/*  THE JOB TITLE, not the permission role. ONB-01 asks
+                      for "Head of Quality" and the design shows it; this
+                      showed `content_creator` — a raw enum from the
+                      permission system, naming a job nobody in a GMP
+                      workspace holds. Falls back to the role only when
+                      no title was given, so the line is never empty.  */}
+                  <span className="text-[9px] dash-text-tertiary uppercase tracking-widest font-bold">
+                    {jobTitleLabel}
+                  </span>
                 </div>
                 <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-sm shadow-md overflow-hidden" style={{ background: 'var(--color-accent)' }}>
                   {(profile as any)?.avatar_url ? (
