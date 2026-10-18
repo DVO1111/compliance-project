@@ -300,13 +300,18 @@ describe('who gets this dashboard', () => {
     expect(usesManufacturingDashboard('Logistics & Courier')).toBe(false);
   });
 
-  //  An unknown or missing industry keeps the dashboard it already had.
-  //  A workspace that never chose one has not been through ONB-02.
-  it('does not switch a workspace over on a guess', () => {
-    expect(usesManufacturingDashboard(null)).toBe(false);
-    expect(usesManufacturingDashboard(undefined)).toBe(false);
-    expect(usesManufacturingDashboard('')).toBe(false);
-    expect(usesManufacturingDashboard('   ')).toBe(false);
+  //  THE DEFAULT IS THIS DASHBOARD, and that is the fix for a bug the
+  //  first version had: listing the industries that qualify meant an
+  //  unwritten or unrecognised industry_type fell through to the
+  //  content-marketing dashboard, silently, with nothing on screen to
+  //  say why. Criateur onboards regulated manufacturers; a workspace
+  //  that has not said otherwise gets the product's own dashboard.
+  it('defaults to this dashboard when the industry is unknown or unrecorded', () => {
+    expect(usesManufacturingDashboard(null)).toBe(true);
+    expect(usesManufacturingDashboard(undefined)).toBe(true);
+    expect(usesManufacturingDashboard('')).toBe(true);
+    expect(usesManufacturingDashboard('   ')).toBe(true);
+    expect(usesManufacturingDashboard('Something nobody has heard of')).toBe(true);
   });
 
   it('is not fussy about case or stray spacing', () => {

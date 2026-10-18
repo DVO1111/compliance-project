@@ -49,22 +49,40 @@ import { INDUSTRIES } from '../onboarding/onboardingData';
  * being replaced, the same way MainLayout already branches its
  * Manufacturing & Quality section by industry.
  *
- * THE AUDIENCE IS THE FOUR INDUSTRIES ONB-02 OFFERS. Two of them —
- * "Importer or Distributor" and "Other Regulated Manufacturer" — do not
- * contain a word getIndustryCategory recognises, so they categorise as
- * 'generic' and would have been left behind by an industry-category
- * check alone. They went through the same six steps and hold the same
- * NAFDAC licences, so they get the same dashboard. Rather than widening
- * categorize() and changing what the sidebar shows them, the ONB-02
- * values are matched here, next to the screen that needs them.
+ * THE EXCLUSION LIST IS THE SHORT ONE, so this is written as "everyone
+ * except". Criateur onboards NAFDAC-regulated manufacturers — all four
+ * industries ONB-02 offers are that — and this is the dashboard drawn
+ * for them. The workspaces that want the other screen are the ones
+ * whose work is submissions and legal review: financial services,
+ * advertising, logistics.
+ *
+ * IT WAS THE OTHER WAY ROUND FIRST, and that was a bug. Listing the
+ * industries that qualify meant anything unrecognised — a profile whose
+ * industry_type never got written, an older workspace, a value typed
+ * before ONB-02 existed — fell through to the content-marketing
+ * dashboard. Which is nobody's dashboard here, and it failed silently:
+ * the person sees the old screen and nothing says why. The default has
+ * to be the product's own dashboard, and only a workspace that has
+ * positively said it does something else gets moved off it.
+ *
+ * Two of ONB-02's four values — "Importer or Distributor" and "Other
+ * Regulated Manufacturer" — contain no word getIndustryCategory
+ * recognises, so they categorise as 'generic'. They are matched by name
+ * as well, rather than widening categorize() and changing what the
+ * sidebar shows them.
  */
 const ONB_INDUSTRY_VALUES = INDUSTRIES.map((i) => i.value.trim().toLowerCase());
 
+/** The categories whose work is not manufacturing, and whose figures
+ *  ONB-08's four tiles would therefore all read as "—" forever. */
+const OTHER_DASHBOARD = ['financial', 'advertising', 'logistics'];
+
 export function usesManufacturingDashboard(industryType: string | null | undefined): boolean {
   const s = (industryType ?? '').trim().toLowerCase();
-  if (!s) return false;
+  //  Nothing recorded is not a reason to show somebody else's dashboard.
+  if (!s) return true;
   if (ONB_INDUSTRY_VALUES.includes(s)) return true;
-  return getIndustryCategory(industryType) === 'life_sciences';
+  return !OTHER_DASHBOARD.includes(getIndustryCategory(industryType));
 }
 
 // ── What the screen is given ─────────────────────────────────────────

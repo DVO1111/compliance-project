@@ -847,35 +847,42 @@ function AppContent() {
     );
   }
 
+  //  ONB-08 · the dashboard after setup, for the regulated manufacturers
+  //  the onboarding flow was drawn for. Only a workspace whose work is
+  //  submissions and legal review rather than batches and lots — finance,
+  //  advertising, logistics — keeps the dashboard that counts those; see
+  //  usesManufacturingDashboard for why the default is this way round.
+  //
+  //  DECLARED ONCE AND USED TWICE, because the switch below ends in
+  //  `default: dashboard`. An unmatched PageId lands there, and when this
+  //  was written inline in `case 'dashboard'` only, that fallback still
+  //  rendered the OLD dashboard — so one stale navigation put somebody on
+  //  a screen built for a different industry with nothing to say why.
+  const dashboard = () =>
+    usesManufacturingDashboard((profile as any)?.industry_type)
+      ? (
+        <FirstRunDashboard
+          companyId={profile?.company_id}
+          userId={user?.id}
+          //  There is no product registry screen yet. Registrations and
+          //  licences — the reason the design names products as the first
+          //  step — live on Regulatory Affairs, so that is where the
+          //  button goes. It is the nearest true destination, and it is
+          //  better than the dead 'products' page this used to point at.
+          onAddProduct={() => setCurrentPage('regulatory-affairs')}
+          onImportSpreadsheet={() => downloadImportTemplate()}
+          onOpenRow={(key) => {
+            if (key === 'import') { downloadImportTemplate(); return; }
+            setCurrentPage(FINISH_ROW_PAGES[key]);
+          }}
+        />
+      )
+      : <DashboardPage onNavigateToArchive={() => setCurrentPage('archive')} />;
+
   const renderPage = () => {
     switch (currentPage) {
-      //  ONB-08 · the dashboard after setup, for the regulated
-      //  manufacturers the onboarding flow was drawn for. Everyone else
-      //  — a financial or advertising workspace, whose work is
-      //  submissions and legal review rather than batches and lots —
-      //  keeps the dashboard that counts those things. The route
-      //  branches by industry the same way MainLayout's sidebar does.
       case 'dashboard':
-        return usesManufacturingDashboard((profile as any)?.industry_type)
-          ? (
-            <FirstRunDashboard
-              companyId={profile?.company_id}
-              userId={user?.id}
-              //  There is no product registry screen yet. Registrations
-              //  and licences — the reason the design names products as
-              //  the first step — live on Regulatory Affairs, so that is
-              //  where the button goes. It is the nearest true
-              //  destination, and it is better than the dead 'products'
-              //  page this used to point at.
-              onAddProduct={() => setCurrentPage('regulatory-affairs')}
-              onImportSpreadsheet={() => downloadImportTemplate()}
-              onOpenRow={(key) => {
-                if (key === 'import') { downloadImportTemplate(); return; }
-                setCurrentPage(FINISH_ROW_PAGES[key]);
-              }}
-            />
-          )
-          : <DashboardPage onNavigateToArchive={() => setCurrentPage('archive')} />;
+        return dashboard();
 
       case 'upload':
         return perms.canUpload ? <UploadPage /> : <AccessDenied />;
@@ -1240,7 +1247,7 @@ function AppContent() {
         return perms.canViewPharmaIntegrations ? <PharmaIntegrationsPage /> : <AccessDenied />;
 
       default:
-        return <DashboardPage />;
+        return dashboard();
     }
   };
 
