@@ -64,14 +64,29 @@ describe('isEmailAllowedToSignIn', () => {
 });
 
 describe('canRestoreAuthSession', () => {
+  //  The unlisted example is deliberately an address that belongs to
+  //  nobody. It used to be a real one, which worked until that person
+  //  was added to the list — then this test failed, and the recovery
+  //  test below silently stopped testing an UNLISTED recovery while
+  //  still passing. An example that can be granted access is not a
+  //  fixture, it is a time bomb.
+  const NOBODY = 'stranger@example.invalid';
+
   it('keeps the closed allowlist for ordinary sessions', () => {
-    expect(canRestoreAuthSession('aeoladehinde@sterlinglams.com', false)).toBe(false);
+    expect(canRestoreAuthSession(NOBODY, false)).toBe(false);
     expect(canRestoreAuthSession('fmuyiwa15@gmail.com', false)).toBe(true);
   });
 
   it('allows an unlisted recovery session only so its password can be changed', () => {
-    expect(canRestoreAuthSession('aeoladehinde@sterlinglams.com', true)).toBe(true);
+    expect(canRestoreAuthSession(NOBODY, true)).toBe(true);
     expect(canRestoreAuthSession(null, true)).toBe(true);
+  });
+
+  //  The test account, added so the invite flow can be exercised end to
+  //  end. Asserted here so that removing it from the list is a decision
+  //  someone makes rather than something that happens.
+  it('admits the test account', () => {
+    expect(canRestoreAuthSession('aeoladehinde@sterlinglams.com', false)).toBe(true);
   });
 });
 

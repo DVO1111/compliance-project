@@ -35,6 +35,7 @@
 export const ALLOWED_SIGNIN_EMAILS: readonly string[] = [
   'ayomideelijah1@gmail.com',
   'fmuyiwa15@gmail.com',
+  'aeoladehinde@sterlinglams.com',
 ];
 
 /** True when the gate is on at all. An empty list means "everyone", so

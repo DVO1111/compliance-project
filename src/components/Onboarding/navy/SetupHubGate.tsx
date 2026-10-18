@@ -150,7 +150,7 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
   if (openStep === 'company-details' && companyId && userId) {
     //  Held until the current values are in hand, so the fields do not
     //  render empty and then fill in under the person's cursor.
-    if (companyDetails === null) return <BrandSplash />;
+    if (companyDetails === null) return <BrandSplash tone="onboarding" />;
     return (
       <StepCompanyDetails
         companyId={companyId}
@@ -178,7 +178,7 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
     //  Held until the stored sites are in hand: the empty state opens a
     //  blank form, and opening one over a workspace that already has
     //  sites would invite a duplicate.
-    if (sitesState === null) return <BrandSplash />;
+    if (sitesState === null) return <BrandSplash tone="onboarding" />;
     return (
       <StepSites
         companyId={companyId}
@@ -190,7 +190,7 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
   }
 
   if (openStep === 'modules' && companyId && userId) {
-    if (areas === undefined) return <BrandSplash />;
+    if (areas === undefined) return <BrandSplash tone="onboarding" />;
     return (
       <StepModules
         companyId={companyId}
@@ -204,7 +204,7 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
   }
 
   if (openStep === 'invite-team' && companyId && userId) {
-    if (areas === undefined || siteOptions === null) return <BrandSplash />;
+    if (areas === undefined || siteOptions === null) return <BrandSplash tone="onboarding" />;
     const chosen = areas ?? defaultAreasFor(industryId);
     return (
       <StepInviteTeam
@@ -235,7 +235,7 @@ export default function SetupHubGate({ companyId, userId, me, onFinish }: SetupH
   //  what marks onboarding complete, because every step before it can
   //  still be gone back to.
   if (openStep === 'ready' && companyId) {
-    if (summary === null) return <BrandSplash />;
+    if (summary === null) return <BrandSplash tone="onboarding" />;
     const finish = (page?: string) => {
       if (userId) void markOnboardingComplete(userId);
       onFinish(page);
