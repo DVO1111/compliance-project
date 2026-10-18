@@ -141,6 +141,65 @@ CREATE POLICY authorised_signatories_write ON public.authorised_signatories
   USING (public.app_has_company_role(company_id, ARRAY['owner','admin']))
   WITH CHECK (public.app_has_company_role(company_id, ARRAY['owner','admin']));
 
+DO $$
+BEGIN
+  IF to_regclass('public.audit_logs') IS NULL THEN
+    RAISE NOTICE 'audit_logs absent, the signatory log cannot be installed';
+    RETURN;
+  END IF;
+  EXECUTE 'ALTER TABLE public.audit_logs
+    ADD COLUMN IF NOT EXISTS integrity_hash text,
+    ADD COLUMN IF NOT EXISTS previous_hash text DEFAULT ''GENESIS'',
+    ADD COLUMN IF NOT EXISTS evidence_snapshot jsonb DEFAULT ''{}''::jsonb,
+    ADD COLUMN IF NOT EXISTS company_id uuid,
+    ADD COLUMN IF NOT EXISTS ip_address text,
+    ADD COLUMN IF NOT EXISTS sequence_number bigint';
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_audit_logs_company_seq
+    ON public.audit_logs (company_id, sequence_number ASC)';
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_audit_logs_integrity_hash
+    ON public.audit_logs (integrity_hash)';
+END $$;
+
+CREATE OR REPLACE FUNCTION public.licence_audit_step(
+  p_company_id uuid,
+  p_action     text,
+  p_entity_type text,
+  p_entity_id  uuid,
+  p_metadata   jsonb DEFAULT '{}'::jsonb
+) RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+  v_uid  uuid := auth.uid();
+  v_prev text; v_seq bigint; v_hash text; v_now timestamptz := now(); v_id uuid;
+BEGIN
+  SELECT integrity_hash, sequence_number INTO v_prev, v_seq
+    FROM public.audit_logs
+   WHERE company_id = p_company_id AND integrity_hash IS NOT NULL
+   ORDER BY sequence_number DESC LIMIT 1;
+  v_prev := coalesce(v_prev, 'GENESIS');
+  v_seq  := coalesce(v_seq, 0) + 1;
+
+  v_hash := encode(digest(concat_ws('|',
+      p_action, p_entity_type, p_entity_id::text, v_uid::text,
+      coalesce(p_metadata,'{}'::jsonb)::text, v_now::text, v_prev, v_seq::text),
+    'sha256'), 'hex');
+
+  INSERT INTO public.audit_logs
+    (user_id, action, entity_type, entity_id, metadata, created_at,
+     integrity_hash, previous_hash, company_id, sequence_number)
+  VALUES
+    (v_uid, p_action, p_entity_type, p_entity_id,
+     coalesce(p_metadata,'{}'::jsonb) || jsonb_build_object('audit_hash_convention','sha256-sql-v1'),
+     v_now, v_hash, v_prev, p_company_id, v_seq)
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END $$;
+
+REVOKE ALL ON FUNCTION public.licence_audit_step(uuid,text,text,uuid,jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.licence_audit_step(uuid,text,text,uuid,jsonb) TO service_role;
+
 CREATE OR REPLACE FUNCTION public.fn_log_signatory_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'public', 'extensions', 'pg_temp'
@@ -198,10 +257,28 @@ END
 $$;
 
 DO $$
+DECLARE
+  v_missing int;
 BEGIN
   DROP TRIGGER IF EXISTS trg_log_signatory_change ON public.authorised_signatories;
   IF to_regprocedure('public.licence_audit_step(uuid, text, text, uuid, jsonb)') IS NULL THEN
     RAISE NOTICE 'licence_audit_step absent, signatory changes will not be logged';
+    RETURN;
+  END IF;
+  IF to_regclass('public.audit_logs') IS NULL THEN
+    RAISE NOTICE 'audit_logs absent, signatory changes will not be logged';
+    RETURN;
+  END IF;
+  SELECT count(*) INTO v_missing
+  FROM (VALUES ('user_id'),('action'),('entity_type'),('entity_id'),('metadata'),
+               ('created_at'),('integrity_hash'),('previous_hash'),('company_id'),
+               ('sequence_number')) AS needed(col)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'audit_logs'
+      AND column_name = needed.col);
+  IF v_missing > 0 THEN
+    RAISE NOTICE 'audit_logs is missing % of the columns the log writes, signatory changes will not be logged', v_missing;
     RETURN;
   END IF;
   CREATE TRIGGER trg_log_signatory_change

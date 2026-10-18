@@ -20,6 +20,8 @@ import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import AccessRequestsPage from './components/Auth/AccessRequestsPage';
 import SignupPage from './components/Auth/SignupPage';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
+import { usesManufacturingDashboard } from './lib/dashboard/firstRun';
+import { downloadImportTemplate } from './lib/onboarding/importTemplate';
 import BrandSplash from './components/BrandSplash';
 import ConfigurationNeeded from './components/ConfigurationNeeded';
 import WorkspaceSetupNeeded from './components/WorkspaceSetupNeeded';
@@ -111,6 +113,7 @@ function lazyPage<T extends ComponentType<any>>(
 const DepartmentsPage           = lazyPage(() => import('./components/company/DepartmentsPage'));
 const AIDashboardPage           = lazyPage(() => import('./components/Governance/AI/AIDashboardPage'));
 const DashboardPage             = lazyPage(() => import('./components/Dashboard/DashboardPage'));
+const FirstRunDashboard         = lazyPage(() => import('./components/Dashboard/FirstRunDashboard'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
 const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
 const RegulationsPage           = lazyPage(() => import('./components/Regulations/RegulationsPage'));
@@ -205,6 +208,25 @@ const EnterpriseDashboardPage   = lazyPage(() => import('./components/Enterprise
 const PharmaIntegrationsPage    = lazyPage(() => import('./components/PharmaIntegrations/PharmaIntegrationsPage'));
 
 type UnauthView = 'landing' | 'platform' | 'who' | 'about' | 'contact' | 'login' | 'signup';
+
+/**
+ * ONB-08's "Finish setting up" rows, and the page each one finishes on.
+ *
+ * Every row goes somewhere that can actually complete it, which is the
+ * difference between a checklist and a list of links: Invitations opens
+ * the invite register where a pending invitation can be resent or
+ * revoked, Licence details opens Regulatory Affairs where the expiry
+ * date the renewal alerts need is entered, and Starter records opens the
+ * obligation register the starter rows were written into.
+ *
+ * 'import' is not here. It downloads the template rather than opening a
+ * page, so App handles it directly.
+ */
+const FINISH_ROW_PAGES: Record<'invitations' | 'licence-details' | 'starter-records', PageId> = {
+  invitations: 'company-invites',
+  'licence-details': 'regulatory-affairs',
+  'starter-records': 'obligations',
+};
 
 function isValidPageId(value: any): value is PageId {
   return (
@@ -827,8 +849,33 @@ function AppContent() {
 
   const renderPage = () => {
     switch (currentPage) {
+      //  ONB-08 · the dashboard after setup, for the regulated
+      //  manufacturers the onboarding flow was drawn for. Everyone else
+      //  — a financial or advertising workspace, whose work is
+      //  submissions and legal review rather than batches and lots —
+      //  keeps the dashboard that counts those things. The route
+      //  branches by industry the same way MainLayout's sidebar does.
       case 'dashboard':
-        return <DashboardPage onNavigateToArchive={() => setCurrentPage('archive')} />;
+        return usesManufacturingDashboard((profile as any)?.industry_type)
+          ? (
+            <FirstRunDashboard
+              companyId={profile?.company_id}
+              userId={user?.id}
+              //  There is no product registry screen yet. Registrations
+              //  and licences — the reason the design names products as
+              //  the first step — live on Regulatory Affairs, so that is
+              //  where the button goes. It is the nearest true
+              //  destination, and it is better than the dead 'products'
+              //  page this used to point at.
+              onAddProduct={() => setCurrentPage('regulatory-affairs')}
+              onImportSpreadsheet={() => downloadImportTemplate()}
+              onOpenRow={(key) => {
+                if (key === 'import') { downloadImportTemplate(); return; }
+                setCurrentPage(FINISH_ROW_PAGES[key]);
+              }}
+            />
+          )
+          : <DashboardPage onNavigateToArchive={() => setCurrentPage('archive')} />;
 
       case 'upload':
         return perms.canUpload ? <UploadPage /> : <AccessDenied />;

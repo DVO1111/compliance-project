@@ -300,6 +300,58 @@
       rgba(8, 19, 26, 0) 74%),
     linear-gradient(165deg, #0B1E1D 0%, #0A1722 55%, #0B1626 100%);
 
+  /* ── The light counterpart, for ONB-08 ───────────────────────
+     ONB-08 is the first screen in the v2 system drawn on a LIGHT
+     ground: cream content area, navy sidebar. It is not a theme switch
+     and it does not replace the navy tokens above — onboarding stays
+     navy, and the two sit side by side in the design because they are
+     different moments. Setup is a dark, focused, one-thing-at-a-time
+     sequence; the dashboard is a room you work in all day.
+
+     The ground is the cream the navy theme already uses for text
+     (#fbf9f5), warmed one step, so the two surfaces are recognisably
+     the same palette seen from opposite sides rather than two
+     unrelated designs. Text is the navy itself, which is why the
+     screen reads as the same product.
+
+     The action green is the v2 system's #71a66a, unchanged — but its
+     text colour is NOT. On navy it sits under #101931; on cream a
+     mid-green button needs white type to clear 4.5:1, so
+     --nv-light-action-text is white and must stay white. */
+  --nv-light-ground:         #f7f4ee;
+  --nv-light-surface:        #ffffff;
+  --nv-light-surface-sunken: #f1ede4;
+  --nv-light-border:         #e4dfd3;
+  --nv-light-border-strong:  #cfc8b8;
+
+  --nv-light-text-primary:   #101931;
+  --nv-light-text-secondary: #4d5569;
+  --nv-light-text-tertiary:  #7b8397;
+
+  --nv-light-action-bg:      #71a66a;
+  --nv-light-action-hover:   #5f9158;
+  --nv-light-action-text:    #ffffff;
+
+  /*  The "next step" treatment, carried over from ONB-00's current-step
+      card and ONB-07's first-action card: a green stroke over an 8%
+      wash. Same two values on both grounds, which is why a next step
+      looks like a next step across the whole flow. */
+  --nv-light-next-fill:      rgba(113, 166, 106, 0.08);
+  --nv-light-next-border:    #71a66a;
+
+  /*  Badge pairs for "Finish setting up". Each is a fill and a text
+      colour that clears 4.5:1 on it, and each state also carries a
+      distinct WORD — Waiting, To do, Optional, Done — so the colour is
+      never the only signal. */
+  --nv-light-badge-waiting-bg:   #fdf0dc;
+  --nv-light-badge-waiting-text: #8a5209;
+  --nv-light-badge-todo-bg:      #e7eaf2;
+  --nv-light-badge-todo-text:    #39415a;
+  --nv-light-badge-optional-bg:  #f1ede4;
+  --nv-light-badge-optional-text:#6b6559;
+  --nv-light-badge-done-bg:      #e3f0de;
+  --nv-light-badge-done-text:    #2f5a29;
+
   /* ── Navy: type, per the design and the mobile adaptation rules ──
       title    Bricolage 32/38 desktop, 24/30 mobile
       body     Sora 15/22 desktop, 14/20 mobile
