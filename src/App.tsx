@@ -20,7 +20,6 @@ import ResetPasswordPage from './components/Auth/ResetPasswordPage';
 import AccessRequestsPage from './components/Auth/AccessRequestsPage';
 import SignupPage from './components/Auth/SignupPage';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
-import { usesManufacturingDashboard } from './lib/dashboard/firstRun';
 import { downloadImportTemplate } from './lib/onboarding/importTemplate';
 import BrandSplash from './components/BrandSplash';
 import ConfigurationNeeded from './components/ConfigurationNeeded';
@@ -112,7 +111,6 @@ function lazyPage<T extends ComponentType<any>>(
    ────────────────────────────────────────────────────────────────── */
 const DepartmentsPage           = lazyPage(() => import('./components/company/DepartmentsPage'));
 const AIDashboardPage           = lazyPage(() => import('./components/Governance/AI/AIDashboardPage'));
-const DashboardPage             = lazyPage(() => import('./components/Dashboard/DashboardPage'));
 const FirstRunDashboard         = lazyPage(() => import('./components/Dashboard/FirstRunDashboard'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
 const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
@@ -910,37 +908,47 @@ function AppContent() {
     );
   }
 
-  //  ONB-08 · the dashboard after setup, for the regulated manufacturers
-  //  the onboarding flow was drawn for. Only a workspace whose work is
-  //  submissions and legal review rather than batches and lots — finance,
-  //  advertising, logistics — keeps the dashboard that counts those; see
-  //  usesManufacturingDashboard for why the default is this way round.
+  //  ONB-08 · the dashboard, full stop.
+  //
+  //  THERE IS NO LONGER A BRANCH HERE, and removing it is the point.
+  //  This used to choose between ONB-08 and the older DashboardPage by
+  //  the industry on the signed-in person's PROFILE — and that profile
+  //  field is set once, at sign-up, from a list that still offers
+  //  "Advertising & Marketing Agency", "Financial Services" and
+  //  "Logistics & Courier" from what this codebase used to be. So an
+  //  account created before the product became a NAFDAC compliance tool
+  //  carried an answer from a different product, and that stale answer
+  //  silently decided which dashboard the workspace got. It took four
+  //  rounds to find, because every branch of it fails without an error:
+  //  you are simply shown a different screen.
+  //
+  //  Criateur onboards regulated manufacturers. This is their dashboard.
+  //  One workspace, one dashboard, no condition in between.
+  //
+  //  DashboardPage is still in the repository, unrouted. If a workspace
+  //  ever needs it, it belongs behind its own page and its own nav item,
+  //  chosen deliberately — not behind a field nobody knows is deciding.
   //
   //  DECLARED ONCE AND USED TWICE, because the switch below ends in
-  //  `default: dashboard`. An unmatched PageId lands there, and when this
-  //  was written inline in `case 'dashboard'` only, that fallback still
-  //  rendered the OLD dashboard — so one stale navigation put somebody on
-  //  a screen built for a different industry with nothing to say why.
-  const dashboard = () =>
-    usesManufacturingDashboard((profile as any)?.industry_type)
-      ? (
-        <FirstRunDashboard
-          companyId={profile?.company_id}
-          userId={user?.id}
-          //  There is no product registry screen yet. Registrations and
-          //  licences — the reason the design names products as the first
-          //  step — live on Regulatory Affairs, so that is where the
-          //  button goes. It is the nearest true destination, and it is
-          //  better than the dead 'products' page this used to point at.
-          onAddProduct={() => setCurrentPage('regulatory-affairs')}
-          onImportSpreadsheet={() => downloadImportTemplate()}
-          onOpenRow={(key) => {
-            if (key === 'import') { downloadImportTemplate(); return; }
-            setCurrentPage(FINISH_ROW_PAGES[key]);
-          }}
-        />
-      )
-      : <DashboardPage onNavigateToArchive={() => setCurrentPage('archive')} />;
+  //  `default: dashboard`, so an unmatched PageId lands on the same
+  //  screen rather than somewhere else.
+  const dashboard = () => (
+    <FirstRunDashboard
+      companyId={profile?.company_id}
+      userId={user?.id}
+      //  There is no product registry screen yet. Registrations and
+      //  licences — the reason the design names products as the first
+      //  step — live on Regulatory Affairs, so that is where the
+      //  button goes. It is the nearest true destination, and it is
+      //  better than the dead 'products' page this used to point at.
+      onAddProduct={() => setCurrentPage('regulatory-affairs')}
+      onImportSpreadsheet={() => downloadImportTemplate()}
+      onOpenRow={(key) => {
+        if (key === 'import') { downloadImportTemplate(); return; }
+        setCurrentPage(FINISH_ROW_PAGES[key]);
+      }}
+    />
+  );
 
   const renderPage = () => {
     switch (currentPage) {

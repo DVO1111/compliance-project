@@ -35,55 +35,24 @@
 
 import { supabase } from '../supabase';
 import { logger } from '../logger';
-import { getIndustryCategory } from '../regulatoryProfile';
-import { INDUSTRIES } from '../onboarding/onboardingData';
 
 // ── Who sees this dashboard ──────────────────────────────────────────
-
-/**
- * ONB-08 is the regulated-manufacturing dashboard: its four tiles count
- * batches, deviations, quarantined lots and licence expiries. For a
- * financial or advertising workspace those figures do not exist, and the
- * existing DashboardPage — submissions, legal queue, marketing pipeline
- * — is the right screen. So the dashboard route branches rather than
- * being replaced, the same way MainLayout already branches its
- * Manufacturing & Quality section by industry.
- *
- * THE EXCLUSION LIST IS THE SHORT ONE, so this is written as "everyone
- * except". Criateur onboards NAFDAC-regulated manufacturers — all four
- * industries ONB-02 offers are that — and this is the dashboard drawn
- * for them. The workspaces that want the other screen are the ones
- * whose work is submissions and legal review: financial services,
- * advertising, logistics.
- *
- * IT WAS THE OTHER WAY ROUND FIRST, and that was a bug. Listing the
- * industries that qualify meant anything unrecognised — a profile whose
- * industry_type never got written, an older workspace, a value typed
- * before ONB-02 existed — fell through to the content-marketing
- * dashboard. Which is nobody's dashboard here, and it failed silently:
- * the person sees the old screen and nothing says why. The default has
- * to be the product's own dashboard, and only a workspace that has
- * positively said it does something else gets moved off it.
- *
- * Two of ONB-02's four values — "Importer or Distributor" and "Other
- * Regulated Manufacturer" — contain no word getIndustryCategory
- * recognises, so they categorise as 'generic'. They are matched by name
- * as well, rather than widening categorize() and changing what the
- * sidebar shows them.
- */
-const ONB_INDUSTRY_VALUES = INDUSTRIES.map((i) => i.value.trim().toLowerCase());
-
-/** The categories whose work is not manufacturing, and whose figures
- *  ONB-08's four tiles would therefore all read as "—" forever. */
-const OTHER_DASHBOARD = ['financial', 'advertising', 'logistics'];
-
-export function usesManufacturingDashboard(industryType: string | null | undefined): boolean {
-  const s = (industryType ?? '').trim().toLowerCase();
-  //  Nothing recorded is not a reason to show somebody else's dashboard.
-  if (!s) return true;
-  if (ONB_INDUSTRY_VALUES.includes(s)) return true;
-  return !OTHER_DASHBOARD.includes(getIndustryCategory(industryType));
-}
+//
+//  EVERYONE. There was a gate here that chose between this dashboard
+//  and the older DashboardPage by the industry on the signed-in
+//  person's profile, and it was removed rather than corrected.
+//
+//  It could not be made right. That field is written once, at sign-up,
+//  from a list that still offers "Advertising & Marketing Agency",
+//  "Financial Services" and "Logistics & Courier" — answers to a
+//  question this product stopped asking when it became a NAFDAC
+//  compliance tool. An account made before that carried an answer from
+//  a different product, and it silently decided which dashboard the
+//  whole workspace saw. Both directions of the rule failed the same
+//  way: no error, no log, just a different screen than the one the
+//  person expected, with nothing to suggest a reason.
+//
+//  Criateur onboards regulated manufacturers. This is their dashboard.
 
 // ── What the screen is given ─────────────────────────────────────────
 

@@ -13,10 +13,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   greeting, glanceScope, tilesFrom, finishRowsFrom, nextStepFrom,
-  inviteeLabel, nameList, inviteeSentence, usesManufacturingDashboard,
+  inviteeLabel, nameList, inviteeSentence,
   NO_COUNTS, type WorkspaceCounts, type TileKey,
 } from '../lib/dashboard/firstRun';
-import { INDUSTRIES } from '../lib/onboarding/onboardingData';
 
 const counts = (over: Partial<WorkspaceCounts> = {}): WorkspaceCounts => ({
   ...NO_COUNTS, ...over,
@@ -279,42 +278,5 @@ describe('what the tiles are a glance at', () => {
 
   it('falls back to the workspace when no site was recorded', () => {
     expect(glanceScope([], null).heading).toBe('Your workspace at a glance');
-  });
-});
-
-describe('who gets this dashboard', () => {
-  //  All four industries ONB-02 offers went through the same six steps
-  //  and hold the same NAFDAC licences, so all four get the same
-  //  dashboard. Two of them categorise as 'generic', which is exactly
-  //  the case an industry-category check alone would drop.
-  it('covers every industry the onboarding flow offers', () => {
-    for (const industry of INDUSTRIES) {
-      expect(usesManufacturingDashboard(industry.value), industry.value).toBe(true);
-    }
-    expect(INDUSTRIES.length).toBe(4);
-  });
-
-  it('leaves workspaces whose work is not manufacturing on the other dashboard', () => {
-    expect(usesManufacturingDashboard('Financial Services')).toBe(false);
-    expect(usesManufacturingDashboard('Advertising Agency')).toBe(false);
-    expect(usesManufacturingDashboard('Logistics & Courier')).toBe(false);
-  });
-
-  //  THE DEFAULT IS THIS DASHBOARD, and that is the fix for a bug the
-  //  first version had: listing the industries that qualify meant an
-  //  unwritten or unrecognised industry_type fell through to the
-  //  content-marketing dashboard, silently, with nothing on screen to
-  //  say why. Criateur onboards regulated manufacturers; a workspace
-  //  that has not said otherwise gets the product's own dashboard.
-  it('defaults to this dashboard when the industry is unknown or unrecorded', () => {
-    expect(usesManufacturingDashboard(null)).toBe(true);
-    expect(usesManufacturingDashboard(undefined)).toBe(true);
-    expect(usesManufacturingDashboard('')).toBe(true);
-    expect(usesManufacturingDashboard('   ')).toBe(true);
-    expect(usesManufacturingDashboard('Something nobody has heard of')).toBe(true);
-  });
-
-  it('is not fussy about case or stray spacing', () => {
-    expect(usesManufacturingDashboard('  pharmaceutical manufacturing  ')).toBe(true);
   });
 });
