@@ -1,15 +1,18 @@
 #  Publish to GitHub Pages.
 #
-#  WHY THIS EXISTS ALONGSIDE THE NETLIFY DEPLOY. Netlify refused a
-#  deploy with "Account credit usage exceeded — new deploys are blocked
-#  until credits are added". The build was fine; the host would not
-#  accept it. This repository is public, so GitHub Pages costs nothing
-#  and has no deploy quota to exhaust, and it runs on the same two
-#  secrets the Netlify job already uses.
+#  WHY THIS REPLACED NETLIFY. Netlify refused a deploy with "Account
+#  credit usage exceeded — new deploys are blocked until credits are
+#  added". The build was fine; the host would not accept it. This
+#  repository is public, so GitHub Pages costs nothing and has no deploy
+#  quota to exhaust, and it runs on the same two secrets.
 #
-#  It does not replace the Netlify job — that one still runs, and will
-#  start working again the moment the account does. This is a second
-#  destination, not a migration.
+#  It began as a second destination, with the Netlify job left in place
+#  in case that account ever came back. It never did, and criateur.com
+#  now resolves here, so the Netlify job was deleted: it had failed on
+#  every push for weeks, deploying to a host that serves nobody. A check
+#  that is always red is worse than no check, because it teaches you to
+#  ignore the colour. If Netlify is ever wanted again it belongs in its
+#  own workflow, written then, against whatever that account looks like.
 #
 #  WHAT A PAGES SITE DOES NOT DO, said plainly:
 #
