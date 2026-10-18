@@ -519,9 +519,15 @@ const MISSING_SCHEMA = (e: any): boolean =>
   e?.code === '42P01' || e?.code === '42703' || e?.code === 'PGRST205' ||
   /does not exist|could not find the/i.test(e?.message ?? '');
 
+//  ONE SCRIPT, NAMED CORRECTLY. This used to name
+//  add-sites-and-department-codes.sql, which was superseded:
+//  onboarding-all.sql replaced it and two others after the originals
+//  failed to survive being pasted into the Supabase editor. Sending
+//  someone to a file that is no longer the one to run turns a solvable
+//  message into a dead end.
 export const SITES_MIGRATION_HINT =
   'This workspace’s database doesn’t have the sites table yet. Run ' +
-  'scripts/fix/add-sites-and-department-codes.sql in the Supabase SQL editor, then reload.';
+  'scripts/fix/onboarding-all.sql in the Supabase SQL editor, then reload this page.';
 
 /** Reads back everything ONB-03 shows. */
 export async function loadSitesStep(

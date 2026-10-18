@@ -195,9 +195,10 @@ export default function StepSites({ companyId, initial, onBack, onDone }: StepSi
       >
         {initial.sitesUnavailable && (
           <p role="alert" style={alertText}>
-            This workspace’s database doesn’t have the sites table yet. What you enter here can’t be
-            saved until <code>scripts/fix/add-sites-and-department-codes.sql</code> has been run in
-            the Supabase SQL editor.
+            This workspace’s database doesn’t have the sites table yet. What you enter here can’t
+            be saved until <code>scripts/fix/onboarding-all.sql</code> has been run in the Supabase
+            SQL editor. It creates the sites table, the department codes and the product
+            categories, and it is safe to run more than once.
           </p>
         )}
 
