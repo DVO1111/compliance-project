@@ -72,7 +72,13 @@ export default function StepReady({
       onContinue={onGoToDashboard}
       continueLabel="Go to dashboard"
       continueVariant="outline"
-      footnote="You can reopen any setup step from Company Settings."
+      //  THE ADDRESS, because there is no link. This said "from Company
+      //  Settings" and that page has nothing on it that reopens setup —
+      //  so the one line telling somebody how to get back pointed at a
+      //  place where the way back is not. /onboarding does open the hub,
+      //  and naming it is true today; a link in Company Settings would
+      //  be better and is not what this comment is for.
+      footnote="You can reopen any setup step later at criateur.com/onboarding."
     >
       <section style={card}>
         <h2 style={cardTitle}>What’s set up</h2>
