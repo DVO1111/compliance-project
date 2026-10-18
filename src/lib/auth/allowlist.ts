@@ -62,10 +62,29 @@ export function isEmailAllowedToSignIn(email: string | null | undefined): boolea
   return ALLOWED_SIGNIN_EMAILS.some((allowed) => allowed.trim().toLowerCase() === normalised);
 }
 
-/** Recovery sessions may set a password, but do not grant normal app access. */
+/**
+ * Recovery and invite sessions may set a password, but do not grant
+ * normal app access.
+ *
+ * THE ARGUMENT COVERS BOTH KINDS OF EMAILED LINK, and it has to.
+ * approve-signup adds an approved address to `allowed_signins` in the
+ * database and then sends an invite through inviteUserByEmail. What it
+ * cannot do is add that address to ALLOWED_SIGNIN_EMAILS, which is
+ * compiled into the bundle every visitor downloads. So an invite
+ * callback that was only compared against the hard-coded array was
+ * signed out on arrival: the session existed, the password screen drew,
+ * and a moment later it vanished. Approving someone produced an email
+ * that could not be used.
+ *
+ * Widening this to invites is safe for the same reason it was safe for
+ * recoveries: the link was sent by the product to an address the
+ * recipient controls, after an owner approved the request, and
+ * `allowed_signins` -- the gate that is not in the browser -- still
+ * decides whether the account can have a profile at all.
+ */
 export function canRestoreAuthSession(
   email: string | null | undefined,
-  isPasswordRecoveryCallback: boolean,
+  isEmailedLinkCallback: boolean,
 ): boolean {
-  return isPasswordRecoveryCallback || isEmailAllowedToSignIn(email);
+  return isEmailedLinkCallback || isEmailAllowedToSignIn(email);
 }

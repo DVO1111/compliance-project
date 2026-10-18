@@ -152,7 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         //  keep walking back in until its token expired. Checked on
         //  restore as well as at sign-in, so the list governs who is
         //  inside and not merely who may knock.
-        if (session?.user && !canRestoreAuthSession(session.user.email, INITIAL_AUTH_CALLBACK_IS_RECOVERY)) {
+        //  INVITE AS WELL AS RECOVERY. approve-signup allowlists the
+        //  address in the database and emails an invite, but it cannot
+        //  edit the array compiled into this bundle — so comparing an
+        //  invite arrival against that array alone signed out every
+        //  newly approved user the moment their password screen drew.
+        const fromEmailedLink =
+          INITIAL_AUTH_CALLBACK_IS_RECOVERY || INITIAL_AUTH_CALLBACK_IS_INVITE || hasInviteCallback();
+
+        if (session?.user && !canRestoreAuthSession(session.user.email, fromEmailedLink)) {
           logger.warn('restored session is not on the sign-in allowlist — signing out');
           void supabase.auth.signOut();
           setSession(null);

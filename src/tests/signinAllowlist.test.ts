@@ -82,6 +82,17 @@ describe('canRestoreAuthSession', () => {
     expect(canRestoreAuthSession(null, true)).toBe(true);
   });
 
+  //  THE CASE THIS MISSED. approve-signup writes the approved address
+  //  into allowed_signins and emails an invite, but cannot edit the
+  //  array compiled into the bundle. An invite arrival judged only
+  //  against that array was signed out as its password screen drew, so
+  //  approving someone produced an email that could not be used. The
+  //  argument covers both kinds of emailed link for that reason.
+  it('allows an invite callback for an address not in the compiled list', () => {
+    expect(isEmailAllowedToSignIn('newly.approved@example.invalid')).toBe(false);
+    expect(canRestoreAuthSession('newly.approved@example.invalid', true)).toBe(true);
+  });
+
   //  The test account, added so the invite flow can be exercised end to
   //  end. Asserted here so that removing it from the list is a decision
   //  someone makes rather than something that happens.
