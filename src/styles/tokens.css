@@ -339,18 +339,55 @@
   --nv-light-next-fill:      rgba(113, 166, 106, 0.08);
   --nv-light-next-border:    #71a66a;
 
-  /*  Badge pairs for "Finish setting up". Each is a fill and a text
-      colour that clears 4.5:1 on it, and each state also carries a
-      distinct WORD — Waiting, To do, Optional, Done — so the colour is
-      never the only signal. */
-  --nv-light-badge-waiting-bg:   #fdf0dc;
-  --nv-light-badge-waiting-text: #8a5209;
-  --nv-light-badge-todo-bg:      #e7eaf2;
-  --nv-light-badge-todo-text:    #39415a;
-  --nv-light-badge-optional-bg:  #f1ede4;
-  --nv-light-badge-optional-text:#6b6559;
-  --nv-light-badge-done-bg:      #e3f0de;
-  --nv-light-badge-done-text:    #2f5a29;
+  /*  Badge pairs for "Finish setting up", and for any state badge on a
+      light surface. Each state also carries a distinct WORD — Waiting,
+      To do, Optional, Done — so the colour is never the only signal.
+
+      THESE ARE BOUND VALUES, read from the design system file's "State
+      colour mapping" frame (node 16:32 in Criateur Compliance · Product
+      Design) rather than sampled from a screenshot. The first version of
+      this block was eight hexes I approximated by eye from a PDF, and
+      every one of them was close to but not the design's: #e3f0de for a
+      green the system sets at #e6f3ea, #2f5a29 for a text colour it sets
+      at #117a47. Close is how a palette drifts — nobody notices one
+      wrong green, and a year later nothing matches anything.
+
+      Three of the four map onto a state the system defines. Waiting is
+      `pending`, To do is `draft`, Done is `compliant`. The borders are
+      the system's too; ONB-08's badges do not draw one, but a badge
+      elsewhere will.  */
+  --nv-light-badge-waiting-bg:     #fcf0e5;  /* state/pending */
+  --nv-light-badge-waiting-text:   #a35a20;
+  --nv-light-badge-waiting-border: #f6b886;
+
+  --nv-light-badge-todo-bg:        #efeeec;  /* state/draft */
+  --nv-light-badge-todo-text:      #6a6a6f;
+  --nv-light-badge-todo-border:    #a7a7a9;
+
+  --nv-light-badge-done-bg:        #e6f3ea;  /* state/compliant */
+  --nv-light-badge-done-text:      #117a47;
+  --nv-light-badge-done-border:    #7cc9a2;
+
+  /*  OPTIONAL IS NOT A STATE THE DESIGN SYSTEM DEFINES, and it is not
+      one of the six — compliant, pending, overdue, rejected, hold,
+      draft. "Optional" is the absence of a requirement rather than a
+      position in a workflow, so there is nothing to bind it to and
+      these two are deliberately ours. Kept quieter than `draft` so a
+      row nobody has to act on does not read like one that is waiting.  */
+  --nv-light-badge-optional-bg:    #f4f2ee;
+  --nv-light-badge-optional-text:  #86827a;
+
+  /*  The other three states the system defines, for the quality screens
+      that need them — a quarantined lot, an overdue investigation, a
+      rejected batch. Bound from the same frame. */
+  --nv-light-state-overdue-bg:     #f3d7d2;
+  --nv-light-state-overdue-text:   #b42c1d;
+  --nv-light-state-overdue-border: #c62f1e;
+  --nv-light-state-rejected-bg:    #c62f1e;
+  --nv-light-state-rejected-text:  #ffffff;
+  --nv-light-state-hold-bg:        #e6e8ec;
+  --nv-light-state-hold-text:      #183470;
+  --nv-light-state-hold-border:    #7f8eae;
 
   /* ── Navy: type, per the design and the mobile adaptation rules ──
       title    Bricolage 32/38 desktop, 24/30 mobile
