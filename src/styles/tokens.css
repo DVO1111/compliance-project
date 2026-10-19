@@ -319,14 +319,21 @@
      mid-green button needs white type to clear 4.5:1, so
      --nv-light-action-text is white and must stay white. */
   --nv-light-ground:         #f7f4ee;
-  --nv-light-surface:        #ffffff;
   --nv-light-surface-sunken: #f1ede4;
   --nv-light-border:         #e4dfd3;
   --nv-light-border-strong:  #cfc8b8;
 
-  --nv-light-text-primary:   #101931;
-  --nv-light-text-secondary: #4d5569;
-  --nv-light-text-tertiary:  #7b8397;
+  /*  BOUND, like the state colours above. These four were mine, matched
+      by eye from a PDF, and all four were near misses: #ffffff for a
+      raised surface the system sets at #fdfcfa, #101931 for a primary
+      text colour it sets at #0d1933, #4d5569 against #4a4a51, #7b8397
+      against #6e6e73. Read from the record/banner component (node
+      38:441), where they appear as surface/raised and text/primary |
+      secondary | tertiary. */
+  --nv-light-surface:        #fdfcfa;  /* surface/raised */
+  --nv-light-text-primary:   #0d1933;  /* text/primary   */
+  --nv-light-text-secondary: #4a4a51;  /* text/secondary */
+  --nv-light-text-tertiary:  #6e6e73;  /* text/tertiary  */
 
   --nv-light-action-bg:      #71a66a;
   --nv-light-action-hover:   #5f9158;
