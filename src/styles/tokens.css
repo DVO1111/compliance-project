@@ -319,9 +319,15 @@
      mid-green button needs white type to clear 4.5:1, so
      --nv-light-action-text is white and must stay white. */
   --nv-light-ground:         #f7f4ee;
-  --nv-light-surface-sunken: #f1ede4;
   --nv-light-border:         #e4dfd3;
-  --nv-light-border-strong:  #cfc8b8;
+
+  /*  Bound from state/step (node 47:385), which draws its connector
+      lines in border/strong and its collapsed-later pill on
+      surface/recessed. Mine were #cfc8b8 and #f1ede4 — warmer than the
+      system's, because I sampled them from a cream screenshot where
+      everything picks up the ground. */
+  --nv-light-border-strong:  #d4d4d5;  /* border/strong    */
+  --nv-light-surface-sunken: #f4f1eb;  /* surface/recessed */
 
   /*  BOUND, like the state colours above. These four were mine, matched
       by eye from a PDF, and all four were near misses: #ffffff for a
@@ -374,6 +380,9 @@
   --nv-light-badge-done-bg:        #e6f3ea;  /* state/compliant */
   --nv-light-badge-done-text:      #117a47;
   --nv-light-badge-done-border:    #7cc9a2;
+  /*  The solid fill, for a marker rather than a tint — the completed
+      node on the lifecycle track is this colour with a white glyph. */
+  --nv-light-state-compliant-icon: #117a47;
 
   /*  OPTIONAL IS NOT A STATE THE DESIGN SYSTEM DEFINES, and it is not
       one of the six — compliant, pending, overdue, rejected, hold,

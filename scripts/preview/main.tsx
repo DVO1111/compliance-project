@@ -5,6 +5,60 @@ import MainLayout from '../../src/components/Layout/MainLayout';
 import FirstRunDashboard from '../../src/components/Dashboard/FirstRunDashboard';
 import ProductsPage from '../../src/components/Products/ProductsPage';
 import RecordBanner from '../../src/components/Common/RecordBanner';
+import LifecycleTrack from '../../src/components/Common/LifecycleTrack';
+
+//  RA-02's own track: a NAPAMS application paused by a compliance
+//  directive raised at Division review.
+const SUBMISSION = [
+  { key: 'draft',             label: 'Draft' },
+  { key: 'submitted',         label: 'Submitted' },
+  { key: 'division_review',   label: 'Division review' },
+  { key: 'directive',         label: 'Compliance directive', branch: 'paused' as const, raisedAt: 'division_review' },
+  { key: 'lab_testing',       label: 'Lab testing' },
+  { key: 'fdrc',              label: 'FDRC committee' },
+  { key: 'approved',          label: 'Approved' },
+];
+
+const tracks = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={{ fontFamily: 'var(--nv-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', color: 'var(--nv-light-text-tertiary)' }}>
+        Paused by a compliance directive
+      </p>
+      <LifecycleTrack states={SUBMISSION} currentKey="directive" />
+    </div>
+    <div>
+      <p style={{ fontFamily: 'var(--nv-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', color: 'var(--nv-light-text-tertiary)' }}>
+        Mid-review, nothing to collapse
+      </p>
+      <LifecycleTrack states={SUBMISSION.filter(s => !s.branch)} currentKey="division_review" />
+    </div>
+    <div>
+      <p style={{ fontFamily: 'var(--nv-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', color: 'var(--nv-light-text-tertiary)' }}>
+        Deep in a long lifecycle, both shoulders collapsed
+      </p>
+      <LifecycleTrack
+        states={[...SUBMISSION.filter(s => !s.branch),
+                 { key: 'licence_issued', label: 'Licence issued' },
+                 { key: 'listed',         label: 'Listed' }]}
+        currentKey="fdrc" />
+    </div>
+    <div>
+      <p style={{ fontFamily: 'var(--nv-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', color: 'var(--nv-light-text-tertiary)' }}>
+        Returned for revision (branch)
+      </p>
+      <LifecycleTrack
+        states={[...SUBMISSION.filter(s => !s.branch),
+                 { key: 'returned', label: 'Returned', branch: 'returned' as const, raisedAt: 'submitted' }]}
+        currentKey="returned" />
+    </div>
+  </div>
+);
 
 const screen = new URLSearchParams(location.search).get('screen') ?? 'dashboard';
 
@@ -67,11 +121,11 @@ const banners = (
   </div>
 );
 
-const page = screen === 'banners' ? banners
+const page = screen === 'tracks' ? tracks : screen === 'banners' ? banners
   : screen === 'products'
     ? <ProductsPage companyId="c1" userId="u1" onOpenRegistrations={() => {}} onImportSpreadsheet={() => {}} />
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(screen === 'banners' ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={((screen === 'banners' || screen === 'tracks') ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );
