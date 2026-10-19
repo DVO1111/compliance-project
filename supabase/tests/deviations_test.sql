@@ -23,6 +23,15 @@
 
 \set ON_ERROR_STOP off
 
+--  The harness runs every suite against one database in sequence, and a
+--  suite that ends while still SET ROLE authenticated leaves the next
+--  one running as that role — where the fixtures below are refused by
+--  RLS and every assertion then fails for a reason that has nothing to
+--  do with deviations. Start from a known role rather than inheriting
+--  whatever the previous file left behind.
+RESET ROLE;
+SELECT set_config('request.jwt.claims','', false);
+
 DO $guard$
 BEGIN
   IF current_database() NOT IN ('postgres','criateur_local') THEN
@@ -376,9 +385,16 @@ SELECT set_config('request.jwt.claims','', false);
 
 SELECT seq, id, name, verdict, detail FROM dev_results ORDER BY seq;
 
-SELECT count(*) FILTER (WHERE verdict='PASS') AS passed,
-       count(*) FILTER (WHERE verdict='FAIL') AS failed,
-       count(*) AS total
+--  Two shapes, because the CI harness reads either: the grouped
+--  verdict table when there are failures, and the three-column line
+--  when there are none. The three columns are total, passed, failed in
+--  that order -- the harness takes columns 2 and 3 as passed and
+--  failed, so any other order reports a clean suite as a broken one.
+SELECT verdict, count(*) FROM dev_results GROUP BY verdict ORDER BY verdict;
+
+SELECT count(*) AS total,
+       count(*) FILTER (WHERE verdict='PASS') AS passed,
+       count(*) FILTER (WHERE verdict='FAIL') AS failed
 FROM dev_results;
 
 -- ── Clean up ─────────────────────────────────────────────────────────

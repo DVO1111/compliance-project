@@ -607,13 +607,20 @@ BEGIN
       WHERE table_schema='public' AND table_name='material_coa_discrepancies'
         AND column_name='deviation_id'));
 
-  PERFORM _cc('G','G3 no foreign key yet, since the target does not exist',
-    NOT EXISTS (SELECT 1 FROM information_schema.key_column_usage k
-                 JOIN information_schema.table_constraints tc
-                   ON tc.constraint_name=k.constraint_name
-                WHERE k.table_name='material_coa_discrepancies'
-                  AND k.column_name='deviation_id'
-                  AND tc.constraint_type='FOREIGN KEY'));
+  --  UPDATED IN WEEK 5. This asserted the ABSENCE of a foreign key,
+  --  because in Week 4 deviations did not exist and the column was
+  --  left unconstrained so this item could deploy without them. Item 07
+  --  added the table and the key, which is the one-line follow-up the
+  --  migration's own comment promised. The assertion is therefore
+  --  inverted rather than deleted: the column still has to point at
+  --  something, and now there is something for it to point at.
+  PERFORM _cc('G','G3 the foreign key to deviations now exists',
+    EXISTS (SELECT 1 FROM information_schema.key_column_usage k
+             JOIN information_schema.table_constraints tc
+               ON tc.constraint_name=k.constraint_name
+            WHERE k.table_name='material_coa_discrepancies'
+              AND k.column_name='deviation_id'
+              AND tc.constraint_type='FOREIGN KEY'));
 
   --  The backlog is queryable, so discrepancies raised before Week 6 are
   --  not lost when it arrives.
