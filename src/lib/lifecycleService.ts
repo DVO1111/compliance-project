@@ -237,8 +237,24 @@ export async function transition(params: {
   companyId: string;
   comment?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * The signature this action was signed with, from
+   * signElectronicRecord. Required for any transition whose definition
+   * sets requires_signature — QA closure of a deviation, batch release,
+   * issuing a certificate.
+   *
+   * THIS PARAMETER WAS MISSING UNTIL IT WAS NEEDED, and its absence was
+   * invisible: `lifecycle_transition` has taken a p_signature_id since
+   * 20260917000000, this file sent six arguments to an eight-argument
+   * function, and PostgREST filled the rest with defaults. Nothing
+   * failed to compile and nothing failed at runtime until an action
+   * that actually requires a signature was defined — at which point it
+   * failed with LIFECYCLE_SIGNATURE_REQUIRED no matter what the person
+   * did, because there was no way to send one.
+   */
+  signatureId?: string;
 }): Promise<LifecycleResult<{ from_state: string; to_state: string; history_id: string; actor_id: string | null }>> {
-  const { entityType, entityId, actionKey, companyId, comment, metadata } = params;
+  const { entityType, entityId, actionKey, companyId, comment, metadata, signatureId } = params;
 
   // p_actor_id is deliberately not sent. The database resolves the actor
   // from the session and refuses a mismatched one, so anything this file
@@ -250,6 +266,7 @@ export async function transition(params: {
     p_company_id: companyId,
     p_comment: comment ?? null,
     p_metadata: metadata ?? {},
+    p_signature_id: signatureId ?? null,
   });
 
   if (error) {
@@ -282,4 +299,85 @@ export async function transition(params: {
       actor_id: result.actor_id ?? null,
     },
   };
+}
+
+/**
+ * Sign, then transition — the two calls a signature-gated action needs,
+ * in the one order that is safe.
+ *
+ * SIGNING FIRST IS NOT A STYLE CHOICE. `lifecycle_consume_signature`
+ * checks that the signature still matches the record's hash, so a
+ * signature has to be taken over the record as it stands and then spent
+ * immediately. Transitioning first and signing after would produce a
+ * signature over a record that had already changed — which is the
+ * thing the hash check exists to prevent, and which Part 11 language
+ * about "the signed record" is specifically about.
+ *
+ * A FAILED TRANSITION LEAVES AN UNSPENT SIGNATURE, deliberately. The
+ * row stays, unconsumed, and the person can try again: the alternative
+ * is deleting a record of the fact that somebody entered their password
+ * and approved something, which is exactly the kind of evidence that
+ * must not be quietly removed. An unspent signature is visible in the
+ * signature register as what it is — an approval that did not take
+ * effect.
+ *
+ * The password never reaches this module's callers or its logs. It goes
+ * straight to the RPC, which verifies it and discards it.
+ */
+export async function signAndTransition(params: {
+  entityType: LifecycleEntityType | string;
+  entityId: string;
+  actionKey: string;
+  companyId: string;
+  /** Why the signature is being given, from SIGNATURE_MEANINGS. */
+  meaning: string;
+  /** Re-entered at the moment of signing. Never stored, never logged. */
+  password: string;
+  comment?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<LifecycleResult<{
+  from_state: string; to_state: string; history_id: string;
+  actor_id: string | null; signature_id: string;
+}>> {
+  const { signElectronicRecord } = await import('./electronicSignatureService');
+
+  const signed = await signElectronicRecord({
+    companyId: params.companyId,
+    entityType: params.entityType,
+    entityId: params.entityId,
+    action: params.actionKey,
+    meaning: params.meaning as any,
+    password: params.password,
+    reason: params.reason,
+    metadata: params.metadata,
+  });
+
+  if (!signed.ok) {
+    //  A refused signature is not a lifecycle failure and must not be
+    //  reported as one — the usual cause is a mistyped password, and
+    //  "the transition was rejected" would send someone looking at the
+    //  workflow instead of at the field they are typing in.
+    return { ok: false, code: signed.code, message: signed.message };
+  }
+
+  const moved = await transition({
+    entityType: params.entityType,
+    entityId: params.entityId,
+    actionKey: params.actionKey,
+    companyId: params.companyId,
+    comment: params.comment,
+    metadata: params.metadata,
+    signatureId: signed.signatureId,
+  });
+
+  if (!moved.ok) {
+    logger.warn('[lifecycle] signed but the transition was refused; the signature stays unspent', {
+      entityType: params.entityType, entityId: params.entityId, actionKey: params.actionKey,
+      code: moved.code,
+    });
+    return moved;
+  }
+
+  return { ok: true, data: { ...moved.data, signature_id: signed.signatureId } };
 }
