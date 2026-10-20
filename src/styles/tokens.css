@@ -319,7 +319,12 @@
      mid-green button needs white type to clear 4.5:1, so
      --nv-light-action-text is white and must stay white. */
   --nv-light-ground:         #f7f4ee;
-  --nv-light-border:         #e4dfd3;
+
+  /*  BOUND from `disabled/border` on the button component (node 17:206),
+      which is also the neutral border every card, dialog and divider in
+      the W2-0 frames draws. Mine was #e4dfd3 — a warmer near miss, from
+      the same eyeballing pass as the four below. */
+  --nv-light-border:         #e6e3dc;  /* border/default */
 
   /*  Bound from state/step (node 47:385), which draws its connector
       lines in border/strong and its collapsed-later pill on
@@ -341,9 +346,53 @@
   --nv-light-text-secondary: #4a4a51;  /* text/secondary */
   --nv-light-text-tertiary:  #6e6e73;  /* text/tertiary  */
 
-  --nv-light-action-bg:      #71a66a;
-  --nv-light-action-hover:   #5f9158;
-  --nv-light-action-text:    #ffffff;
+  /*  BOUND from the button component (node 17:206), which carries the
+      whole action palette as variables. The note above says the action
+      green is "the v2 system's #71a66a, unchanged" — that was wrong.
+      #71a66a is the navy theme's green; on cream the system uses a
+      darker #3e7a41, and its hover goes DOWN to #1e5620 rather than up.
+      The note's conclusion survives: the text stays white.
+
+      The other four families are here because a screen that needs a
+      secondary, a destructive or a disabled button should not have to
+      invent one — which is how #71a66a got in. */
+  --nv-light-action-bg:            #3e7a41;  /* action/primary/bg        */
+  --nv-light-action-hover:         #1e5620;  /* action/primary/bg-hover  */
+  --nv-light-action-active:        #17451a;  /* action/primary/bg-active */
+  --nv-light-action-text:          #ffffff;  /* action/primary/text      */
+
+  --nv-light-ink-bg:               #0d1933;  /* action/ink/*    */
+  --nv-light-ink-hover:            #1c2a4d;
+  --nv-light-ink-text:             #ffffff;
+
+  --nv-light-outline-bg:           #fdfcfa;  /* action/outline/* */
+  --nv-light-outline-border:       #d4d4d5;
+  --nv-light-outline-border-hover: #a9a9ae;
+  --nv-light-outline-text:         #0d1933;
+
+  --nv-light-danger-bg:            #c62f1e;  /* action/danger/* */
+  --nv-light-danger-hover:         #a3261a;
+  --nv-light-danger-text:          #ffffff;
+  --nv-light-danger-soft-bg:       #f3d7d2;  /* action/danger-soft/* */
+  --nv-light-danger-soft-text:     #a3261a;
+
+  --nv-light-disabled-bg:          #efece6;  /* disabled/* */
+  --nv-light-disabled-text:        #a9a9ae;
+  --nv-light-disabled-border:      #e6e3dc;
+
+  /*  One focus ring for every variant, stated in the button's own
+      description: "2 px CR Blue Light (#183470) outside stroke, same on
+      every variant". Not a per-component choice. */
+  --nv-light-focus-ring:           #183470;  /* focus/ring */
+
+  --nv-light-surface-hover:        #f4f1eb;  /* surface/hover   */
+  --nv-light-surface-pressed:      #ede9e1;  /* surface/pressed */
+
+  /*  The selected-option treatment: a green stroke (action/primary/bg)
+      over a very pale green fill. Drawn as literals in the W2-0 request
+      dialog and review drawer rather than as a variable, so this one is
+      read from the frames and not bound. */
+  --nv-light-select-fill:          #f5faf5;
 
   /*  The "next step" treatment, carried over from ONB-00's current-step
       card and ONB-07's first-action card: a green stroke over an 8%

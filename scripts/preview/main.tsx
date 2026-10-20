@@ -6,6 +6,10 @@ import FirstRunDashboard from '../../src/components/Dashboard/FirstRunDashboard'
 import ProductsPage from '../../src/components/Products/ProductsPage';
 import RecordBanner from '../../src/components/Common/RecordBanner';
 import LifecycleTrack from '../../src/components/Common/LifecycleTrack';
+import LockedSectionsCard from '../../src/components/Access/LockedSectionsCard';
+import RequestAccessDialog from '../../src/components/Access/RequestAccessDialog';
+import AccessRequestsInbox from '../../src/components/Access/AccessRequestsInbox';
+import ReviewRequestDrawer from '../../src/components/Access/ReviewRequestDrawer';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -121,7 +125,140 @@ const banners = (
   </div>
 );
 
-const page = screen === 'tracks' ? tracks : screen === 'banners' ? banners
+//  W2-0. The four access screens on one page, with the design's own
+//  people and words, so they can be put beside the Figma frames.
+//  Fixed "today" so the dates in the dialog do not drift and a
+//  screenshot taken next month still matches one taken now.
+const TODAY = new Date('2026-10-08T09:00:00Z');
+
+const access = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <LockedSectionsCard
+      adminName="Kemi Adewale"
+      onRequest={() => {}}
+      sections={[
+        { section: 'qc_testing',     wouldAllow: 'View results for lots you received', pending: true },
+        { section: 'deviation_capa', wouldAllow: 'View deviations linked to your lots' },
+        { section: 'audit_trail',    wouldAllow: 'View the history of your records' },
+        { section: 'batch_release',  wouldAllow: '' },
+      ]}
+    />
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <RequestAccessDialog
+        section="qc_testing"
+        role="storekeeper"
+        roleLabel="Storekeeper"
+        scopeOptions={['Lots I received', 'All lots at Ikeja plant']}
+        adminName="Kemi Adewale"
+        today={TODAY}
+        onCancel={() => {}}
+        onSend={() => {}}
+      />
+    </div>
+
+    <AccessRequestsInbox
+      oldest="2 hours"
+      onReview={() => {}}
+      onOpenDecided={() => {}}
+      waiting={[
+        {
+          id: 'r1',
+          person: { name: 'Tunde Bello', initials: 'TB', standing: 'Storekeeper · Ikeja plant', role: 'storekeeper' },
+          askedAgo: '2 hours ago',
+          section: 'qc_testing', level: 'view',
+          scope: 'Lots they received', duration: 'Until 31 Oct 2026',
+          reason: 'I need to see when sampling is finished so I can plan put-away for the sucrose and maltodextrin lots.',
+        },
+        {
+          id: 'r2',
+          person: { name: 'Ifeoma Nwosu', initials: 'IN', standing: 'QC Analyst · Ikeja plant', role: 'qc_analyst' },
+          askedAgo: '1 hour ago',
+          section: 'qa_disposition', level: 'act',
+          scope: 'All lots at Ikeja plant', duration: 'No end date',
+          reason: 'Cover for QA while Adaeze is on leave next week.',
+        },
+        {
+          id: 'r3',
+          person: { name: 'Musa Danjuma', initials: 'MD', standing: 'Production supervisor · Ikeja', role: 'production_supervisor' },
+          askedAgo: '35 min ago',
+          section: 'audit_trail', level: 'view',
+          scope: 'Batches at Ikeja plant', duration: 'No end date',
+          reason: 'I need to check who changed the line-clearance record on IBU-2610-022.',
+        },
+      ]}
+      decided={[
+        {
+          id: 'd1',
+          person: { name: 'Bisi Afolabi', initials: 'BA', standing: 'Procurement' },
+          section: 'deviation_capa', level: 'view',
+          decision: { kind: 'grant_with_limits', level: 'view',
+                      scope: 'Supplier-related deviations only', until: '2026-12-31',
+                      note: 'Supplier-related deviations only, until the end of the year.' },
+          by: 'K. Adewale · 7 Oct',
+        },
+        {
+          id: 'd2',
+          person: { name: 'Femi Ojo', initials: 'FO', standing: 'Production operator' },
+          section: 'material_lots', level: 'act',
+          decision: { kind: 'decline',
+                      reason: 'Issuing material is a Storekeeper task. Ask Tunde to issue lots.' },
+          by: 'K. Adewale · 6 Oct',
+        },
+      ]}
+    />
+
+    {/*  Two drawers side by side: the design's clean request, and the
+        conflicting one, which is the case the screenshot does not show
+        and the one the rule exists for. */}
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+      {([
+        ['Clean request · narrowing offered', {
+          reference: 'REQ-0193', askedAgo: 'Requested 2 hours ago',
+          person: { name: 'Tunde Bello', initials: 'TB',
+                    standing: 'Storekeeper · Ikeja plant · since March 2024',
+                    role: 'storekeeper' as const, roleLabel: 'Storekeeper' },
+          request: { section: 'qc_testing' as const, level: 'view' as const,
+                     scope: 'Lots they received', until: '2026-10-31',
+                     reason: 'I need to see when sampling is finished so I can plan put-away for the sucrose and maltodextrin lots.' },
+          scopeOptions: ['Lots they received', 'All lots'] as [string, string],
+          context: { site: 'Ikeja plant', sectionEnabledAtSite: true, existingGrant: null },
+        }],
+        ['Duties conflict · Act refused', {
+          reference: 'REQ-0194', askedAgo: 'Requested 1 hour ago',
+          person: { name: 'Ifeoma Nwosu', initials: 'IN',
+                    standing: 'QC Analyst · Ikeja plant · since July 2023',
+                    role: 'qc_analyst' as const, roleLabel: 'QC Analyst' },
+          request: { section: 'qa_disposition' as const, level: 'act' as const,
+                     scope: 'All lots at Ikeja plant', until: null,
+                     reason: 'Cover for QA while Adaeze is on leave next week.' },
+          scopeOptions: ['Lots they tested', 'All lots at Ikeja plant'] as [string, string],
+          context: { site: 'Ikeja plant', sectionEnabledAtSite: true, existingGrant: null },
+        }],
+      ] as const).map(([caption, pending]) => (
+        <div key={caption} style={{ flex: 1, minWidth: 360 }}>
+          <p style={{ fontFamily: 'var(--nv-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                      textTransform: 'uppercase', color: 'var(--nv-light-text-tertiary)' }}>
+            {caption}
+          </p>
+          <div style={{ height: 760, border: '1px solid var(--nv-light-border)', borderRadius: 12,
+                        overflow: 'hidden', display: 'flex' }}>
+            <ReviewRequestDrawer
+              pending={pending}
+              today={TODAY}
+              onClose={() => {}}
+              onDecide={() => {}}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const page = screen === 'access' ? access
+  : screen === 'tracks' ? tracks : screen === 'banners' ? banners
   : screen === 'products'
     ? <ProductsPage companyId="c1" userId="u1" onOpenRegistrations={() => {}} onImportSpreadsheet={() => {}} />
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
