@@ -629,13 +629,26 @@ BEGIN
   PERFORM _i11k('C','C6 every one of them landed',
     n_after = n_before + 3, format('%s then %s', n_before, n_after));
 
-  --  AND NO DEVIATION WAS CREATED. There is no deviations table at all
-  --  yet, which is the strongest form this assertion can take today:
-  --  nothing could have been written because there is nowhere to write.
-  PERFORM _i11k('C','C7 no deviation was created, there being no such table yet',
-    to_regclass('public.deviations') IS NULL
-    AND to_regclass('public.deviation_records') IS NULL,
-    coalesce(to_regclass('public.deviations')::text,'no deviations table'));
+  --  AND NO DEVIATION WAS CREATED.
+  --
+  --  This assertion was written as "there is no deviations table at
+  --  all yet" — the strongest form available when item 11 was built,
+  --  and one deliberately destined to expire. Week 5 item 02 built the
+  --  table, so the proxy went from strongest to simply false, and the
+  --  suite had been failing on it unnoticed because dblink could not
+  --  reach the server on this machine.
+  --
+  --  Rewritten to the thing it always meant: recording an
+  --  out-of-specification reading must not raise a deviation by
+  --  itself. Somebody decides that; the system does not decide it for
+  --  them.
+  PERFORM _i11k('C','C7 no deviation was raised by recording the readings',
+    NOT EXISTS (SELECT 1 FROM public.deviations
+                 WHERE company_id = current_setting('i11.c_a')::uuid)
+    AND NOT EXISTS (SELECT 1 FROM public.deviation_links
+                     WHERE company_id = current_setting('i11.c_a')::uuid),
+    (SELECT coalesce(string_agg(deviation_number, ', '), 'none')
+       FROM public.deviations WHERE company_id = current_setting('i11.c_a')::uuid));
 
   PERFORM _i11k('C','C8 nor any escalation raised by the system itself',
     NOT EXISTS (SELECT 1 FROM public.inprocess_oos_escalations

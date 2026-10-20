@@ -1289,6 +1289,115 @@ $j2$;
 DROP FUNCTION IF EXISTS _d9_lot(uuid,numeric,text,text);
 DROP FUNCTION IF EXISTS _d9_clear(uuid);
 
+-- =====================================================================
+--  K — W4·18: flagged versus blocked, and the picker that never lies
+-- =====================================================================
+--  The design states one rule that spans all seven screens of this
+--  section, and it is the only one written as a definition:
+--
+--    "Flagged vs blocked: flagged = amber, info icon, 'you can
+--     continue with…'; blocked = solid red, ✕, 'can't', no way past
+--     it on screen."
+--
+--  K1-K6 hold the common shape to it. K7-K11 are the picker:
+--  "Unapproved lots selectable then refused: no. They are never
+--  listed."
+--
+--  The API line declares 24.0 kg ± 2 %, so 23.5 is inside and 26.0 is
+--  outside — the flagged case the gate can only report by refusing.
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('d9.u_op'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $k$
+DECLARE
+  b1 uuid := current_setting('d9.b1')::uuid;
+  lot_ok uuid := current_setting('d9.lot_ok')::uuid;
+  n integer; r record;
+BEGIN
+  --  A quantity inside tolerance raises nothing at all. An amber
+  --  notice on a correct weight would train people to ignore amber.
+  SELECT count(*) INTO n FROM public.dispensing_conditions(b1, lot_ok, 24.0);
+  PERFORM _d9k('K','K1 a weight inside tolerance reports no condition', n=0, n||' row(s)');
+
+  --  THE FLAGGED CASE, and the reason the common shape exists.
+  SELECT * INTO r FROM public.dispensing_conditions(b1, lot_ok, 26.0)
+   WHERE condition_key='out_of_tolerance';
+  PERFORM _d9k('K','K2 a weight outside tolerance is flagged, not blocked',
+    r.severity='flagged', coalesce(r.severity,'(none)'));
+
+  --  "you can continue with…" — a flagged row without this renders as
+  --  that sentence followed by nothing.
+  PERFORM _d9k('K','K3 and names who can let the work continue',
+    coalesce(btrim(r.continue_with),'') <> '' AND r.continue_with ILIKE '%supervisor%',
+    coalesce(r.continue_with,'NULL'));
+
+  --  The detail has to carry the numbers. "Outside tolerance" alone
+  --  leaves an operator unable to say how far out, which is the first
+  --  thing a supervisor asks.
+  PERFORM _d9k('K','K4 and states the allowed range',
+    r.detail LIKE '%24.0%' AND r.detail LIKE '%2%',
+    coalesce(r.detail,'NULL'));
+
+  --  THE INVARIANT THE WHOLE FILE EXISTS FOR, checked on real rows
+  --  rather than only by the deploy assertion.
+  SELECT count(*) INTO n FROM public.dispensing_conditions(b1, lot_ok, 26.0)
+   WHERE severity NOT IN ('flagged','blocked');
+  PERFORM _d9k('K','K5 every condition is flagged or blocked and nothing else', n=0, n||' row(s)');
+
+  SELECT count(*) INTO n FROM public.dispensing_conditions(b1, lot_ok, 26.0)
+   WHERE (severity='flagged' AND coalesce(btrim(continue_with),'')='')
+      OR (severity='blocked' AND continue_with IS NOT NULL);
+  PERFORM _d9k('K','K6 flagged always offers a way on, blocked never does', n=0, n||' row(s)');
+END
+$k$;
+
+DO $k2$
+DECLARE
+  b1 uuid := current_setting('d9.b1')::uuid;
+  m_api uuid := current_setting('d9.m_api')::uuid;
+  lot_ok uuid := current_setting('d9.lot_ok')::uuid;
+  n integer; r record;
+BEGIN
+  --  "They are never listed; the picker says so."
+  PERFORM _d9k('K','K7 the approved lot is offered',
+    EXISTS (SELECT 1 FROM public.dispensable_lots(b1, m_api) WHERE lot_id=lot_ok));
+
+  --  Quarantined, rejected and exhausted lots must be absent — not
+  --  greyed, not listed with a reason: absent.
+  SELECT count(*) INTO n FROM public.dispensable_lots(b1, m_api)
+   WHERE lot_id IN (current_setting('d9.lot_q')::uuid,
+                    current_setting('d9.lot_rej')::uuid,
+                    current_setting('d9.lot_exh')::uuid);
+  PERFORM _d9k('K','K8 quarantined, rejected and exhausted lots are not listed at all',
+    n=0, n||' row(s)');
+
+  --  And the list agrees with the gate on every row it does offer. A
+  --  picker that listed something the gate refuses is the exact
+  --  failure the design rules out.
+  SELECT count(*) INTO n FROM public.dispensable_lots(b1, m_api) dl
+   WHERE public.dispensing_block_reason(b1, dl.lot_id, NULL) IS NOT NULL;
+  PERFORM _d9k('K','K9 nothing offered would be refused by the gate', n=0, n||' row(s)');
+
+  --  Oldest usable stock first, so nobody takes the newest drum off
+  --  the front of the rack and leaves the older one to expire.
+  SELECT count(*) INTO n FROM (
+    SELECT retest_due_date,
+           lag(retest_due_date) OVER () AS prev
+      FROM public.dispensable_lots(b1, m_api)) q
+   WHERE prev IS NOT NULL AND retest_due_date IS NOT NULL AND retest_due_date < prev;
+  PERFORM _d9k('K','K10 the list is ordered oldest first', n=0, n||' out of order');
+
+  --  Every offered lot has stock. A lot with nothing left is not a
+  --  choice, it is a dead end one tap in.
+  SELECT count(*) INTO n FROM public.dispensable_lots(b1, m_api)
+   WHERE quantity_available IS NULL OR quantity_available <= 0;
+  PERFORM _d9k('K','K11 every offered lot has stock left', n=0, n||' row(s)');
+END
+$k2$;
+
+RESET ROLE; RESET request.jwt.claims;
+
 \echo ''
 \echo '════════════════════════════════════════════════════════════════'
 \echo '  WEEK 4 / ITEM 09 — DISPENSING AND GENEALOGY LINKS'

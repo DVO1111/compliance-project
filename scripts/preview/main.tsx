@@ -21,6 +21,8 @@ import VersionComparison from '../../src/components/Formula/VersionComparison';
 import StageStrip from '../../src/components/Batch/StageStrip';
 import SignOffPair from '../../src/components/Batch/SignOffPair';
 import CorrectionRecord from '../../src/components/Batch/CorrectionRecord';
+import FloorNotice from '../../src/components/Floor/FloorNotice';
+import ApprovedLotPicker from '../../src/components/Floor/ApprovedLotPicker';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -605,7 +607,107 @@ const batch = (
   </div>
 );
 
-const page = screen === 'batch' ? batch
+//  W4·18. The two treatments beside each other, which is the only
+//  way to see whether the rule holds: flagged must never read as a
+//  stop, blocked must never read as a warning.
+const floor = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={label}>LC-02 · blocked — solid red, ✕, "can't", no way past it</p>
+      <FloorNotice
+        condition={{ key: 'line_blocked', severity: 'blocked',
+          title: 'Line TL-2 is blocked',
+          detail: 'A changeover verification failed: residue found on the hopper outlet. '
+            + 'The line stays blocked until a passing verification is recorded — it cannot '
+            + 'be overridden here.',
+          continueWith: null, sortOrder: 5 }}
+        nextSteps={
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#ffffff', fontSize: 14, lineHeight: '22px' }}>
+            <li>Re-clean the line to the changeover SOP.</li>
+            <li>QC takes a new swab and records the result.</li>
+            <li>Start a fresh line clearance once it passes.</li>
+          </ul>
+        } />
+    </div>
+
+    <div>
+      <p style={label}>DS-03 · blocked — names the instrument, the date, and what removes it</p>
+      <FloorNotice
+        condition={{ key: 'instrument_unusable', severity: 'blocked',
+          title: 'Balance BAL-02 cannot be used',
+          detail: 'BAL-02 went out of calibration on 08 Oct 2026 and cannot be used until it '
+            + 'is recalibrated. The weight you read is not lost — it has not been recorded '
+            + 'against the batch.',
+          continueWith: null, sortOrder: 10 }}
+        nextSteps={
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#ffffff', fontSize: 14, lineHeight: '22px' }}>
+            <li>Switch to BAL-03, calibrated to 14 Feb 2027, and weigh again.</li>
+            <li>Notify S. Bakare, who owns BAL-02.</li>
+          </ul>
+        } />
+    </div>
+
+    <div>
+      <p style={label}>DS-02 · flagged — amber, info, "you can continue with…"</p>
+      <FloorNotice
+        condition={{ key: 'out_of_tolerance', severity: 'flagged',
+          title: 'Outside tolerance',
+          detail: '26.0 kg weighed against 24.0 kg ± 2 %. The allowed range is 23.52 to '
+            + '24.48 kg.',
+          continueWith: 'A supervisor signing in here, with a reason. The weight is recorded '
+            + 'as it was read, not adjusted.',
+          sortOrder: 20 }}
+        action={{ label: 'Get authorisation', onAct: () => {} }} />
+    </div>
+
+    <div>
+      <p style={label}>CAL · flagged — due soon, readings still valid</p>
+      <FloorNotice
+        condition={{ key: 'calibration_due_soon', severity: 'flagged',
+          title: 'Balance BAL-03 is due for calibration',
+          detail: 'Calibration runs out on 14 Nov 2026, in 25 days. Readings taken until then '
+            + 'are valid.',
+          continueWith: 'Nothing — the instrument is still in calibration. Book it in before '
+            + 'the date to avoid a stoppage.',
+          sortOrder: 20 }} />
+    </div>
+
+    <div>
+      <p style={label}>A malformed flagged condition degrades to blocked rather than promising nothing</p>
+      <FloorNotice
+        condition={{ key: 'broken', severity: 'flagged',
+          title: 'Something the database flagged without saying how to continue',
+          detail: 'This renders as blocked on purpose. "You can continue with:" followed by '
+            + 'nothing is worse than no distinction at all, because it looks right.',
+          continueWith: null, sortOrder: 30 }} />
+    </div>
+
+    <div>
+      <p style={label}>DS-01 · the picker lists approved lots only</p>
+      <ApprovedLotPicker
+        materialName="Paracetamol BP"
+        selectedLotId="l2"
+        onSelect={() => {}}
+        lots={[
+          { lotId: 'l1', lotNumber: 'ML-2609-031', quantityAvailable: 42,
+            unitOfMeasure: 'kg', retestDueDate: '2027-03-09', supplierExpiryDate: '2029-01-11' },
+          { lotId: 'l2', lotNumber: 'ML-2610-028', quantityAvailable: 150,
+            unitOfMeasure: 'kg', retestDueDate: '2028-10-09', supplierExpiryDate: '2029-09-11' },
+          { lotId: 'l3', lotNumber: 'ML-2610-044', quantityAvailable: 88,
+            unitOfMeasure: 'kg', retestDueDate: null, supplierExpiryDate: '2030-02-01' },
+        ]} />
+    </div>
+
+    <div>
+      <p style={label}>… and says so when there are none</p>
+      <ApprovedLotPicker materialName="Maize starch BP" lots={[]} onSelect={() => {}} />
+    </div>
+  </div>
+);
+
+const page = screen === 'floor' ? floor
+  : screen === 'batch' ? batch
   : screen === 'formula' ? formula
   : screen === 'materials' ? materials
   : screen === 'roles' ? roles
@@ -616,5 +718,5 @@ const page = screen === 'batch' ? batch
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );
