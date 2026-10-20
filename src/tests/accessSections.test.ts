@@ -78,52 +78,72 @@ describe('the section list', () => {
 });
 
 describe('the segregation-of-duties rules', () => {
-  const seeded = [...valuesBlockFor('access_duty_conflicts')
+  const pairs = [...valuesBlockFor('access_duty_conflicts')
     .matchAll(/^\s*\('([a-z_]+)',\s*'([a-z_]+)',/gm)]
     .map((m) => ({ role: m[1] as WorkRole, section: m[2] as AccessSection }));
 
-  it('seeds the eight the module enforces', () => {
-    const fromModule = new Set<string>();
-    for (const { role } of seeded) {
-      for (const section of forbiddenActSections(role)) fromModule.add(`${role}/${section}`);
+  //  The allowlist is seeded (section, role) — the other way round
+  //  from the denylist, because it is a different kind of statement.
+  const owners = [...valuesBlockFor('access_act_owners')
+    .matchAll(/^\s*\('([a-z_]+)',\s*'([a-z_]+)',/gm)]
+    .map((m) => ({ section: m[1] as AccessSection, role: m[2] as WorkRole }));
+
+  const ownedSections = new Set(owners.map((o) => o.section));
+  const ownerOf = (section: AccessSection) =>
+    new Set(owners.filter((o) => o.section === section).map((o) => o.role));
+
+  /** What the migration's two tables, together, say about one cell. */
+  const sqlForbids = (role: WorkRole, section: AccessSection) =>
+    (ownedSections.has(section) && !ownerOf(section).has(role))
+    || pairs.some((p) => p.role === role && p.section === section);
+
+  it('seeds the pairs the module carries', () => {
+    const fromSql = new Set(pairs.map((r) => `${r.role}/${r.section}`));
+    for (const { role, section } of pairs) {
+      expect(fromSql.has(`${role}/${section}`), `${role}/${section}`).toBe(true);
     }
-    const fromSql = new Set(seeded.map((r) => `${r.role}/${r.section}`));
-    expect(fromSql).toEqual(fromModule);
+    expect(pairs.length).toBeGreaterThanOrEqual(9);
   });
 
-  //  The migration's own deploy-time assertion refuses fewer than
-  //  eight. If that number ever moves, this is where it is noticed.
-  it('seeds at least the eight the migration asserts', () => {
-    expect(seeded.length).toBeGreaterThanOrEqual(8);
+  //  "Segregation of duties — enforced for everyone, including
+  //  admins." The one rule a permissions system is most likely to
+  //  exempt itself from.
+  it('binds the Compliance admin too', () => {
+    expect(forbiddenActSections('compliance_admin')).toContain('qa_disposition');
+    expect(sqlForbids('compliance_admin', 'qa_disposition')).toBe(true);
+  });
+
+  it('names owners for every section the module restricts by allowlist', () => {
+    //  QA disposition is the one the design draws. If the module ever
+    //  restricts another section this way and the migration does not,
+    //  the browser disables a radio the database would grant.
+    expect(ownedSections.has('qa_disposition')).toBe(true);
+    expect(ownerOf('qa_disposition')).toEqual(new Set(['qa_officer', 'qa_manager']));
   });
 
   it('points every seeded pair at a section that exists', () => {
-    for (const { section } of seeded) {
-      expect(SECTION_LABELS[section], section).toBeTruthy();
-    }
+    for (const { section } of pairs) expect(SECTION_LABELS[section], section).toBeTruthy();
+    for (const { section } of owners) expect(SECTION_LABELS[section], section).toBeTruthy();
   });
 
-  //  The one direction the set-equality above does not cover on its
-  //  own: a rule added to the module and not to the migration would
-  //  disable a radio the database happily grants.
-  it('has no module rule missing from the migration', () => {
-    const fromSql = new Set(seeded.map((r) => `${r.role}/${r.section}`));
+  //  THE ONE THAT MATTERS: the two copies agree on every cell, in both
+  //  directions. A rule in the module and not the migration disables a
+  //  radio the database grants; a rule in the migration and not the
+  //  module offers a radio the save then refuses.
+  it('agrees with the module on every role and section, both ways', () => {
     const roles: WorkRole[] = [
       'production_operator', 'production_supervisor', 'storekeeper',
       'qc_analyst', 'qa_officer', 'qa_manager', 'regulatory_affairs',
       'procurement', 'compliance_admin', 'other',
     ];
     for (const role of roles) {
-      for (const section of forbiddenActSections(role)) {
-        expect(fromSql.has(`${role}/${section}`), `${role}/${section} is not seeded`).toBe(true);
+      for (const section of Object.keys(SECTION_LABELS) as AccessSection[]) {
+        expect(checkConflict(role, section, 'act').conflicts, `${role}/${section}`)
+          .toBe(sqlForbids(role, section));
+        //  And viewing is never refused by either copy.
+        expect(checkConflict(role, section, 'view').conflicts, `${role}/${section} view`)
+          .toBe(false);
       }
-    }
-  });
-
-  it('agrees with checkConflict on every seeded pair', () => {
-    for (const { role, section } of seeded) {
-      expect(checkConflict(role, section, 'act').conflicts, `${role}/${section}`).toBe(true);
-      expect(checkConflict(role, section, 'view').conflicts, `${role}/${section}`).toBe(false);
     }
   });
 });

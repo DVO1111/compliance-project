@@ -10,6 +10,8 @@ import LockedSectionsCard from '../../src/components/Access/LockedSectionsCard';
 import RequestAccessDialog from '../../src/components/Access/RequestAccessDialog';
 import AccessRequestsInbox from '../../src/components/Access/AccessRequestsInbox';
 import ReviewRequestDrawer from '../../src/components/Access/ReviewRequestDrawer';
+import RolesMatrix from '../../src/components/Access/RolesMatrix';
+import PersonAccessPanel from '../../src/components/Access/PersonAccessPanel';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -257,12 +259,87 @@ const access = (
   </div>
 );
 
-const page = screen === 'access' ? access
+//  PM-03 and PM-04, with the design's own roles and people.
+const roles = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <RolesMatrix
+      onOpenApprovalRules={() => {}}
+      sections={['material_lots', 'qc_testing', 'qa_disposition', 'batch_records',
+                 'batch_release', 'deviation_capa', 'audit_trail']}
+      roles={[
+        { role: 'procurement', peopleCount: 4,
+          access: { material_lots: 'view', deviation_capa: 'view' } },
+        { role: 'storekeeper', peopleCount: 6,
+          access: { material_lots: 'act', batch_records: 'view' } },
+        { role: 'qc_analyst', peopleCount: 5,
+          access: { material_lots: 'view', qc_testing: 'act', deviation_capa: 'act' } },
+        { role: 'qa_officer', peopleCount: 3,
+          access: { material_lots: 'view', qc_testing: 'view', qa_disposition: 'act',
+                    batch_records: 'view', deviation_capa: 'act' } },
+        { role: 'qa_manager', peopleCount: 2,
+          access: { material_lots: 'view', qc_testing: 'view', qa_disposition: 'act',
+                    batch_records: 'view', batch_release: 'act', deviation_capa: 'act',
+                    audit_trail: 'view' } },
+        { role: 'production_supervisor', peopleCount: 7,
+          access: { material_lots: 'view', batch_records: 'act', deviation_capa: 'act' } },
+        { role: 'compliance_admin', peopleCount: 1,
+          access: { material_lots: 'view', qc_testing: 'view', batch_records: 'view',
+                    deviation_capa: 'view', audit_trail: 'view' } },
+      ]}
+      steps={[
+        { step: 'Release a batch',  whoCanDoIt: 'QA Manager (QA release role)', needs: 'signature' },
+        { step: 'Material disposition', whoCanDoIt: 'QA Officer, QA Manager',   needs: 'signature' },
+        { step: 'Close a deviation', whoCanDoIt: 'QA Officer, QA Manager' },
+        { step: 'Approve a supplier', whoCanDoIt: 'QA Manager',                 needs: 'signature' },
+        { step: 'Change roles and permissions', whoCanDoIt: 'Compliance admin', needs: 'logged' },
+      ]}
+    />
+
+    <PersonAccessPanel
+      today={TODAY}
+      person={{ name: 'Tunde Bello', initials: 'TB', role: 'storekeeper',
+                standing: 'Storekeeper · Ikeja plant · joined March 2024', peopleInRole: 6 }}
+      roleAccess={[
+        { section: 'material_lots',  level: 'act' },
+        { section: 'batch_records',  level: 'view' },
+        { section: 'deviation_capa', level: 'view', restrictedFrom: 'act' },
+        { section: 'qc_testing' },
+        { section: 'qa_disposition' },
+      ]}
+      extraGrants={[{
+        id: 'g1', section: 'qc_testing', level: 'view',
+        scope: 'Lots they received', until: '2026-10-20',
+        provenance: 'Granted with limits by K. Adewale · 8 Oct, 11:02 · REQ-0193',
+      }]}
+      restrictions={[{
+        id: 'x1', section: 'deviation_capa', from: 'act', to: 'view', until: '2026-10-15',
+        reason: 'Stock count investigation at store B.',
+        setBy: 'Set by K. Adewale · 5 Oct, 16:40',
+      }]}
+      history={[
+        { at: '8 Oct 2026 · 11:02', what: 'Granted QC testing (View), with limits',
+          detail: 'Until 20 Oct; asked for 31 Oct · K. Adewale' },
+        { at: '8 Oct 2026 · 10:14', what: 'Asked for QC testing (View)',
+          detail: '“I need to see when sampling is finished…” · T. Bello' },
+        { at: '5 Oct 2026 · 16:40', what: 'Restricted Deviation / CAPA to View',
+          detail: 'Until 15 Oct · K. Adewale' },
+        { at: '12 Mar 2024 · 09:00', what: 'Role assigned: Storekeeper',
+          detail: 'Ikeja plant · K. Adewale' },
+      ]}
+      onOpenRole={() => {}} onChangeRole={() => {}}
+      onRestrict={() => {}} onRevoke={() => {}} onLiftRestriction={() => {}}
+    />
+  </div>
+);
+
+const page = screen === 'roles' ? roles
+  : screen === 'access' ? access
   : screen === 'tracks' ? tracks : screen === 'banners' ? banners
   : screen === 'products'
     ? <ProductsPage companyId="c1" userId="u1" onOpenRegistrations={() => {}} onImportSpreadsheet={() => {}} />
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={((screen === 'banners' || screen === 'tracks') ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );

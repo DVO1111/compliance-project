@@ -172,6 +172,25 @@ BEGIN
   PERFORM acc_assert('B3','every conflict carries a reason and somewhere else to ask',
     (SELECT count(*) FROM public.access_duty_conflicts
       WHERE length(btrim(reason)) < 20 OR length(btrim(instead_ask)) < 10) = 0);
+
+  --  THE ALLOWLIST. A denylist is only safe if it is complete, and
+  --  nothing keeps it complete: this is the case it exists for, a role
+  --  with no explicit pair on a section that has named owners.
+  PERFORM acc_assert('B3a','a role with no explicit pair is still refused QA disposition',
+    EXISTS (SELECT 1 FROM public.access_conflict(c_a,'regulatory_affairs','qa_disposition','act')));
+  PERFORM acc_assert('B3b','including a role the product has never heard of',
+    EXISTS (SELECT 1 FROM public.access_conflict(c_a,'night_shift_lead','qa_disposition','act')));
+  PERFORM acc_assert('B3c','but the named owners may act',
+    NOT EXISTS (SELECT 1 FROM public.access_conflict(c_a,'qa_officer','qa_disposition','act'))
+    AND NOT EXISTS (SELECT 1 FROM public.access_conflict(c_a,'qa_manager','qa_disposition','act')));
+  --  And a section with no named owners is not accidentally closed to
+  --  everyone by the allowlist's existence.
+  PERFORM acc_assert('B3d','a section with no named owners stays open',
+    NOT EXISTS (SELECT 1 FROM public.access_conflict(c_a,'regulatory_affairs','sop_library','act')));
+  --  The explicit pair's own wording wins over the generic sentence.
+  PERFORM acc_assert('B3e','an explicit pair keeps its own reason',
+    (SELECT reason FROM public.access_conflict(c_a,'qc_analyst','qa_disposition','act'))
+      LIKE '%their own result%');
 END $$;
 
 --  B4 · THE ONE THAT MATTERS. An admin may narrow a request. They may

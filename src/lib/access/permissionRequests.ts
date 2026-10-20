@@ -175,12 +175,50 @@ const ACT_CONFLICTS: { role: WorkRole; section: AccessSection; reason: string; i
     insteadAsk: 'QC testing belongs to a QC analyst.',
   },
   {
+    //  "Segregation of duties — enforced for everyone, INCLUDING
+    //  ADMINS." The Compliance admin decides who can open what; if
+    //  they could also act in QA disposition, they could grant
+    //  themselves the one permission the whole quality system is built
+    //  to separate, and the access log would show it as routine
+    //  administration.
+    role: 'compliance_admin', section: 'qa_disposition',
+    reason: 'A Compliance admin decides who holds access. Acting in QA disposition as well '
+      + 'would let one person grant themselves the decision they then make.',
+    insteadAsk: 'QA disposition belongs to a QA officer or QA manager.',
+  },
+  {
     role: 'qc_analyst', section: 'batch_records',
     reason: 'A QC analyst records results against a batch. Editing the batch record itself '
       + 'would let the result and the record be changed together.',
     insteadAsk: 'Batch records belong to production.',
   },
 ];
+
+/**
+ * Sections only named roles may act in.
+ *
+ * WHY AN ALLOWLIST AND NOT MORE PAIRS. PM-03's matrix shows QA
+ * disposition locked for Procurement, Storekeeper, QC Analyst,
+ * Production supervisor and the Compliance admin — everyone drawn
+ * except QA. Expressing that as five more rows in ACT_CONFLICTS would
+ * look identical on that screen and be wrong in the one case the
+ * screen does not draw: a role nobody thought of. `other` exists, new
+ * roles get added, and a denylist says yes to every one of them.
+ *
+ * So the sections where acting IS the control get named owners, and
+ * everything not named is refused. A denylist is safe only if it is
+ * complete, and nothing keeps it complete.
+ */
+const ACT_RESTRICTED_TO: Partial<Record<AccessSection, {
+  roles: WorkRole[]; reason: string; insteadAsk: string;
+}>> = {
+  qa_disposition: {
+    roles: ['qa_officer', 'qa_manager'],
+    reason: 'Deciding the disposition of material is the independent quality check on '
+      + 'everyone else\'s work.',
+    insteadAsk: 'QA disposition belongs to a QA officer or QA manager.',
+  },
+};
 
 /**
  * The automatic check step 3 describes. Pure, so the request dialog can
@@ -193,6 +231,19 @@ export function checkConflict(
   //  rule is about acting. Viewing is not a conflict.
   if (level === 'view') return { conflicts: false };
 
+  //  The allowlist first: where a section has named owners, everyone
+  //  else is refused, including roles that have no explicit pair.
+  const owned = ACT_RESTRICTED_TO[section];
+  if (owned && !owned.roles.includes(role)) {
+    //  A role WITH an explicit pair keeps that pair's wording, which is
+    //  written for them — "approving their own result" says more to a
+    //  QC analyst than the generic sentence does.
+    const specific = ACT_CONFLICTS.find((c) => c.role === role && c.section === section);
+    return specific
+      ? { conflicts: true, reason: specific.reason, insteadAsk: specific.insteadAsk }
+      : { conflicts: true, reason: owned.reason, insteadAsk: owned.insteadAsk };
+  }
+
   const hit = ACT_CONFLICTS.find((c) => c.role === role && c.section === section);
   if (!hit) return { conflicts: false };
 
@@ -201,7 +252,63 @@ export function checkConflict(
 
 /** Every section this role may not act on. Drives the dialog's disabling. */
 export function forbiddenActSections(role: WorkRole): AccessSection[] {
-  return ACT_CONFLICTS.filter((c) => c.role === role).map((c) => c.section);
+  const out = new Set<AccessSection>(
+    ACT_CONFLICTS.filter((c) => c.role === role).map((c) => c.section),
+  );
+  for (const [section, owned] of Object.entries(ACT_RESTRICTED_TO)) {
+    if (!owned!.roles.includes(role)) out.add(section as AccessSection);
+  }
+  return [...out];
+}
+
+export const ROLE_LABELS: Record<WorkRole, string> = {
+  production_operator:   'Production operator',
+  production_supervisor: 'Production supervisor',
+  storekeeper:           'Storekeeper',
+  qc_analyst:            'QC Analyst',
+  qa_officer:            'QA Officer',
+  qa_manager:            'QA Manager',
+  regulatory_affairs:    'Regulatory affairs',
+  procurement:           'Procurement',
+  compliance_admin:      'Compliance admin',
+  other:                 'Other',
+};
+
+/**
+ * The "Segregation of duties · enforced for everyone, including admins"
+ * card, one line per role.
+ *
+ * DERIVED, not written out. The design shows four sentences —
+ * "Storekeeper can't record QC results or make dispositions" and so on
+ * — and typing those in would make a fifth copy of the rule, one that
+ * nothing checks and that would still read "four" after a fifth rule
+ * was added. Grouping the same table the check reads means the card
+ * cannot describe a rule that is not enforced, or omit one that is.
+ */
+export function segregationSummary(): { role: WorkRole; line: string }[] {
+  const byRole = new Map<WorkRole, AccessSection[]>();
+  for (const c of ACT_CONFLICTS) {
+    byRole.set(c.role, [...(byRole.get(c.role) ?? []), c.section]);
+  }
+  //  The allowlist's effect on the roles the card already names. It is
+  //  not expanded into a line for every other role — "Regulatory
+  //  affairs can't act in QA disposition" is true and is noise, and
+  //  the matrix's lock already says it where it matters.
+  for (const [section, owned] of Object.entries(ACT_RESTRICTED_TO)) {
+    for (const role of byRole.keys()) {
+      const list = byRole.get(role)!;
+      if (!owned!.roles.includes(role) && !list.includes(section as AccessSection)) {
+        byRole.set(role, [...list, section as AccessSection]);
+      }
+    }
+  }
+
+  return [...byRole.entries()].map(([role, sections]) => {
+    const names = sections.map((s) => SECTION_LABELS[s]);
+    const list = names.length === 1 ? names[0]
+      : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+    return { role, line: `${ROLE_LABELS[role]} can't act in ${list}.` };
+  });
 }
 
 // ── What the two levels mean, per section ────────────────────────────

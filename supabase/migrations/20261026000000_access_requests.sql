@@ -180,8 +180,61 @@ INSERT INTO public.access_duty_conflicts (work_role, section_key, reason, instea
    'QC testing belongs to a QC analyst.'),
   ('qc_analyst', 'batch_records',
    'A QC analyst records results against a batch. Editing the batch record itself would let the result and the record be changed together.',
-   'Batch records belong to production.')
+   'Batch records belong to production.'),
+  --  "Enforced for everyone, INCLUDING ADMINS." The admin who decides
+  --  who holds access must not also hold the decision they would be
+  --  granting, or the access log shows self-dealing as routine
+  --  administration.
+  ('compliance_admin', 'qa_disposition',
+   'A Compliance admin decides who holds access. Acting in QA disposition as well would let one person grant themselves the decision they then make.',
+   'QA disposition belongs to a QA officer or QA manager.')
 ON CONFLICT (work_role, section_key) WHERE company_id IS NULL DO UPDATE
+  SET reason = EXCLUDED.reason, instead_ask = EXCLUDED.instead_ask;
+
+-- ── 2b. Sections only named roles may act in ─────────────────────────
+--  WHY AN ALLOWLIST SITS BESIDE THE DENYLIST. PM-03's matrix shows QA
+--  disposition locked for Procurement, Storekeeper, QC Analyst,
+--  Production supervisor and the Compliance admin -- everyone drawn
+--  except QA. Five more rows in access_duty_conflicts would look the
+--  same on that screen and be wrong in the one case the screen does
+--  not draw: a role nobody thought of. Roles get added, 'other'
+--  exists, and a denylist says yes to every one of them.
+--
+--  So the sections where ACTING IS THE CONTROL get named owners, and
+--  anything not named is refused. A denylist is only safe if it is
+--  complete, and nothing keeps it complete.
+CREATE TABLE IF NOT EXISTS public.access_act_owners (
+  section_key text NOT NULL REFERENCES public.access_sections(key) ON DELETE CASCADE,
+  work_role   text NOT NULL,
+  --  Why this section has named owners at all. Shown to anybody
+  --  refused, so the refusal is a sentence and not a rule number.
+  reason      text NOT NULL CHECK (length(btrim(reason)) > 0),
+  instead_ask text NOT NULL CHECK (length(btrim(instead_ask)) > 0),
+  PRIMARY KEY (section_key, work_role)
+);
+
+ALTER TABLE public.access_act_owners ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'access_act_owners'
+      AND policyname = 'access_act_owners_readable'
+  ) THEN
+    CREATE POLICY access_act_owners_readable ON public.access_act_owners
+      FOR SELECT TO authenticated USING (true);
+  END IF;
+END $$;
+
+INSERT INTO public.access_act_owners (section_key, work_role, reason, instead_ask) VALUES
+  ('qa_disposition', 'qa_officer',
+   'Deciding the disposition of material is the independent quality check on everyone else''s work.',
+   'QA disposition belongs to a QA officer or QA manager.'),
+  ('qa_disposition', 'qa_manager',
+   'Deciding the disposition of material is the independent quality check on everyone else''s work.',
+   'QA disposition belongs to a QA officer or QA manager.')
+ON CONFLICT (section_key, work_role) DO UPDATE
   SET reason = EXCLUDED.reason, instead_ask = EXCLUDED.instead_ask;
 
 -- ── 3. How long a temporary grant may run ────────────────────────────
@@ -384,16 +437,36 @@ CREATE OR REPLACE FUNCTION public.access_conflict(
 ) RETURNS TABLE (reason text, instead_ask text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp
 AS $$
-  --  Viewing is never a conflict. Stated once, here, and the table
-  --  below cannot express anything else.
-  SELECT c.reason, c.instead_ask
-  FROM public.access_duty_conflicts c
-  WHERE p_level = 'act'
-    AND c.work_role = p_work_role
-    AND c.section_key = p_section_key
-    AND (c.company_id IS NULL OR c.company_id = p_company_id)
+  --  Viewing is never a conflict. Stated once, here, and neither
+  --  table below can express anything else.
+  --
+  --  The explicit pair is preferred over the allowlist's generic
+  --  sentence when both apply, because a pair's wording is written for
+  --  that role -- "approving their own result" says more to a QC
+  --  analyst than "this is the independent check" does.
+  SELECT x.reason, x.instead_ask FROM (
+    SELECT c.reason, c.instead_ask, 0 AS rank, c.company_id
+    FROM public.access_duty_conflicts c
+    WHERE p_level = 'act'
+      AND c.work_role = p_work_role
+      AND c.section_key = p_section_key
+      AND (c.company_id IS NULL OR c.company_id = p_company_id)
+
+    UNION ALL
+
+    --  The allowlist: a section with named owners refuses every role
+    --  that is not one of them, including roles with no pair.
+    SELECT DISTINCT o.reason, o.instead_ask, 1 AS rank, NULL::uuid AS company_id
+    FROM public.access_act_owners o
+    WHERE p_level = 'act'
+      AND o.section_key = p_section_key
+      AND NOT EXISTS (
+        SELECT 1 FROM public.access_act_owners o2
+        WHERE o2.section_key = p_section_key AND o2.work_role = p_work_role
+      )
+  ) x
   --  A company's own rule wins over the shipped one for the same pair.
-  ORDER BY c.company_id NULLS LAST
+  ORDER BY x.rank, x.company_id NULLS LAST
   LIMIT 1;
 $$;
 
@@ -698,9 +771,16 @@ BEGIN
   END IF;
 
   SELECT count(*) INTO v_n FROM public.access_duty_conflicts WHERE company_id IS NULL;
-  IF v_n < 8 THEN
-    RAISE EXCEPTION 'W2_0_VIOLATION: expected at least 8 shipped segregation-of-duties '
+  IF v_n < 9 THEN
+    RAISE EXCEPTION 'W2_0_VIOLATION: expected at least 9 shipped segregation-of-duties '
       'rules, found %. The automatic conflict check has nothing to check against.', v_n;
+  END IF;
+
+  SELECT count(*) INTO v_n FROM public.access_act_owners
+  WHERE section_key = 'qa_disposition';
+  IF v_n < 2 THEN
+    RAISE EXCEPTION 'W2_0_VIOLATION: QA disposition has % named Act owner(s). With none, '
+      'the allowlist is empty and every role may act in it.', v_n;
   END IF;
 
   --  No write policy on the requests table: every write must go

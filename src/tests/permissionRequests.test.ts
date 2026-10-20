@@ -123,12 +123,57 @@ describe('the automatic conflict check', () => {
     expect(checkConflict('storekeeper', 'qc_testing', 'act').conflicts).toBe(true);
   });
 
-  //  The compliance admin administers access; it is not a role that
-  //  bypasses the duties rule, but neither is it one the rule blocks.
   it('does not forbid roles that have no conflicting duty', () => {
     expect(forbiddenActSections('qa_manager')).toEqual([]);
-    expect(forbiddenActSections('compliance_admin')).toEqual([]);
-    expect(forbiddenActSections('other')).toEqual([]);
+  });
+
+  //  THE ALLOWLIST. A denylist is only safe if it is complete, and
+  //  nothing keeps it complete — `other` exists and new roles get
+  //  added. QA disposition names its owners, so every role that is not
+  //  one of them is refused whether or not anybody wrote a pair for it.
+  it('refuses Act on an owned section to a role with no explicit pair', () => {
+    for (const role of ['regulatory_affairs', 'procurement', 'other'] as WorkRole[]) {
+      const c = checkConflict(role, 'qa_disposition', 'act');
+      expect(c.conflicts, role).toBe(true);
+      expect(c.reason, role).toBeTruthy();
+      expect(c.insteadAsk, role).toBeTruthy();
+      expect(forbiddenActSections(role), role).toContain('qa_disposition');
+    }
+  });
+
+  it('lets the named owners act', () => {
+    expect(checkConflict('qa_officer', 'qa_disposition', 'act').conflicts).toBe(false);
+    expect(checkConflict('qa_manager', 'qa_disposition', 'act').conflicts).toBe(false);
+  });
+
+  //  An explicit pair's wording is written for that role; the
+  //  allowlist's is generic. The specific one has to win or the QC
+  //  analyst is told the rule instead of why it applies to them.
+  it('keeps an explicit pair\'s own reason over the generic one', () => {
+    expect(checkConflict('qc_analyst', 'qa_disposition', 'act').reason)
+      .toMatch(/approving their own result/i);
+  });
+
+  //  The allowlist must not close a section that has no named owners.
+  it('leaves sections without named owners open', () => {
+    for (const role of ALL_ROLES) {
+      expect(checkConflict(role, 'sop_library', 'act').conflicts, role).toBe(false);
+    }
+  });
+
+  //  "Segregation of duties — enforced for everyone, INCLUDING
+  //  ADMINS." A permissions system's most natural bug is to exempt the
+  //  person who administers it: the Compliance admin grants access, so
+  //  an admin who could also act in QA disposition could grant
+  //  themselves the decision and have it logged as administration.
+  it('binds the Compliance admin to the duties rule as well', () => {
+    expect(forbiddenActSections('compliance_admin')).toContain('qa_disposition');
+    const c = checkConflict('compliance_admin', 'qa_disposition', 'act');
+    expect(c.conflicts).toBe(true);
+    expect(c.reason).toMatch(/grant themselves/i);
+    //  Still not a conflict for viewing. An admin who cannot see a
+    //  disposition cannot review access to it.
+    expect(checkConflict('compliance_admin', 'qa_disposition', 'view').conflicts).toBe(false);
   });
 
   //  forbiddenActSections drives which Act radios the dialog disables.
