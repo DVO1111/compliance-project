@@ -30,6 +30,15 @@ import SupervisorDecision from '../../src/components/Inprocess/SupervisorDecisio
 import YieldAccountCard from '../../src/components/Yield/YieldAccountCard';
 import type { ZoneBand, ZoneOrNone } from '../../src/lib/inprocess/zones';
 import type { AccountLine } from '../../src/lib/yield/yieldAccount';
+import RaiseDeviationSheet from '../../src/components/Deviations/RaiseDeviationSheet';
+import RootCausePanel from '../../src/components/Deviations/RootCausePanel';
+import InvestigationPanel from '../../src/components/Deviations/InvestigationPanel';
+import DeviationRegister from '../../src/components/Deviations/DeviationRegister';
+import DeviationOnRecord from '../../src/components/Deviations/DeviationOnRecord';
+import { emptyDraft, type ImpactOption } from '../../src/lib/deviations/raise';
+import type {
+  RootCauseAnalysis, ReadinessCondition, RegisterRow, Investigation,
+} from '../../src/lib/deviations/investigation';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -1042,7 +1051,314 @@ const yieldPhone = (
   </div>
 );
 
-const page = screen === 'inprocess-phone' ? inprocessPhone
+//  W5·11. The story continues W4·19: weight check #14 on
+//  PCM-2610-014, which is where the supervisor raises from.
+const IMPACT_OPTIONS: ImpactOption[] = [
+  { impact: 'yes', label: 'Yes — product quality is affected', effect: 'blocks',
+    consequence: 'This will block release of batch PCM-2610-014 until the deviation is '
+      + 'closed.', sortOrder: 1 },
+  { impact: 'no', label: 'No — product quality is not affected', effect: 'warns',
+    consequence: 'Release of batch PCM-2610-014 will carry a warning, not a block.',
+    sortOrder: 2 },
+  { impact: 'undetermined', label: 'Undetermined — not yet assessed', effect: 'blocks',
+    consequence: 'This will block release of batch PCM-2610-014 until somebody assesses '
+      + 'the impact. Undetermined is a real answer; blank is not.', sortOrder: 3 },
+];
+
+const DEV_CONTEXT = [
+  { key: 'batch', label: 'Batch', value: 'PCM-2610-014' },
+  { key: 'product', label: 'Product', value: 'Paracetamol 500 mg Tablets' },
+  { key: 'stage', label: 'Stage', value: '6 · Compression' },
+  { key: 'reading', label: 'Reading', value: '641 mg · zone 3U · check #14' },
+  { key: 'line', label: 'Line', value: 'TL-1 · press RP-01' },
+];
+
+const READINESS: ReadinessCondition[] = [
+  { key: 'impact_assessed', met: true, blocking: true,
+    title: 'Product quality impact is assessed',
+    detail: 'Recorded as "yes".', sortOrder: 10 },
+  { key: 'root_cause_determined', met: false, blocking: true,
+    title: 'A root cause has been determined',
+    detail: 'A five whys analysis is in progress but has no conclusion yet.',
+    sortOrder: 20 },
+  { key: 'capa_decided', met: false, blocking: false,
+    title: 'A CAPA has been raised, or recorded as not needed',
+    detail: 'No CAPA is linked and none has been recorded as unnecessary. Whether this '
+      + 'is required before closure is still being decided.', sortOrder: 30 },
+  { key: 'awaiting_qa', met: false, blocking: true,
+    title: 'The deviation has been sent for QA closure',
+    detail: 'Currently under_investigation.', sortOrder: 40 },
+];
+
+const INVESTIGATION: Investigation = {
+  deviationId: 'd1', deviationNumber: 'DEV-00014',
+  title: 'Tablet mass above the action limit on check #14',
+  severity: 'major', impact: 'yes',
+  stateKey: 'under_investigation', stateLabel: 'Under Investigation',
+  ownerName: 'Ada Okafor', dueDate: '2026-10-09',
+  daysOverdue: 11, isOverdue: true,
+  immediateAction: 'Press stopped and the last good check isolated — 4,200 tablets '
+    + 'quarantined pending this investigation.',
+  containment: 'Compression held. The granule already dispensed stays on the line.',
+};
+
+const REGISTER_ROWS: RegisterRow[] = [
+  { id: 'r1', deviationNumber: 'DEV-00014',
+    title: 'Tablet mass above the action limit on check #14',
+    severity: 'major', impact: 'yes', sourceType: 'batch',
+    sourceLabel: 'PCM-2610-014', stateKey: 'under_investigation',
+    stateLabel: 'Under Investigation', dueDate: '2026-10-09', daysOverdue: 11,
+    isOverdue: true, raisedAt: '2026-09-28T10:40:00Z', linkedCapaCount: 0 },
+  { id: 'r2', deviationNumber: 'DEV-00011',
+    title: 'Swab result above limit after changeover',
+    severity: 'minor', impact: 'no', sourceType: 'batch',
+    sourceLabel: 'PCM-2610-009', stateKey: 'under_investigation',
+    stateLabel: 'Under Investigation', dueDate: '2026-09-30', daysOverdue: 20,
+    isOverdue: true, raisedAt: '2026-09-20T07:10:00Z', linkedCapaCount: 1 },
+  { id: 'r3', deviationNumber: 'DEV-00018',
+    title: 'Balance BAL-02 found out of calibration mid-shift',
+    severity: 'critical', impact: 'undetermined', sourceType: 'equipment',
+    sourceLabel: 'BAL-02', stateKey: 'raised', stateLabel: 'Raised',
+    dueDate: '2026-10-27', daysOverdue: -7, isOverdue: false,
+    raisedAt: '2026-10-20T06:05:00Z', linkedCapaCount: 0 },
+  { id: 'r4', deviationNumber: 'DEV-00017',
+    title: 'Supplier certificate figure disagrees with incoming test',
+    severity: 'major', impact: 'no', sourceType: 'material_lot',
+    sourceLabel: 'ML-2610-028', stateKey: 'pending_qa_closure',
+    stateLabel: 'Pending QA Closure', dueDate: null, daysOverdue: null,
+    isOverdue: false, raisedAt: '2026-10-18T13:22:00Z', linkedCapaCount: 2 },
+];
+
+const RCA_FIVE: RootCauseAnalysis = {
+  id: 'a1', framework: 'five_whys',
+  whys: [
+    { seq: 1, question: 'Why did this happen?',
+      answer: 'Tablet mass drifted above the upper action limit.' },
+    { seq: 2, question: 'Why did that happen? — "Tablet mass drifted above the upper action limit"',
+      answer: 'The fill depth increased during the run.' },
+    { seq: 3, question: 'Why did that happen? — "The fill depth increased during the run"',
+      answer: null },
+  ],
+  answers: {},
+  determinedRootCause: null, rootCauseCategory: null, completedAt: null,
+};
+
+const RCA_5W1H: RootCauseAnalysis = {
+  id: 'a2', framework: '5w1h', whys: [],
+  answers: {
+    what: 'Tablet mass ran above the upper action limit on check #14.',
+    why: 'Out-of-specification tablets reached the collection bin.',
+    where: 'Line TL-1, compression, press RP-01.',
+    when: '10:34, about 40 minutes after the hopper was topped up.',
+    who: null, how: null,
+  },
+  determinedRootCause: 'Fill cam worn beyond its service limit',
+  rootCauseCategory: 'machine', completedAt: null,
+};
+
+const CATEGORIES = [
+  { key: 'people', label: 'People' }, { key: 'machine', label: 'Machine' },
+  { key: 'method', label: 'Method' }, { key: 'material', label: 'Material' },
+  { key: 'measurement', label: 'Measurement' }, { key: 'environment', label: 'Environment' },
+];
+
+const deviations = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={label}>
+        DV-01 · the tablet sheet with nothing chosen. Raise says what is missing rather
+        than going dim.
+      </p>
+      <RaiseDeviationSheet
+        presentation="sheet"
+        draft={emptyDraft('batch', 'b1')}
+        onChange={() => {}}
+        context={DEV_CONTEXT}
+        sourceLabel="PCM-2610-014"
+        impactOptions={IMPACT_OPTIONS}
+        onRaise={() => {}} onCancel={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>
+        … and after pressing Raise with nothing chosen: the messages appear beside the
+        fields, not on arrival
+      </p>
+      <RaiseDeviationSheet
+        presentation="sheet"
+        draft={emptyDraft('batch', 'b1')}
+        onChange={() => {}}
+        attempted
+        context={DEV_CONTEXT}
+        sourceLabel="PCM-2610-014"
+        impactOptions={IMPACT_OPTIONS}
+        onRaise={() => {}} onCancel={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>
+        DV-03 · Major and impact Yes chosen. The consequence is stated on its own,
+        naming the batch, before Raise is pressed.
+      </p>
+      <RaiseDeviationSheet
+        presentation="sheet"
+        draft={{ ...emptyDraft('batch', 'b1'),
+          title: 'Tablet mass above the action limit on check #14',
+          description: 'Three consecutive tablets above UAL 635 mg on check #14.',
+          severity: 'major', impact: 'yes' }}
+        onChange={() => {}}
+        context={DEV_CONTEXT}
+        sourceLabel="PCM-2610-014"
+        impactOptions={IMPACT_OPTIONS}
+        onRaise={() => {}} onCancel={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>DV-11 · the deviation on the batch — release blocked</p>
+      <DeviationOnRecord
+        recordKind="batch" recordLabel="PCM-2610-014"
+        deviations={[
+          { id: 'd1', deviationNumber: 'DEV-00014',
+            title: 'Tablet mass above the action limit on check #14',
+            severity: 'major', impact: 'yes', stateKey: 'under_investigation',
+            stateLabel: 'Under Investigation', effect: 'blocks',
+            attachedAs: 'raised_against' },
+          { id: 'd2', deviationNumber: 'DEV-00017',
+            title: 'Supplier certificate figure disagrees with incoming test',
+            severity: 'major', impact: 'no', stateKey: 'pending_qa_closure',
+            stateLabel: 'Pending QA Closure', effect: 'warns',
+            attachedAs: 'linked', viaLabel: 'lot ML-2610-028' },
+          { id: 'd3', deviationNumber: 'DEV-00002',
+            title: 'Line clearance record signed late',
+            severity: 'minor', impact: 'no', stateKey: 'closed',
+            stateLabel: 'Closed', effect: 'none', attachedAs: 'raised_against' },
+        ]}
+        onOpen={() => {}} onRaise={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>DV-12 · and on the lot — a warning, not a block</p>
+      <DeviationOnRecord
+        recordKind="lot" recordLabel="ML-2610-028"
+        deviations={[
+          { id: 'd2', deviationNumber: 'DEV-00017',
+            title: 'Supplier certificate figure disagrees with incoming test',
+            severity: 'major', impact: 'no', stateKey: 'pending_qa_closure',
+            stateLabel: 'Pending QA Closure', effect: 'warns',
+            attachedAs: 'raised_against' },
+        ]}
+        onOpen={() => {}} onRaise={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>DV-09 · the register — overdue first, then gravest, then oldest</p>
+      <DeviationRegister
+        rows={REGISTER_ROWS} includingClosed={false}
+        onOpen={() => {}} onToggleClosed={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>DV-10 · and empty, saying which kind of empty it is</p>
+      <DeviationRegister
+        rows={[]} includingClosed={false}
+        onOpen={() => {}} onToggleClosed={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>
+        DV-04 / DV-07 · the investigation, overdue, with the readiness checklist. The
+        CAPA condition is amber: shown and counted, enforcing nothing, because decision
+        4 is still open.
+      </p>
+      <InvestigationPanel
+        investigation={INVESTIGATION}
+        conditions={READINESS}
+        linked={[
+          { key: 'b', kind: 'batch', label: 'PCM-2610-014',
+            detail: 'Paracetamol 500 mg Tablets · release blocked' },
+        ]}
+        isQa
+        onSign={() => {}} onRaiseCapa={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>DV-08 · closed and locked, signed as Approved</p>
+      <InvestigationPanel
+        investigation={{ ...INVESTIGATION, stateKey: 'closed', stateLabel: 'Closed',
+          isOverdue: false, daysOverdue: null }}
+        conditions={READINESS.map((c) => ({ ...c, met: true }))}
+        linked={[
+          { key: 'c', kind: 'capa', label: 'CAPA-00031',
+            detail: 'Replace fill cam and add it to the PM schedule · systemic' },
+          { key: 'cc', kind: 'change_control', label: 'CC-00008',
+            detail: 'PM interval for compression tooling' },
+        ]}
+        isQa
+        signature={{ signedByName: 'Ada Okafor', signedAt: '20 Oct 2026 · 16:12',
+                     meaning: 'Approved' }}
+        onSign={() => {}} onRaiseCapa={() => {}} />
+    </div>
+
+    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 420px', minWidth: 300 }}>
+        <p style={label}>DV-05 · root cause, five whys</p>
+        <RootCausePanel
+          analysis={RCA_FIVE} categories={CATEGORIES}
+          onAnswerWhy={() => {}} onAddWhy={() => {}} onAnswer={() => {}}
+          onChangeRootCause={() => {}} onChangeCategory={() => {}} onComplete={() => {}} />
+      </div>
+      <div style={{ flex: '1 1 420px', minWidth: 300 }}>
+        <p style={label}>
+          DV-05b · the same deviation's analysis under 5W1H. One framework per analysis —
+          the other one's fields are not in the document at all.
+        </p>
+        <RootCausePanel
+          analysis={RCA_5W1H} categories={CATEGORIES}
+          onAnswerWhy={() => {}} onAddWhy={() => {}} onAnswer={() => {}}
+          onChangeRootCause={() => {}} onChangeCategory={() => {}} onComplete={() => {}} />
+      </div>
+    </div>
+
+    <div>
+      <p style={label}>
+        … and an analysis that somehow holds both: not drawn, rather than drawn
+        misleadingly
+      </p>
+      <RootCausePanel
+        analysis={{ ...RCA_FIVE, answers: { what: 'Tablets ran heavy' } }}
+        categories={CATEGORIES}
+        onAnswerWhy={() => {}} onAddWhy={() => {}} onAnswer={() => {}}
+        onChangeRootCause={() => {}} onChangeCategory={() => {}} onComplete={() => {}} />
+    </div>
+  </div>
+);
+
+const deviationsPhone = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 0, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <RaiseDeviationSheet
+      presentation="fullscreen"
+      draft={{ ...emptyDraft('batch', 'b1'),
+        title: 'Tablet mass above the action limit on check #14',
+        severity: 'major', impact: 'yes' }}
+      onChange={() => {}}
+      context={DEV_CONTEXT}
+      sourceLabel="PCM-2610-014"
+      impactOptions={IMPACT_OPTIONS}
+      onRaise={() => {}} onCancel={() => {}} />
+    <div style={{ padding: 16 }}>
+      <p style={label}>DV-M09 · the register on a phone</p>
+      <DeviationRegister
+        rows={REGISTER_ROWS} includingClosed={false} layout="phone"
+        onOpen={() => {}} onToggleClosed={() => {}} />
+    </div>
+  </div>
+);
+
+const page = screen === 'deviations' ? deviations
+  : screen === 'deviations-phone' ? deviationsPhone
+  : screen === 'inprocess-phone' ? inprocessPhone
   : screen === 'yield-phone' ? yieldPhone
   : screen === 'inprocess' ? inprocess
   : screen === 'yield' ? yieldScreen
@@ -1058,5 +1374,5 @@ const page = screen === 'inprocess-phone' ? inprocessPhone
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor','inprocess','yield','inprocess-phone','yield-phone'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor','inprocess','yield','inprocess-phone','yield-phone','deviations','deviations-phone'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );
