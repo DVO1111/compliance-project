@@ -16,6 +16,8 @@ import ReleaseReadinessCard from '../../src/components/Materials/ReleaseReadines
 import QuarantineBanner from '../../src/components/Materials/QuarantineBanner';
 import StateBadge from '../../src/components/Common/StateBadge';
 import { summarise } from '../../src/lib/materials/releaseReadiness';
+import StageParameterRow from '../../src/components/Formula/StageParameterRow';
+import VersionComparison from '../../src/components/Formula/VersionComparison';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -443,7 +445,82 @@ const materials = (
   </div>
 );
 
-const page = screen === 'materials' ? materials
+//  W4·16. The parameter rows of one stage — both types, critical and
+//  not, locked and not — and the v3 → v4 comparison.
+const formula = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={label}>Stage 7 · Compression — parameters, both types</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <StageParameterRow showRecording parameter={{
+          parameter: 'Pre-compression force', parameterType: 'machine_setting',
+          unit: 'kN', targetValue: 3.0, minValue: 2.0, maxValue: 4.0,
+          isCritical: true, samplingIntervalMinutes: null }} />
+        <StageParameterRow showRecording parameter={{
+          parameter: 'Main compression force', parameterType: 'machine_setting',
+          unit: 'kN', targetValue: 12.0, minValue: 10.0, maxValue: 14.0,
+          samplingIntervalMinutes: null }} />
+        <StageParameterRow showRecording parameter={{
+          parameter: 'Turret speed', parameterType: 'machine_setting',
+          unit: 'rpm', targetValue: 30, minValue: 25, maxValue: 35,
+          samplingIntervalMinutes: null }} />
+        <StageParameterRow showRecording parameter={{
+          parameter: 'Tablet mass', parameterType: 'product_attribute',
+          unit: 'mg', targetValue: 550, minValue: 530, maxValue: 570,
+          samplingIntervalMinutes: 30 }} />
+        <StageParameterRow showRecording parameter={{
+          parameter: 'Hardness', parameterType: 'product_attribute',
+          unit: 'N', targetValue: 80, minValue: 60, maxValue: 100,
+          samplingIntervalMinutes: 60 }} />
+        <StageParameterRow showRecording locked parameter={{
+          parameter: 'Appearance', parameterType: 'product_attribute',
+          targetText: 'White, biconvex, scored', minValue: null, maxValue: null,
+          samplingIntervalMinutes: 60 }} />
+      </div>
+    </div>
+
+    <VersionComparison
+      fromVersion="3" toVersion="4"
+      differences={[
+        { stageCode: 'DRY', stageName: 'Dry blending', sequenceNo: 2, scope: 'stage',
+          change: 'changed', item: 'Dry blending', field: 'name',
+          oldValue: 'Dry mixing', newValue: 'Dry blending', sortOrder: 10 },
+        { stageCode: 'GRAN', stageName: 'Wet granulation', sequenceNo: 3, scope: 'stage',
+          change: 'changed', item: 'Wet granulation', field: 'equipment',
+          oldValue: 'Granulator 1', newValue: 'Granulator 2', sortOrder: 10 },
+        { stageCode: 'COMP', stageName: 'Compression', sequenceNo: 7, scope: 'parameter',
+          change: 'changed', item: 'Pre-compression force', field: 'limits',
+          oldValue: '3.0 kN · 2.0 – 4.0 · critical',
+          newValue: '3.0 kN · 2.5 – 3.5 · critical', sortOrder: 20 },
+        { stageCode: 'COMP', stageName: 'Compression', sequenceNo: 7, scope: 'parameter',
+          change: 'changed', item: 'Tablet mass', field: 'sampling_interval_minutes',
+          oldValue: '550 mg · 530 – 570 · every 30 min',
+          newValue: '550 mg · 530 – 570 · every 15 min', sortOrder: 20 },
+        { stageCode: 'COMP', stageName: 'Compression', sequenceNo: 7, scope: 'parameter',
+          change: 'added', item: 'Hardness', field: null,
+          oldValue: null, newValue: '80 N · 60 – 100 · every 60 min', sortOrder: 20 },
+        { stageCode: 'SCRN', stageName: 'Screening', sequenceNo: 5, scope: 'stage',
+          change: 'removed', item: 'Screening', field: null,
+          oldValue: 'stage 5', newValue: null, sortOrder: 10 },
+        { stageCode: null, stageName: null, sequenceNo: null, scope: 'material',
+          change: 'changed', item: 'Maize starch BP', field: 'quantity_per_batch',
+          oldValue: '18.00 kg · ± 1.0 %', newValue: '20.00 kg · ± 1.0 %', sortOrder: 30 },
+        { stageCode: null, stageName: null, sequenceNo: null, scope: 'formula',
+          change: 'changed', item: 'Yield range', field: 'yield_range',
+          oldValue: '95 – 101', newValue: '96 – 101', sortOrder: 2 },
+      ]}
+    />
+
+    <div>
+      <p style={label}>Two versions with nothing between them</p>
+      <VersionComparison fromVersion="4" toVersion="4" differences={[]} />
+    </div>
+  </div>
+);
+
+const page = screen === 'formula' ? formula
+  : screen === 'materials' ? materials
   : screen === 'roles' ? roles
   : screen === 'access' ? access
   : screen === 'tracks' ? tracks : screen === 'banners' ? banners
@@ -452,5 +529,5 @@ const page = screen === 'materials' ? materials
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles','materials'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );
