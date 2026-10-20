@@ -949,7 +949,102 @@ const yieldScreen = (
   </div>
 );
 
-const page = screen === 'inprocess' ? inprocess
+//  W4·19 phones. IP-M01, IP-M02 and YR-M01 are different
+//  compositions, not the tablet narrower — no on-screen keypad, short
+//  labels, sticky action bars — so they get their own screens to be
+//  looked at in a 390 px window.
+const inprocessPhone = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 16, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div>
+      <p style={label}>IP-M01 · sample due (phone) — dial 56, button under the text</p>
+      <SampleDuePrompt
+        layout="phone"
+        headline="Weight check #14"
+        prompt={{ minutesOverdue: 2, intervalMinutes: 30, dueAt: '10:30',
+                  parameter: 'Tablet mass', checkNumber: 14,
+                  alsoChecking: ['Hardness', 'Thickness'] }}
+        onTakeSample={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>
+        IP-M02 · reading entry (phone) — a real field, so the phone's number pad opens.
+        No on-screen keypad is rendered at all.
+      </p>
+      <ReadingEntry
+        layout="phone"
+        parameter="Weight check #14 · tablet 13 of 20"
+        unit="mg"
+        subtitle="Target 605 mg · LWL 590 · UWL 620 · LAL 575 · UAL 635"
+        requiredCount={20}
+        recorded={RECORDED}
+        text="627" value={627} zone="2U" zoneAction="adjust"
+        actionDetail="Zone 2U · adjust: reduce fill depth"
+        bands={BANDS}
+        conditions={[{ key: 'weight_zone_2u', severity: 'flagged',
+          title: 'Zone 2U — above the warning limit',
+          detail: '627 mg. This product\u2019s configured response is to adjust.',
+          continueWith: 'Saving the reading and adjusting the machine before the next '
+            + 'sample.',
+          sortOrder: 22 }]}
+        needsAcknowledgement={false} acknowledged={false} onAcknowledge={() => {}}
+        onKey={() => {}} onText={() => {}} onSave={() => {}}
+        onSaveAndEscalate={() => {}} onCorrect={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>IP-M04 · the supervisor's decision on a phone</p>
+      <SupervisorDecision
+        reading={{ parameter: 'Tablet mass', value: 641, unit: 'mg', sequenceNo: 13,
+                   zone: '3U', inSpecification: false,
+                   recordedBy: 'Musa Bello', recordedAt: '10:34' }}
+        raisedBy="Musa Bello"
+        raisedNote="Third sample running high since the hopper was topped up."
+        canDecide
+        onDecide={() => {}}
+        onRaiseDeviation={() => {}} />
+    </div>
+  </div>
+);
+
+const yieldPhone = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 16, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div>
+      <p style={label}>
+        YR-M01 · the block comes first, labels are short, figures are bare with the
+        unit said once, and both routes sit in a sticky bar
+      </p>
+      <YieldAccountCard
+        layout="phone"
+        stageName="Packing" stageSequence={7}
+        lines={YIELD_LINES}
+        verdict={{ yieldPct: 96.48, variancePct: -3.52, thresholdPct: 2,
+                   withinThreshold: false, investigationRequired: false,
+                   authorised: false }}
+        window={{ lower: 98, upper: 101 }}
+        onFlagInvestigation={() => {}} onRecount={() => {}} onComplete={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>… and once authorised, the bar carries the one action left</p>
+      <YieldAccountCard
+        layout="phone"
+        stageName="Packing" stageSequence={7}
+        lines={YIELD_LINES}
+        verdict={{ yieldPct: 96.48, variancePct: -3.52, thresholdPct: 2,
+                   withinThreshold: false, investigationRequired: true,
+                   authorised: true }}
+        window={{ lower: 98, upper: 101 }}
+        onFlagInvestigation={() => {}} onRecount={() => {}} onComplete={() => {}} />
+    </div>
+  </div>
+);
+
+const page = screen === 'inprocess-phone' ? inprocessPhone
+  : screen === 'yield-phone' ? yieldPhone
+  : screen === 'inprocess' ? inprocess
   : screen === 'yield' ? yieldScreen
   : screen === 'floor' ? floor
   : screen === 'batch' ? batch
@@ -963,5 +1058,5 @@ const page = screen === 'inprocess' ? inprocess
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor','inprocess','yield'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor','inprocess','yield','inprocess-phone','yield-phone'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );

@@ -34,7 +34,8 @@ import { describe, it, expect } from 'vitest';
 import {
   summarise, formatQuantity, formatPct, formatSignedPct, formatUnaccounted,
   thresholdBand, thresholdNote, thresholdWindow, blockHeadline, blockDetail,
-  completeButtonLabel, routes,
+  completeButtonLabel, routes, lineLabel, formatBare, accountUnit,
+  blockDetailShort, phoneRouteNote,
   type AccountLine, type YieldVerdict,
 } from '../lib/yield/yieldAccount';
 
@@ -355,5 +356,110 @@ describe('the threshold strip', () => {
 
   it('places no marker when there is no yield', () => {
     expect(thresholdBand(null, 98, 102).markerPct).toBeNull();
+  });
+});
+
+/**
+ * YR-M01 — the phone.
+ *
+ * The phone card is not the workstation card narrower. It drops the
+ * threshold strip, shortens every label, prints the figures bare and
+ * moves both routes into a bar at the bottom. Each of those loses
+ * something, and these assert that what is lost turns up somewhere
+ * else on the same screen rather than going missing.
+ */
+describe('the phone layout', () => {
+  //  SHORT, NOT TRUNCATED. "Packed, releas…" reads as a rendering
+  //  fault; "Packed" reads as a word somebody chose.
+  it('gives every line a short label that is a whole word', () => {
+    for (const l of LINES) {
+      const short = lineLabel(l, 'phone');
+      expect(short.length).toBeLessThanOrEqual(l.label.length);
+      expect(short).not.toMatch(/[….]$/);
+      expect(short.length).toBeGreaterThan(0);
+    }
+    expect(lineLabel(LINES[1], 'phone')).toBe('Packed');
+    expect(lineLabel(LINES[1], 'workstation')).toBe('Packed, released to store');
+  });
+
+  //  The figures go bare so seven "tablets" do not run down a 390 px
+  //  column — so the unit has to be recoverable, once, from the lines.
+  it('prints figures bare and still knows the unit', () => {
+    expect(formatBare(300000, 'quantity')).toBe('300,000');
+    expect(formatBare(96.48, 'pct')).toBe('96.5 %');
+    expect(formatBare(null, 'quantity')).toBe('—');
+    expect(accountUnit(LINES)).toBe('tablets');
+  });
+
+  //  A reconciliation with no breakdown still has a unit, from the
+  //  lines that do have a figure.
+  it('finds the unit from whichever lines were recorded', () => {
+    const bare = LINES.map((l) =>
+      ['samples', 'rejects', 'accounted', 'unaccounted'].includes(l.key)
+        ? { ...l, quantity: null } : l);
+    expect(accountUnit(bare)).toBe('tablets');
+  });
+
+  //  Reported rather than guessed at. A reconciliation has one output
+  //  unit, so lines that disagree are a fault, and printing one of
+  //  them over a column of the other would be the worst outcome.
+  it('reports no unit at all when the lines disagree', () => {
+    const mixed = LINES.map((l) =>
+      l.key === 'samples' ? { ...l, unit: 'kg' } : l);
+    expect(accountUnit(mixed)).toBeNull();
+  });
+
+  //  ═══ THE ONE THAT MATTERS FOR THE PHONE ═══
+  //  The strip is dropped, so the figures it carried — the yield and
+  //  the threshold it is being judged against — must be in the one
+  //  line that replaces it. Without this, the phone shows a block
+  //  with no number behind it.
+  it('keeps the yield and the threshold in the short detail', () => {
+    const d = blockDetailShort(summarise(LINES, BLOCKED));
+    expect(d).toContain('96.5 %');
+    expect(d).toContain('98.0 %');
+    expect(d).toMatch(/below/);
+  });
+
+  it('says which side an overage is on, in the short form too', () => {
+    const over = summarise(LINES, { ...BLOCKED, yieldPct: 104, variancePct: 4 });
+    expect(blockDetailShort(over)).toMatch(/above the 102\.0 %/);
+  });
+
+  it('says the variance was authorised, in the short form', () => {
+    const ok = summarise(LINES, {
+      ...BLOCKED, investigationRequired: true, authorised: true,
+    });
+    expect(blockDetailShort(ok)).toMatch(/authorised/i);
+  });
+
+  //  The other half of the detail — what happens next — is the line
+  //  above the action bar, beside the buttons that do it.
+  it('puts the next step beside the buttons that take it', () => {
+    const note = phoneRouteNote(summarise(LINES, BLOCKED));
+    expect(note).toMatch(/recount/i);
+    expect(note).toMatch(/supervisor/i);
+    //  Nothing to say when nothing blocks.
+    expect(phoneRouteNote(summarise(LINES, { ...BLOCKED, withinThreshold: true })))
+      .toBe('');
+  });
+
+  //  "…and ask supervisor" wrapped a 56 px button onto two lines, so
+  //  it is dropped from the label — and the supervisor is named in
+  //  the note above instead, which the previous assertion checks.
+  it('shortens the investigate button and keeps the supervisor in the note', () => {
+    const s = summarise(LINES, BLOCKED);
+    const phone = routes(s, 'phone');
+    const desk = routes(s, 'workstation');
+    expect(phone[0].label).toBe('Flag for investigation');
+    expect(desk[0].label).toBe('Flag for investigation and ask supervisor');
+    //  Same routes, same order, either way.
+    expect(phone.map((r) => r.key)).toEqual(desk.map((r) => r.key));
+    expect(phoneRouteNote(s)).toMatch(/supervisor/i);
+  });
+
+  it('offers no routes on a phone when nothing blocks', () => {
+    expect(routes(summarise(LINES, { ...BLOCKED, withinThreshold: true }), 'phone'))
+      .toEqual([]);
   });
 });

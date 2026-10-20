@@ -59,6 +59,7 @@ import {
 } from '../../lib/inprocess/zones';
 import type { ZoneAction } from '../../lib/pharma/inprocessModel';
 import { TOUCH } from '../../lib/batch/stageStrip';
+import type { FloorLayout } from '../../lib/inprocess/floorLayout';
 
 export interface RecordedReading {
   readingId: string;
@@ -112,6 +113,24 @@ export interface ReadingEntryProps {
 
   /** Other tests in the same visit to the press. */
   alsoInCheck?: Array<{ key: string; parameter: string; detail: string }>;
+
+  /**
+   * IP-02 or IP-M02.
+   *
+   * ON A PHONE THERE IS NO ON-SCREEN KEYPAD, because the phone has
+   * one: "the phone's number pad opens for entry". The field is a
+   * real `<input inputMode="decimal">` and the OS keyboard does the
+   * work — which also gets the operator their own autocorrect-off,
+   * their own key sizes and their own haptics.
+   *
+   * On a workstation tablet bolted to a press there is no OS keyboard
+   * to open, so the 64 px keypad is the only way in. Neither one can
+   * be disabled: see the header.
+   */
+  layout?: FloorLayout;
+  /** Called as the operator types, on a phone. Ignored on a
+   *  workstation, where `onKey` carries every press. */
+  onText?: (text: string) => void;
   className?: string;
 }
 
@@ -120,6 +139,7 @@ export default function ReadingEntry(p: ReadingEntryProps) {
   //  The acknowledgement gates SAVING, which the database requires —
   //  not typing, which nothing does. The distinction is the section.
   const canSave = !p.needsAcknowledgement || p.acknowledged;
+  const phone = p.layout === 'phone';
 
   return (
     <div className={p.className} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -135,41 +155,84 @@ export default function ReadingEntry(p: ReadingEntryProps) {
           phone. Each carries its own zone chip: the point of twenty
           weights is the SPREAD, and twenty numbers without their zones
           is a column an operator has to classify in their head. */}
-      <section style={grid} aria-label={`${p.parameter} recorded so far`}>
+      <section style={{ ...grid, ...(phone ? gridPhone : null) }}
+               aria-label={`${p.parameter} recorded so far`}>
+        {/* eslint-disable-next-line no-nested-ternary */}
         {p.recorded.length === 0 ? (
           <p style={gridEmpty}>Nothing recorded yet for this check.</p>
         ) : p.recorded.map((r) => (
-          <div key={r.readingId} style={gridCell}>
-            <span style={gridIndex}>#{r.sequenceNo}</span>
-            <span style={gridValue}>{r.value} {p.unit}</span>
+          <div key={r.readingId} style={{ ...gridCell, ...(phone ? gridCellPhone : null) }}>
+            {/*  The index goes on a phone. IP-M02 shows the value and
+                its zone only: at 390 px "#13" costs a third of the
+                cell, the readings are already in order, and the
+                sequence number is on the live panel for the one
+                reading being taken. */}
+            {!phone && <span style={gridIndex}>#{r.sequenceNo}</span>}
+            <span style={gridValue}>
+              {r.value}{phone ? '' : ` ${p.unit}`}
+            </span>
             <ZoneChip zone={r.zone} />
           </div>
         ))}
       </section>
 
-      {/*  THE LIVE PANEL. The big number, and the zone beside it. */}
-      <section style={livePanel} aria-live="polite">
-        <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={typingLabel}>
-            TABLET #{p.recorded.length + 1} · {p.text.trim() === '' ? 'WAITING' : 'TYPING'}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={bigValue}>{p.text.trim() === '' ? '—' : p.text}</span>
+      {/*  THE LIVE PANEL. The big number, and the zone beside it.
+          On a phone the number and the chip share one row with the
+          action underneath, so the field an operator is typing into
+          and the verdict on it are never more than a glance apart. */}
+      <section style={{ ...livePanel, ...(phone ? livePanelPhone : null) }} aria-live="polite">
+        <div style={{ flex: phone ? undefined : 1, width: phone ? '100%' : undefined,
+                      minWidth: phone ? 0 : 180,
+                      display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {!phone && (
+            <span style={typingLabel}>
+              TABLET #{p.recorded.length + 1} · {p.text.trim() === '' ? 'WAITING' : 'TYPING'}
+            </span>
+          )}
+
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+            {phone ? (
+              //  A REAL INPUT, so the phone's own number pad opens.
+              //  `inputMode="decimal"` rather than `type="number"`:
+              //  the latter drops a value the browser thinks is
+              //  malformed, and losing a measurement somebody typed is
+              //  exactly what item 11 forbids. No `disabled`, ever.
+              <input
+                value={p.text}
+                onChange={(e) => p.onText?.(e.target.value)}
+                inputMode="decimal"
+                autoComplete="off"
+                aria-label={`${p.parameter}, tablet ${p.recorded.length + 1}`}
+                placeholder="—"
+                style={phoneField}
+              />
+            ) : (
+              <span style={bigValue}>{p.text.trim() === '' ? '—' : p.text}</span>
+            )}
             <span style={bigUnit}>{p.unit}</span>
+            {phone && <span style={{ flex: 1 }} />}
+            {phone && <ZoneChip zone={p.zone} size="focus" />}
           </span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-          <ZoneChip zone={p.zone} size="focus" />
-          {/*  The action, in the product's words. Shown beside the zone
-              rather than inside the chip: the chip is the
-              classification and this is the instruction, and an
-              operator reads them at different moments. */}
-          <span style={actionText}>
+        {phone ? (
+          <span style={{ ...actionText, textAlign: 'left', maxWidth: '100%' }}>
             {p.actionDetail
               ?? (p.zoneAction ? ACTION_LABEL[p.zoneAction] : '')}
           </span>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+            <ZoneChip zone={p.zone} size="focus" />
+            {/*  The action, in the product's words. Shown beside the zone
+                rather than inside the chip: the chip is the
+                classification and this is the instruction, and an
+                operator reads them at different moments. */}
+            <span style={actionText}>
+              {p.actionDetail
+                ?? (p.zoneAction ? ACTION_LABEL[p.zoneAction] : '')}
+            </span>
+          </div>
+        )}
       </section>
 
       <ZoneGauge bands={p.bands} value={p.value} unit={p.unit} />
@@ -209,10 +272,18 @@ export default function ReadingEntry(p: ReadingEntryProps) {
       )}
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        {/*  THE KEYPAD. No `disabled`. See the header. */}
-        <Keypad onKey={p.onKey} />
+        {/*  THE KEYPAD, on a workstation only. Not hidden on a phone —
+            NOT RENDERED. A hidden keypad is still in the accessibility
+            tree, and a screen reader announcing twelve keys that are
+            not there is worse than no keypad at all. The phone's entry
+            is the real input in the live panel above, which the OS
+            number pad opens.
 
-        <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            Neither one has a `disabled`. See the file header. */}
+        {!phone && <Keypad onKey={p.onKey} />}
+
+        <div style={{ flex: 1, minWidth: phone ? 0 : 220,
+                      display: 'flex', flexDirection: 'column', gap: 12 }}>
           <button
             type="button" style={{ ...primary, ...(canSave ? {} : pending) }}
             onClick={p.onSave}
@@ -221,11 +292,13 @@ export default function ReadingEntry(p: ReadingEntryProps) {
             //  itself says what is missing. The button is never
             //  removed and never greyed — see the file header.
           >
-            {canSave ? 'Save and next tablet' : 'Acknowledge the flag to save'}
+            {canSave
+              ? (phone ? 'Next tablet' : 'Save and next tablet')
+              : 'Acknowledge the flag to save'}
           </button>
 
           <button type="button" style={secondary} onClick={p.onSaveAndEscalate}>
-            Save and escalate to a supervisor
+            {phone ? 'Save and escalate' : 'Save and escalate to a supervisor'}
           </button>
 
           <button type="button" style={secondary} onClick={p.onCorrect}>
@@ -322,6 +395,30 @@ const gridEmpty: CSSProperties = {
   margin: 0, fontSize: 13, lineHeight: '20px', color: 'var(--nv-light-text-secondary)',
 };
 
+const gridPhone: CSSProperties = {
+  //  The grid's own padding and gap come off the width the cells
+  //  share, so they are part of the three-up arithmetic above: at
+  //  326 px wide this leaves 306, and 3 x 96 + 2 x 6 = 304.
+  padding: 10, gap: 6,
+};
+
+const gridCellPhone: CSSProperties = {
+  //  Three to a row at 390 px, as IP-M02 draws it, and 44 px rather
+  //  than 52 — the index is gone, so the cell holds one number and
+  //  one chip.
+  //
+  //  THE BASIS IS SET FROM THE WIDEST CELL'S CONTENT, not from the
+  //  design's pixel width. The widest cell holds a three-digit value
+  //  beside a zone 2 chip — 51 px rather than the circle's 28 — which
+  //  comes to about 96 px with its padding. A basis above that cannot
+  //  shrink to fit three in the ~306 px this grid actually gets inside
+  //  the app's own padding, and the row silently falls back to two:
+  //  twenty weights over ten rows instead of seven, pushing the entry
+  //  field off the screen. Measured, not guessed — see the comment on
+  //  gridPhone.
+  flex: '1 1 94px', minWidth: 94, height: 44, padding: '0 6px', gap: 4,
+};
+
 const gridCell: CSSProperties = {
   display: 'flex', gap: 8, alignItems: 'center',
   //  A fixed floor so the twenty cells line up in columns and the eye
@@ -349,6 +446,31 @@ const gridValue: CSSProperties = {
   //  width instead makes the row fit one fewer cell, which is the
   //  cheaper loss.
   whiteSpace: 'nowrap',
+};
+
+const livePanelPhone: CSSProperties = {
+  flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '14px 16px',
+};
+
+//  The phone's entry field.
+//
+//  It carries the same face and nearly the same size as the big
+//  number on the workstation, because it is the same thing — but it
+//  is VISIBLY A FIELD, with a sunken ground and a ruled underline.
+//  An invisible input would be the purer imitation and the worse
+//  control: on a phone the operator has to know where to tap to open
+//  the number pad, and a number that happens to be tappable does not
+//  say so. `appearance: none` so the look is this and not whichever
+//  default the platform would otherwise paint.
+const phoneField: CSSProperties = {
+  width: 'min(170px, 58%)', minWidth: 0, padding: '2px 10px',
+  appearance: 'none', WebkitAppearance: 'none',
+  border: 'none', borderBottom: '2px solid var(--nv-light-ink-bg)',
+  borderRadius: '6px 6px 0 0',
+  background: 'var(--nv-light-surface-sunken)', outline: 'none',
+  fontFamily: 'var(--nv-font-mono)', fontWeight: 500,
+  fontSize: 34, lineHeight: '44px', color: 'var(--nv-light-text-primary)',
+  fontVariantNumeric: 'tabular-nums',
 };
 
 const livePanel: CSSProperties = {

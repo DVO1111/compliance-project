@@ -40,11 +40,12 @@ import type { CSSProperties } from 'react';
 import { X, ShieldCheck, FileSignature } from 'lucide-react';
 import {
   summarise, formatQuantity, formatPct, formatSignedPct, formatUnaccounted,
-  thresholdBand, thresholdNote, blockHeadline, blockDetail,
-  completeButtonLabel, routes,
-  type AccountLine, type YieldVerdict,
+  thresholdBand, thresholdNote, blockHeadline, blockDetail, blockDetailShort,
+  completeButtonLabel, routes, lineLabel, formatBare, accountUnit, phoneRouteNote,
+  type AccountLine, type AccountSummary, type YieldVerdict,
 } from '../../lib/yield/yieldAccount';
 import { TOUCH } from '../../lib/batch/stageStrip';
+import type { FloorLayout } from '../../lib/inprocess/floorLayout';
 
 export interface YieldAccountCardProps {
   stageName: string;
@@ -59,6 +60,17 @@ export interface YieldAccountCardProps {
   onFlagInvestigation: () => void;
   onRecount: () => void;
   onComplete: () => void;
+  /**
+   * YR-01 or YR-M01.
+   *
+   * The phone is not the same card narrower. It puts the block ABOVE
+   * the account rather than beside it, shortens every label, prints
+   * the figures bare with the unit stated once, drops the threshold
+   * strip, and moves both routes into a bar at the bottom. Each of
+   * those is a decision about what to show, not how to space it —
+   * see lib/inprocess/floorLayout.ts.
+   */
+  layout?: FloorLayout;
   className?: string;
 }
 
@@ -66,15 +78,44 @@ export default function YieldAccountCard(p: YieldAccountCardProps) {
   const s = summarise(p.lines, p.verdict);
   const band = thresholdBand(s.verdict.yieldPct, p.window.lower, p.window.upper);
   const endWidth = (100 - band.withinWidthPct) / 2;
+  const phone = p.layout === 'phone';
+  const unit = accountUnit(s.lines);
 
   return (
-    <div className={p.className} style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+    <div className={p.className}
+         style={phone
+           ? { display: 'flex', flexDirection: 'column', gap: 14 }
+           : { display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+
+      {/*  ON A PHONE THE BLOCK COMES FIRST. Beside the account on a
+          workstation, both are in view at once; stacked, whichever is
+          on top is what an operator sees on arriving. "Can't complete
+          Packing" is the reason they are looking at the screen, so it
+          goes above the seven rows that explain it. */}
+      {phone && (
+        <PhoneVerdict s={s} stageName={p.stageName} />
+      )}
+
       {/* ── The account ───────────────────────────────────────────── */}
-      <section style={{ flex: '1 1 420px', minWidth: 300, display: 'flex',
-                        flexDirection: 'column', gap: 12 }}>
-        <h2 style={title}>
-          Yield reconciliation · stage {p.stageSequence} · {p.stageName}
-        </h2>
+      <section style={phone
+        ? { display: 'flex', flexDirection: 'column', gap: 8 }
+        : { flex: '1 1 420px', minWidth: 300, display: 'flex',
+            flexDirection: 'column', gap: 12 }}>
+        {!phone && (
+          <h2 style={title}>
+            Yield reconciliation · stage {p.stageSequence} · {p.stageName}
+          </h2>
+        )}
+
+        {/*  THE UNIT, SAID ONCE. YR-M01 prints the quantities bare,
+            which is right — seven repetitions of "tablets" down a
+            390 px column is noise — but a column of unlabelled numbers
+            is a real loss, so it is stated here instead of dropped.
+            The design has it nowhere; this is the cheapest way to keep
+            it without the clutter it was removed for. */}
+        {phone && unit && (
+          <span style={unitCaption}>All quantities in {unit}</span>
+        )}
 
         <div style={table} role="table" aria-label="Yield account">
           {s.lines.map((l) => (
@@ -93,11 +134,13 @@ export default function YieldAccountCard(p: YieldAccountCardProps) {
               }}
               role="row"
             >
-              <span style={rowLabel} role="cell">{l.label}</span>
+              <span style={rowLabel} role="cell">{lineLabel(l, p.layout ?? 'workstation')}</span>
               <span style={figure} role="cell">
-                {l.key === 'unaccounted'
-                  ? formatUnaccounted(l)
-                  : formatQuantity(l.quantity, l.unit)}
+                {phone
+                  ? formatBare(l.quantity, 'quantity')
+                  : l.key === 'unaccounted'
+                    ? formatUnaccounted(l)
+                    : formatQuantity(l.quantity, l.unit)}
               </span>
             </div>
           ))}
@@ -108,12 +151,14 @@ export default function YieldAccountCard(p: YieldAccountCardProps) {
           <div style={{ ...row, borderTop: '2px solid var(--nv-light-border)',
                         background: 'var(--nv-light-surface)', fontWeight: 600 }}
                role="row">
-            <span style={rowLabel} role="cell">Actual yield</span>
+            <span style={rowLabel} role="cell">{phone ? 'Yield' : 'Actual yield'}</span>
             <span style={figure} role="cell">{formatPct(s.verdict.yieldPct)}</span>
           </div>
           <div style={{ ...row, background: 'var(--nv-light-surface)', fontWeight: 600 }}
                role="row">
-            <span style={rowLabel} role="cell">Variance from theoretical</span>
+            <span style={rowLabel} role="cell">
+              {phone ? 'Variance' : 'Variance from theoretical'}
+            </span>
             <span style={figure} role="cell">{formatSignedPct(s.verdict.variancePct)}</span>
           </div>
         </div>
@@ -125,7 +170,14 @@ export default function YieldAccountCard(p: YieldAccountCardProps) {
           </p>
         )}
 
-        {/* ── The threshold strip ─────────────────────────────────── */}
+        {/* ── The threshold strip ───────────────────────────────────
+            WORKSTATION ONLY. At 390 px the three segments cannot hold
+            even one word each beside a marker, and a strip whose
+            labels are gone is a coloured bar that means nothing. The
+            figures it carries — the yield and both ends of the window
+            — are in the block panel's own sentence on a phone, so
+            nothing is lost with it. */}
+        {!phone && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={strip} role="img"
                //  The segments show one word each, so the full
@@ -161,9 +213,18 @@ export default function YieldAccountCard(p: YieldAccountCardProps) {
             {thresholdNote(s.verdict.yieldPct, p.window.lower, p.window.upper)}
           </span>
         </div>
+        )}
       </section>
 
-      {/* ── The block, and the way through it ─────────────────────── */}
+      {/*  ON A PHONE the routes are a bar at the bottom and the
+          verdict is already above, so everything below here is the
+          workstation column. */}
+      {phone ? (
+        <PhoneRoutes
+          s={s} onFlagInvestigation={p.onFlagInvestigation}
+          onRecount={p.onRecount} onComplete={p.onComplete} />
+      ) : (
+      /* ── The block, and the way through it ─────────────────────── */
       <section style={{ flex: '1 1 340px', minWidth: 280, display: 'flex',
                         flexDirection: 'column', gap: 12 }}>
         <div
@@ -232,7 +293,94 @@ export default function YieldAccountCard(p: YieldAccountCardProps) {
           </p>
         )}
       </section>
+      )}
     </div>
+  );
+}
+
+/**
+ * The phone's verdict panel (YR-M01's top block).
+ *
+ * One line of detail instead of three sentences — `blockDetailShort`
+ * — because the "what happens next" half is said above the action bar
+ * at the bottom of the screen, where the buttons that do it are. The
+ * same three facts, in the two places each of them fits.
+ */
+function PhoneVerdict({ s, stageName }: { s: AccountSummary; stageName: string }) {
+  const blocked = s.blocks && !s.cleared;
+  return (
+    <div
+      style={{ ...verdictPanel, ...(blocked ? blockTone : clearTone), padding: 14, gap: 8 }}
+      role={blocked ? 'alert' : 'status'}
+    >
+      <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span style={{ ...mark, ...(blocked ? markBlock : markClear),
+                       width: 28, height: 28, borderRadius: 14 }}>
+          {blocked
+            ? <X size={16} strokeWidth={3} aria-hidden />
+            : <ShieldCheck size={16} strokeWidth={2.25} aria-hidden />}
+        </span>
+        <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 17,
+                       lineHeight: '22px' }}>
+          {blockHeadline(stageName, s)}
+        </span>
+      </span>
+      <span style={{ ...verdictDetail, padding: '8px 10px', fontSize: 13,
+                     lineHeight: '19px' }}>
+        {blockDetailShort(s)}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The phone's action bar (YR-M01's sticky bottom).
+ *
+ * STICKY, so the two routes stay reachable however far down the seven
+ * rows an operator has scrolled — the account is what they are
+ * reading and the buttons are what they came to press, and on a 844 px
+ * screen those do not fit in one view.
+ *
+ * It sits above the home indicator: `bottom: 0` plus the safe-area
+ * inset, so the lower button is not half under it.
+ *
+ * THERE IS NO "COMPLETE AND SIGN" BUTTON WHILE BLOCKED, which is YR-M01
+ * and is the same rule as FloorNotice's blocked variant: no way past
+ * it on screen. The workstation card shows the refused button because
+ * there is room to show what the finished state looks like; a phone
+ * has room for the two things that change it.
+ */
+function PhoneRoutes({ s, onFlagInvestigation, onRecount, onComplete }: {
+  s: AccountSummary;
+  onFlagInvestigation: () => void;
+  onRecount: () => void;
+  onComplete: () => void;
+}) {
+  const blocked = s.blocks && !s.cleared;
+  const note = phoneRouteNote(s);
+
+  return (
+    <>
+      {note && <p style={{ margin: 0, fontSize: 13, lineHeight: '19px',
+                           color: 'var(--nv-light-text-secondary)' }}>{note}</p>}
+      <div style={phoneBar}>
+        {blocked ? routes(s, 'phone').map((r) => (
+          <button
+            key={r.key} type="button"
+            style={r.key === 'investigate' ? phoneBarPrimary : phoneBarSecondary}
+            onClick={r.key === 'recount' ? onRecount : onFlagInvestigation}
+          >
+            {r.label}
+          </button>
+        )) : (
+          <button type="button" style={phoneBarPrimary} onClick={onComplete}>
+            <FileSignature size={20} strokeWidth={1.75} aria-hidden
+                           style={{ flexShrink: 0 }} />
+            Complete and sign stage
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -282,6 +430,37 @@ const figure: CSSProperties = {
   //  non-breaking space for the same reason: a figure that splits
   //  across lines stops being one figure.
   whiteSpace: 'nowrap',
+};
+
+const unitCaption: CSSProperties = {
+  fontFamily: 'var(--nv-font-mono)', fontSize: 11, lineHeight: '16px',
+  letterSpacing: '0.04em', color: 'var(--nv-light-text-tertiary)',
+};
+
+const phoneBar: CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 10,
+  position: 'sticky',
+  //  Above the home indicator, not under it.
+  bottom: 'env(safe-area-inset-bottom, 0px)',
+  padding: '12px 0 0',
+  background: 'var(--nv-light-ground)',
+};
+
+const phoneBarPrimary: CSSProperties = {
+  display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'center',
+  minHeight: TOUCH.target, padding: '0 16px', borderRadius: 10,
+  background: 'var(--nv-light-action-bg)', border: '1px solid var(--nv-light-action-bg)',
+  color: '#ffffff',
+  fontFamily: 'var(--nv-font-body)', fontWeight: 600, fontSize: 16, lineHeight: '22px',
+  cursor: 'pointer',
+};
+
+const phoneBarSecondary: CSSProperties = {
+  minHeight: TOUCH.target, padding: '0 16px', borderRadius: 10,
+  background: 'var(--nv-light-surface)', border: '1px solid var(--nv-light-border)',
+  color: 'var(--nv-light-text-primary)',
+  fontFamily: 'var(--nv-font-body)', fontWeight: 600, fontSize: 16, lineHeight: '22px',
+  cursor: 'pointer',
 };
 
 const note: CSSProperties = {

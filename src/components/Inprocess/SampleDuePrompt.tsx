@@ -39,9 +39,19 @@ import {
   promptStatusLine, promptDetailLine, shouldChime, type SamplePrompt,
 } from '../../lib/inprocess/zones';
 import { TOUCH } from '../../lib/batch/stageStrip';
+import type { FloorLayout } from '../../lib/inprocess/floorLayout';
 
 export interface SampleDuePromptProps {
   prompt: SamplePrompt;
+  /**
+   * IP-01 or IP-M01. The phone keeps every one of the three
+   * properties above and rearranges them: a 56 px dial instead of 72
+   * (so it sits beside the status line rather than on its own row at
+   * 390 px), the headline at 20 px, and the button full width
+   * UNDERNEATH the text rather than beside it — where a thumb reaches
+   * it without crossing the screen.
+   */
+  layout?: FloorLayout;
   /** What the check is called on the band — "Weight check #14 · take
    *  20 tablets from the press". Passed in rather than assembled here,
    *  because the sample size is the formula's and the instruction is
@@ -56,32 +66,56 @@ export interface SampleDuePromptProps {
 }
 
 export default function SampleDuePrompt({
-  prompt, headline, onTakeSample, onChime, className,
+  prompt, headline, onTakeSample, onChime, layout = 'workstation', className,
 }: SampleDuePromptProps) {
   useSampleChime(prompt.minutesOverdue, onChime);
   const overdue = prompt.minutesOverdue >= 0;
+  const phone = layout === 'phone';
+
+  //  The dial and the status line sit on one row on a phone; the
+  //  headline, the detail and the button go underneath it. On a
+  //  workstation all four are one row, with the button on the right.
+  const head = (
+    <>
+      <span style={{ ...dial, ...(phone ? dialPhone : null) }} aria-hidden>
+        <Clock size={phone ? 22 : 28} strokeWidth={2.25} />
+      </span>
+      {phone && <span style={statusLine}>{promptStatusLine(prompt)}</span>}
+    </>
+  );
 
   return (
     <section
       className={className}
-      style={band}
+      style={{ ...band, ...(phone ? bandPhone : null) }}
       //  'alert' when overdue, 'status' while counting down. A prompt
       //  that announced itself assertively before it was due would
       //  teach a screen-reader user to ignore the one that matters.
       role={overdue ? 'alert' : 'status'}
       aria-labelledby="sample-due-headline"
     >
-      <span style={dial} aria-hidden>
-        <Clock size={28} strokeWidth={2.25} />
-      </span>
+      {phone ? (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
+          {head}
+        </div>
+      ) : head}
 
-      <div style={{ flex: 1, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={statusLine}>{promptStatusLine(prompt)}</span>
-        <span id="sample-due-headline" style={headlineStyle}>{headline}</span>
+      <div style={{ flex: phone ? undefined : 1, width: phone ? '100%' : undefined,
+                    minWidth: phone ? 0 : 240,
+                    display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {!phone && <span style={statusLine}>{promptStatusLine(prompt)}</span>}
+        <span id="sample-due-headline"
+              style={{ ...headlineStyle, ...(phone ? headlinePhone : null) }}>
+          {headline}
+        </span>
         <span style={detailLine}>{promptDetailLine(prompt)}</span>
       </div>
 
-      <button type="button" style={takeButton} onClick={onTakeSample}>
+      <button
+        type="button"
+        style={{ ...takeButton, ...(phone ? takeButtonPhone : null) }}
+        onClick={onTakeSample}
+      >
         Take sample
       </button>
     </section>
@@ -186,6 +220,31 @@ const headlineStyle: CSSProperties = {
 const detailLine: CSSProperties = {
   fontSize: 13, lineHeight: '18px',
   color: 'var(--nv-light-state-quarantine-body)',
+};
+
+const bandPhone: CSSProperties = {
+  //  Stacked rather than a single row: at 390 px the dial, the text
+  //  and a 180 px button cannot share a line, and letting them wrap
+  //  put the headline below the fold.
+  flexDirection: 'column', alignItems: 'flex-start', gap: 12, padding: 20,
+};
+
+const dialPhone: CSSProperties = {
+  //  56, not 72. At 390 px a 72 px dial plus the status line no
+  //  longer fit on one row, and the dial dropping to a row of its own
+  //  pushed the headline below the fold.
+  width: 56, height: 56, borderRadius: 28,
+};
+
+const headlinePhone: CSSProperties = {
+  fontSize: 20, lineHeight: '28px',
+};
+
+const takeButtonPhone: CSSProperties = {
+  //  Full width, under the text, at the design's 56. A 180 px button
+  //  floated right on a phone is a button reached across the screen;
+  //  under the text it is under the thumb.
+  width: '100%', height: TOUCH.target, minWidth: 0, fontSize: 18,
 };
 
 const takeButton: CSSProperties = {

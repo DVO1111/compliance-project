@@ -70,6 +70,33 @@ export interface YieldVerdict {
   authorised: boolean;
 }
 
+/**
+ * The short labels YR-M01 uses on a phone.
+ *
+ * "Theoretical", not "Theoretical yield"; "Packed", not "Packed,
+ * released to store". At 390 px the long labels pushed every figure
+ * onto a second line, and seven two-line rows is not an account
+ * anybody reads — it is a list of fourteen things.
+ *
+ * NOT DERIVED by truncating the long ones. "Packed, released to
+ * store" truncated is "Packed, releas…", and a label that trails off
+ * reads as a rendering fault rather than as a deliberate short form.
+ * They are written out, so each one is a word somebody chose.
+ */
+export const SHORT_LABEL: Record<AccountLineKey, string> = {
+  theoretical: 'Theoretical',
+  packed: 'Packed',
+  samples: 'Samples',
+  rejects: 'Rejects',
+  accounted: 'Accounted for',
+  unaccounted: 'Unaccounted',
+};
+
+/** The label for a line at the layout in use. */
+export function lineLabel(line: AccountLine, layout: 'workstation' | 'phone'): string {
+  return layout === 'phone' ? SHORT_LABEL[line.key] : line.label;
+}
+
 // ── formatting ───────────────────────────────────────────────────────
 
 /** Quantities with thousands separators, as YR-01 shows them
@@ -109,6 +136,33 @@ export function formatSignedPct(p: number | null): string {
   if (p === null || !Number.isFinite(p)) return '—';
   const sign = p < 0 ? '−' : p > 0 ? '+' : '';
   return `${sign} ${Math.abs(p).toFixed(1)} %`.trim();
+}
+
+/**
+ * A bare figure, for the phone's narrow column: "300,000", "96.5 %".
+ *
+ * THE UNIT IS DROPPED, NOT LOST. YR-M01 prints the quantities without
+ * it, because seven repetitions of "tablets" down a 390 px column is
+ * noise — but a column of unlabelled numbers is a real loss, so the
+ * card states the unit once above the table instead. `accountUnit`
+ * below is what it says.
+ */
+export function formatBare(q: number | null, kind: 'quantity' | 'pct'): string {
+  if (q === null || !Number.isFinite(q)) return '—';
+  if (kind === 'pct') return formatPct(q);
+  const abs = Math.abs(q);
+  const digits = Number.isInteger(q) ? 0 : abs < 100 ? 3 : 1;
+  return q.toLocaleString('en-NG', {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  });
+}
+
+/** The unit the quantities are in, said once. Null when the lines
+ *  disagree about it, which should not happen — a reconciliation has
+ *  one output unit — and is reported rather than guessed at. */
+export function accountUnit(lines: AccountLine[]): string | null {
+  const units = new Set(lines.filter((l) => l.quantity !== null).map((l) => l.unit));
+  return units.size === 1 ? [...units][0] : null;
 }
 
 /** The unaccounted line as YR-01 writes it: "7,200 tablets · 2.4 %".
@@ -276,6 +330,36 @@ export function blockHeadline(stageName: string, s: AccountSummary): string {
   return `Can’t complete ${stageName}`;
 }
 
+/**
+ * The one-line version, for YR-M01's compact panel.
+ *
+ * SHORTER, NOT TRUNCATED. The long detail says the figure, the
+ * threshold, and what has to happen before the stage can complete;
+ * cutting it at a character count would drop whichever of the three
+ * fell off the end. This states the figure and the threshold, and the
+ * line above the action bar says what happens next — so the same
+ * three facts are on the screen, in two places that each fit.
+ */
+export function blockDetailShort(s: AccountSummary): string {
+  const { yieldPct, thresholdPct } = s.verdict;
+  if (!s.blocks) {
+    return `Yield ${formatPct(yieldPct)} is within the ${formatPct(thresholdPct)} threshold.`;
+  }
+  const below = (yieldPct ?? 100) < 100;
+  const edge = thresholdPct === null ? null : below ? 100 - thresholdPct : 100 + thresholdPct;
+  const base = `Yield ${formatPct(yieldPct)} is ${below ? 'below' : 'above'} the `
+    + `${formatPct(edge)} threshold for this product and stage.`;
+  return s.cleared ? `${base} A supervisor has authorised it.` : base;
+}
+
+/** The line above the phone's action bar — the "what happens next"
+ *  half of the detail above. */
+export function phoneRouteNote(s: AccountSummary): string {
+  if (!s.blocks || s.cleared) return '';
+  return 'Recount, or flag for investigation so a supervisor can decide whether the '
+    + 'stage may be completed with the variance on the record.';
+}
+
 /** The sentence under it. Names the figure, the threshold and what
  *  happens next, in that order — the figure first because it is the
  *  thing being disputed. */
@@ -309,13 +393,18 @@ export function completeButtonLabel(s: AccountSummary): string {
 /** The two routes YR-01 offers, in its order: recount first, because a
  *  wrong count is the commonest explanation for a variance and the only
  *  one that costs nothing to rule out. */
-export function routes(s: AccountSummary): Array<{
-  key: 'investigate' | 'recount'; label: string; detail: string;
-}> {
+export function routes(s: AccountSummary, layout: 'workstation' | 'phone' = 'workstation'):
+Array<{ key: 'investigate' | 'recount'; label: string; detail: string }> {
   if (!s.blocks || s.cleared) return [];
   return [
     { key: 'investigate',
-      label: 'Flag for investigation and ask supervisor',
+      //  "…and ask supervisor" is dropped on a phone, where it wrapped
+      //  a 56 px button onto two lines. The supervisor is still named
+      //  — in the line above the action bar, where there is room for
+      //  the whole sentence.
+      label: layout === 'phone'
+        ? 'Flag for investigation'
+        : 'Flag for investigation and ask supervisor',
       detail: 'Records what was looked into and sends the variance to a supervisor '
         + 'to authorise or refuse.' },
     { key: 'recount',

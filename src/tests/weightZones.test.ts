@@ -32,6 +32,7 @@ import {
   type ZoneBand, type ZoneOrNone,
 } from '../lib/inprocess/zones';
 import { weightZone } from '../lib/pharma/inprocessModel';
+import { PHONE_MAX_WIDTH, TARGET } from '../lib/inprocess/floorLayout';
 
 //  The limits IP-01 shows, which are also the test fixture's:
 //  LAL 575 < LWL 590 <= target 605 <= UWL 620 < UAL 635.
@@ -338,5 +339,44 @@ describe('the sample due prompt', () => {
       if (shouldChime(t, last)) { chimes += 1; last = Math.floor(t); }
     }
     expect(chimes).toBe(4);     // minutes 0, 1, 2, 3
+  });
+});
+
+/**
+ * Workstation or phone.
+ *
+ * The layout is a PROP, not a media query, because the differences
+ * between IP-02 and IP-M02 are content decisions: which controls
+ * exist (the on-screen keypad), which words appear, which figures are
+ * shown. A stylesheet cannot make those, and a component that tried
+ * would render both sets of markup and hide one — which is how a
+ * screen reader announces twelve keypad keys that are not there.
+ */
+describe('choosing a layout', () => {
+  //  The default errs towards the workstation. A workstation layout
+  //  briefly shown on a phone reflows into place; a phone layout
+  //  briefly shown on a wall-mounted tablet hides the keypad an
+  //  operator is already reaching for.
+  it('has a phone breakpoint below the workstation grid\'s minimum', () => {
+    //  Two 150 px reading cells plus the grid's own padding is the
+    //  narrowest the workstation composition has anything to lay out.
+    expect(PHONE_MAX_WIDTH).toBeGreaterThan(150 * 2 + 8 + 26);
+    expect(PHONE_MAX_WIDTH).toBeLessThan(768);
+  });
+
+  //  Both layouts clear the 44 px platform minimum, and the
+  //  workstation keypad is larger again because it takes twenty
+  //  presses per check with a gloved hand.
+  it('keeps every touch target above the platform minimum', () => {
+    for (const l of ['workstation', 'phone'] as const) {
+      expect(TARGET[l].action).toBeGreaterThanOrEqual(44);
+      expect(TARGET[l].key).toBeGreaterThanOrEqual(44);
+    }
+    expect(TARGET.workstation.key).toBeGreaterThan(TARGET.phone.key);
+  });
+
+  it('gives both layouts the same action height, as the design draws it', () => {
+    expect(TARGET.phone.action).toBe(TARGET.workstation.action);
+    expect(TARGET.phone.action).toBe(56);
   });
 });
