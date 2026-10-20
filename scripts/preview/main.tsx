@@ -18,6 +18,9 @@ import StateBadge from '../../src/components/Common/StateBadge';
 import { summarise } from '../../src/lib/materials/releaseReadiness';
 import StageParameterRow from '../../src/components/Formula/StageParameterRow';
 import VersionComparison from '../../src/components/Formula/VersionComparison';
+import StageStrip from '../../src/components/Batch/StageStrip';
+import SignOffPair from '../../src/components/Batch/SignOffPair';
+import CorrectionRecord from '../../src/components/Batch/CorrectionRecord';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -519,7 +522,91 @@ const formula = (
   </div>
 );
 
-const page = screen === 'formula' ? formula
+//  W4·17. The strip with a locked stage that says why, the two
+//  signature cards in all three states, and a correction with the
+//  original kept beside the new value.
+const STAGES = [
+  { stageId: 's1', sequenceNo: 1, name: 'Dispensing', status: 'complete',
+    state: 'done' as const, waitingFor: null, requiresVerifier: false,
+    signedByOperator: true, signedByVerifier: false,
+    readingsTotal: 3, readingsRecorded: 3, readingsOutOfSpec: 0 },
+  { stageId: 's2', sequenceNo: 2, name: 'Wet granulation', status: 'awaiting_verification',
+    state: 'current' as const, waitingFor: null, requiresVerifier: true,
+    signedByOperator: true, signedByVerifier: false,
+    readingsTotal: 4, readingsRecorded: 4, readingsOutOfSpec: 1 },
+  { stageId: 's3', sequenceNo: 3, name: 'Drying', status: 'pending',
+    state: 'locked' as const,
+    waitingFor: 'Waiting for stage 2, Wet granulation, which is awaiting verification.',
+    requiresVerifier: false, signedByOperator: false, signedByVerifier: false,
+    readingsTotal: 2, readingsRecorded: 0, readingsOutOfSpec: 0 },
+  { stageId: 's4', sequenceNo: 4, name: 'Compression', status: 'pending',
+    state: 'locked' as const,
+    waitingFor: 'Waiting for stage 2, Wet granulation, which is awaiting verification.',
+    requiresVerifier: true, signedByOperator: false, signedByVerifier: false,
+    readingsTotal: 6, readingsRecorded: 0, readingsOutOfSpec: 0 },
+];
+
+const batch = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={label}>BR-02 · the strip — every locked stage says what it waits for</p>
+      <StageStrip stages={STAGES} activeStageId="s2" onOpen={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>BR-04 · operator signed, waiting for the verifier (seen by the operator)</p>
+      <SignOffPair
+        requiresVerifier
+        viewerIsOperator
+        operator={{ name: 'Musa Danjuma', standing: 'Production operator · Line 2',
+                    signedAt: '12 Oct 2026 · 14:22', meaning: 'Authored' }}
+        verifier={null}
+        onVerify={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>BR-04 · the same stage, seen by somebody who may verify it</p>
+      <SignOffPair
+        requiresVerifier
+        operator={{ name: 'Musa Danjuma', standing: 'Production operator · Line 2',
+                    signedAt: '12 Oct 2026 · 14:22', meaning: 'Authored' }}
+        verifier={null}
+        onVerify={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>BR-05 · both signed — the two records must not look alike</p>
+      <SignOffPair
+        requiresVerifier
+        operator={{ name: 'Musa Danjuma', standing: 'Production operator · Line 2',
+                    signedAt: '12 Oct 2026 · 14:22', meaning: 'Authored' }}
+        verifier={{ name: 'Ifeoma Nwosu', standing: 'QC Analyst · Ikeja plant',
+                    signedAt: '12 Oct 2026 · 14:31', meaning: 'Witnessed' }} />
+    </div>
+
+    <div>
+      <p style={label}>BR-06 · a correction keeps the original</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <CorrectionRecord correction={{
+          parameterName: 'Tablet mass', unit: 'mg',
+          originalValue: '520', newValue: '548',
+          reason: 'Balance was reading against the previous tare. Re-weighed on balance BAL-03.',
+          correctedBy: 'M. Danjuma', correctedAt: '12 Oct 2026 · 15:40',
+          attachment: 'bal-03-printout.jpg' }} />
+        <CorrectionRecord correction={{
+          parameterName: 'Granulation endpoint', unit: 'A',
+          originalValue: '5.1', newValue: '5.4',
+          reason: 'Transcribed from the wrong line of the chart recorder.',
+          correctedBy: 'M. Danjuma', correctedAt: '11 Oct 2026 · 09:12',
+          resigned: true }} />
+      </div>
+    </div>
+  </div>
+);
+
+const page = screen === 'batch' ? batch
+  : screen === 'formula' ? formula
   : screen === 'materials' ? materials
   : screen === 'roles' ? roles
   : screen === 'access' ? access
@@ -529,5 +616,5 @@ const page = screen === 'formula' ? formula
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );

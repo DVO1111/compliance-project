@@ -1145,6 +1145,201 @@ END
 $j2$;
 
 
+-- =====================================================================
+--  K — W4·17: the stage strip, and dual sign-off with a state between
+-- =====================================================================
+--  Two of the design's "not done if" clauses:
+--
+--    "Locked stage greyed with no explanation: no. Every locked stage
+--     says what it waits for."
+--    "Dual sign-off WITH THE STATE IN BETWEEN and the second signer's
+--     own login."
+--
+--  This section gets its OWN batch. The batch above is closed by
+--  section I, and a section that depended on running before it would
+--  break the first time somebody reordered the file — which is
+--  exactly what happened when this was written against the shared
+--  one.
+--
+--  Stage 2 is the stage that requires a verifier (A5), so that is the
+--  one the two-step sign-off runs on.
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('b7.u_op'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $k$
+DECLARE
+  c_a uuid := current_setting('b7.c_a')::uuid;
+  r jsonb; kb uuid; s1 uuid; s2 uuid; s3 uuid;
+  sig uuid; n integer; v_wait text; v_state text;
+BEGIN
+  r := public.batch_record_initiate(
+         c_a, 'K-DUAL-001', current_setting('b7.p_a')::uuid,
+         current_date, current_date + 365, 100, 'kg', NULL,
+         current_setting('b7.f')::uuid);
+  kb := (r->>'batch_id')::uuid;
+  PERFORM set_config('b7.kb', kb::text, false);
+
+  SELECT id INTO s1 FROM public.batch_stages WHERE batch_id=kb AND sequence_no=1;
+  SELECT id INTO s2 FROM public.batch_stages WHERE batch_id=kb AND sequence_no=2;
+  SELECT id INTO s3 FROM public.batch_stages WHERE batch_id=kb AND sequence_no=3;
+
+  SELECT count(*) INTO n FROM public.batch_stage_strip(kb);
+  PERFORM _b7k('K','K1 the strip reports every stage', n=3, n||' row(s)');
+
+  --  THE ONE THE DESIGN RULES OUT. A strip that greys a stage without
+  --  a sentence is the "locked with no explanation" failure.
+  SELECT count(*) INTO n FROM public.batch_stage_strip(kb)
+   WHERE state NOT IN ('current','done') AND coalesce(btrim(waiting_for),'')='';
+  PERFORM _b7k('K','K2 no stage is locked without saying what it waits for', n=0, n||' row(s)');
+
+  SELECT state, waiting_for INTO v_state, v_wait
+    FROM public.batch_stage_strip(kb) WHERE stage_id=s3;
+  PERFORM _b7k('K','K3 stage 3 is locked while stage 1 is unfinished',
+    v_state='locked', coalesce(v_state,'NULL'));
+  PERFORM _b7k('K','K4 and names the stage it is waiting for',
+    v_wait LIKE '%stage 1%', coalesce(v_wait,'NULL'));
+
+  --  "Complete and sign stays disabled with the reason given."
+  PERFORM public.batch_stage_start(s1);
+  SELECT count(*) INTO n FROM public.batch_stage_completion_blockers(s1);
+  PERFORM _b7k('K','K5 an unfinished stage reports why it cannot be completed',
+    n > 0, n||' blocker(s)');
+
+  SELECT count(*) INTO n FROM public.batch_stage_completion_blockers(s1)
+   WHERE coalesce(btrim(title),'')='' OR coalesce(btrim(detail),'')='';
+  PERFORM _b7k('K','K6 and every reason carries words to show', n=0, n||' blank');
+END
+$k$;
+
+--  Complete stage 1 so stage 2 can start. Stage 1 needs no verifier,
+--  so it takes the one-call path, which this change leaves untouched.
+DO $k2$
+DECLARE
+  c_a uuid := current_setting('b7.c_a')::uuid;
+  kb uuid := current_setting('b7.kb')::uuid;
+  s1 uuid; s2 uuid; r jsonb; fp record; ok boolean; msg text;
+BEGIN
+  SELECT id INTO s1 FROM public.batch_stages WHERE batch_id=kb AND sequence_no=1;
+  SELECT id INTO s2 FROM public.batch_stages WHERE batch_id=kb AND sequence_no=2;
+
+  FOR fp IN SELECT id FROM public.batch_stage_parameter_readings
+             WHERE batch_stage_id=s1 AND reading_value IS NULL AND reading_text IS NULL
+  LOOP
+    NULL;  --  stage 1's readings are filled by the loop below
+  END LOOP;
+
+  FOR fp IN
+    SELECT p.id, p.target_value, p.target_text
+      FROM public.master_formula_stage_parameters p
+      JOIN public.master_formula_stages fs ON fs.id = p.stage_id
+      JOIN public.batch_stages bs ON bs.formula_stage_id = fs.id
+     WHERE bs.id = s1
+  LOOP
+    PERFORM public.batch_stage_record_reading(s1, fp.id, fp.target_value, fp.target_text);
+  END LOOP;
+
+  r := public.sign_electronic_record(c_a,'batch_stage',s1,'complete',
+         'authored','CorrectHorse1!');
+  PERFORM public.batch_stage_complete(s1, (r->>'signature_id')::uuid);
+
+  PERFORM _b7k('K','K7 stage 1 completes on one signature where no verifier is required',
+    (SELECT status FROM public.batch_stages WHERE id=s1)='complete',
+    (SELECT status FROM public.batch_stages WHERE id=s1));
+
+  PERFORM _b7k('K','K8 and stage 2 is now the current one',
+    (SELECT state FROM public.batch_stage_strip(kb) WHERE stage_id=s2)='current',
+    (SELECT state FROM public.batch_stage_strip(kb) WHERE stage_id=s2));
+
+  --  Now the two-step path on the stage that does require a verifier.
+  PERFORM public.batch_stage_start(s2);
+  FOR fp IN
+    SELECT p.id, p.target_value, p.target_text
+      FROM public.master_formula_stage_parameters p
+      JOIN public.master_formula_stages fs ON fs.id = p.stage_id
+      JOIN public.batch_stages bs ON bs.formula_stage_id = fs.id
+     WHERE bs.id = s2
+  LOOP
+    PERFORM public.batch_stage_record_reading(s2, fp.id, fp.target_value, fp.target_text);
+  END LOOP;
+
+  r := public.sign_electronic_record(c_a,'batch_stage',s2,'sign_operator',
+         'authored','CorrectHorse1!');
+  PERFORM _b7k('K','K9 the operator can sign their half',
+    (r->>'ok')='true', coalesce(r::text,'NULL'));
+  PERFORM public.batch_stage_sign_operator(s2, (r->>'signature_id')::uuid);
+
+  --  THE STATE THE BACKEND COULD NOT REPRESENT BEFORE. Without it both
+  --  people must sign in one call at one tablet, which is one
+  --  person's session with somebody else's credential in it.
+  PERFORM _b7k('K','K10 the stage is now awaiting verification',
+    (SELECT status FROM public.batch_stages WHERE id=s2)='awaiting_verification',
+    (SELECT status FROM public.batch_stages WHERE id=s2));
+
+  PERFORM _b7k('K','K11 the strip says a second person must sign',
+    (SELECT waiting_for FROM public.batch_stage_strip(kb) WHERE stage_id=s2)
+      LIKE '%second person%',
+    (SELECT coalesce(waiting_for,'NULL') FROM public.batch_stage_strip(kb) WHERE stage_id=s2));
+
+  PERFORM _b7k('K','K12 one signature does not complete it',
+    (SELECT verifier_signature_id IS NULL FROM public.batch_stages WHERE id=s2));
+
+  --  The operator may not be the verifier, checked against who is
+  --  signed in now rather than a parameter somebody passes.
+  r := public.sign_electronic_record(c_a,'batch_stage',s2,'verify',
+         'witnessed','CorrectHorse1!');
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.batch_stage_verify(s2, (r->>'signature_id')::uuid);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BATCH_STAGE_SAME_SIGNER%'; msg := SQLERRM; END;
+  PERFORM _b7k('K','K13 the operator cannot verify their own stage', ok, left(coalesce(msg,''),140));
+
+  --  BR-04: "the stage can't be edited". A reading changed between the
+  --  signatures would be covered by neither.
+  ok := false; msg := NULL;
+  BEGIN
+    UPDATE public.batch_stage_parameter_readings SET reading_value = 1
+     WHERE batch_stage_id = s2;
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BATCH_STAGE_AWAITING_FROZEN%'; msg := SQLERRM; END;
+  PERFORM _b7k('K','K14 readings are frozen between the two signatures', ok, left(coalesce(msg,''),140));
+END
+$k2$;
+
+--  Now as the verifier, with their own account.
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('b7.u_vf'), 'role','authenticated')::text, false);
+
+DO $k3$
+DECLARE
+  c_a uuid := current_setting('b7.c_a')::uuid;
+  kb uuid := current_setting('b7.kb')::uuid;
+  s2 uuid; r jsonb;
+BEGIN
+  SELECT id INTO s2 FROM public.batch_stages WHERE batch_id=kb AND sequence_no=2;
+
+  r := public.sign_electronic_record(c_a,'batch_stage',s2,'verify',
+         'witnessed','CorrectHorse1!');
+  PERFORM public.batch_stage_verify(s2, (r->>'signature_id')::uuid);
+
+  PERFORM _b7k('K','K15 the verifier''s own signature completes the stage',
+    (SELECT status FROM public.batch_stages WHERE id=s2)='complete',
+    (SELECT status FROM public.batch_stages WHERE id=s2));
+
+  --  BR-05: "two visibly different signature records". Two rows, two
+  --  signers — which is what makes them different.
+  PERFORM _b7k('K','K16 the two signatures are by different people',
+    (SELECT operator_signature_id IS DISTINCT FROM verifier_signature_id
+            AND operator_id IS DISTINCT FROM verifier_id
+       FROM public.batch_stages WHERE id=s2));
+
+  --  BR-05: "the next stage unlocks".
+  PERFORM _b7k('K','K17 and the next stage unlocks',
+    (SELECT state FROM public.batch_stage_strip(kb) WHERE sequence_no=3)='current',
+    (SELECT state FROM public.batch_stage_strip(kb) WHERE sequence_no=3));
+END
+$k3$;
+
+RESET ROLE; RESET request.jwt.claims;
+
 \echo ''
 \echo '════════════════════════════════════════════════════════════════'
 \echo '  WEEK 4 / ITEM 07 — BATCH RECORD AND STAGES'
