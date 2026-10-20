@@ -112,6 +112,7 @@ export type PageId =
   | 'website-monitoring'
   | 'vendor-scorecard'
   | 'capa-management'
+  | 'deviations'
   | 'training-simulation'
   | 'claim-extraction'
   | 'pharma-integrations'
@@ -239,7 +240,8 @@ const ONB08_NAV: Record<string, { group: string; label?: string; order: number }
   'dashboard':          { group: 'Overview', order: 1 },
 
   'batch-release':      { group: 'Manufacturing & Quality', order: 1 },
-  'capa-management':    { group: 'Manufacturing & Quality', order: 2 },
+  'deviations':         { group: 'Manufacturing & Quality', order: 2 },
+  'capa-management':    { group: 'Manufacturing & Quality', order: 3 },
   'change-control':     { group: 'Manufacturing & Quality', order: 3 },
   'sop-library':        { group: 'Manufacturing & Quality', order: 4 },
   'gmp-inspection':     { group: 'Manufacturing & Quality', order: 5 },
@@ -346,7 +348,12 @@ export default function MainLayout({
       // ── 2. Quality Operations ────────────────────────────────────────
       { id: 'batch-release', label: 'Batch Release', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'coa', label: 'Certificates of Analysis', icon: FileCheck2, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
-      { id: 'capa-management', label: 'Deviation / CAPA', icon: ClipboardList, category: 'Quality Operations', hidden: !perms.canViewCapaManagement || !usesManufacturingQuality },
+      //  Deviations and CAPA are two registers, not one. This item
+      //  read "Deviation / CAPA" while pointing only at the CAPA page,
+      //  so a deviation had no destination; now each has its own, and
+      //  the CAPA label stops claiming the other.
+      { id: 'deviations', label: 'Deviations', icon: ClipboardList, category: 'Quality Operations', hidden: !perms.canViewCapaManagement || !usesManufacturingQuality },
+      { id: 'capa-management', label: 'CAPA', icon: ClipboardList, category: 'Quality Operations', hidden: !perms.canViewCapaManagement || !usesManufacturingQuality },
       { id: 'change-control', label: 'Change Control', icon: GitMerge, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },

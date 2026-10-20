@@ -112,7 +112,10 @@ function lazyPage<T extends ComponentType<any>>(
 const DepartmentsPage           = lazyPage(() => import('./components/company/DepartmentsPage'));
 const AIDashboardPage           = lazyPage(() => import('./components/Governance/AI/AIDashboardPage'));
 const FirstRunDashboard         = lazyPage(() => import('./components/Dashboard/FirstRunDashboard'));
+import { isQaAuthority } from './lib/pharma/qaAuthority';
+
 const ProductsPage              = lazyPage(() => import('./components/Products/ProductsPage'));
+const DeviationsPage            = lazyPage(() => import('./components/Deviations/DeviationsPage'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
 const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
 const RegulationsPage           = lazyPage(() => import('./components/Regulations/RegulationsPage'));
@@ -1090,6 +1093,22 @@ function AppContent() {
 
       case 'vendor-scorecard':
         return perms.canViewVendorScorecard ? <VendorScorecardPage /> : <AccessDenied />;
+
+      //  W5·11. The register, the raise sheet and the investigation
+      //  view. `isQa` governs whether the closure sign button is
+      //  RENDERED — not whether it is enabled — because the database
+      //  refuses a closure signature from a non-QA caller and a greyed
+      //  button would invite an error nobody can act on. Same source
+      //  of truth as batch release: the company-membership role, not
+      //  the profile role.
+      case 'deviations':
+        return perms.canViewCapaManagement
+          ? <DeviationsPage
+              companyId={profile?.company_id}
+              userId={user?.id}
+              isQa={isQaAuthority((profile as any)?.company_role)}
+            />
+          : <AccessDenied />;
 
       case 'capa-management':
         return perms.canViewCapaManagement ? <CapaManagementPage /> : <AccessDenied />;
