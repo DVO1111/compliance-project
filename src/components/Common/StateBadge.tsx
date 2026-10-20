@@ -80,6 +80,22 @@ const TINT: Record<BadgeState, { bg: string; border: string; text: string; dashe
     border: 'var(--nv-light-state-hold-border)',
     text: 'var(--nv-light-state-hold-text)',
   },
+  /**
+   * W4·15. The second badge that inverts, and only the second: solid
+   * navy with white type, bound from node 119:1503.
+   *
+   * "Quarantine looks like On hold: no. Quarantine is solid navy with
+   * a lock; On hold is the light hold tint with a pause icon. Distinct
+   * in greyscale too." The two sit next to each other in a lot list,
+   * and the greyscale clause is the real test — a tint and a fill
+   * differ in print and under a colour-blind palette, two tints do
+   * not.
+   */
+  quarantine: {
+    bg: 'var(--nv-light-state-quarantine-bg)',
+    border: 'var(--nv-light-state-quarantine-bg)',
+    text: 'var(--nv-light-state-quarantine-text)',
+  },
 };
 
 export default function StateBadge({ state, children, className }: StateBadgeProps) {

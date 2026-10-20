@@ -12,6 +12,10 @@ import AccessRequestsInbox from '../../src/components/Access/AccessRequestsInbox
 import ReviewRequestDrawer from '../../src/components/Access/ReviewRequestDrawer';
 import RolesMatrix from '../../src/components/Access/RolesMatrix';
 import PersonAccessPanel from '../../src/components/Access/PersonAccessPanel';
+import ReleaseReadinessCard from '../../src/components/Materials/ReleaseReadinessCard';
+import QuarantineBanner from '../../src/components/Materials/QuarantineBanner';
+import StateBadge from '../../src/components/Common/StateBadge';
+import { summarise } from '../../src/lib/materials/releaseReadiness';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -333,7 +337,114 @@ const roles = (
   </div>
 );
 
-const page = screen === 'roles' ? roles
+//  W4·15. MT-06's release readiness in both states, the quarantine
+//  banner, and the new badge beside the one it must not be mistaken
+//  for. The conditions are the design's own worked example.
+const MT06 = [
+  { key: 'certificate_verified', met: false, blocking: true, sortOrder: 10,
+    title: 'Supplier certificate not verified',
+    detail: '2 discrepancies: 4-aminophenol stated 62 ppm against ≤ 50 ppm (our result 38 ppm), '
+      + 'and particle size not on the certificate. You review and verify it (D2.6).',
+    waitingOn: 'WAITING ON YOU' },
+  { key: 'tests_complete', met: false, blocking: true, sortOrder: 20,
+    title: '1 test incomplete: total aerobic microbial count',
+    detail: 'Incubating since 11 Oct. Read due 15 Oct 2026. Release needs every test complete '
+      + 'and passing (D2.5).',
+    waitingOn: 'WAITING ON QC · S. BAKARE' },
+  { key: 'tests_passed', met: true, blocking: true, sortOrder: 30,
+    title: '6 of 7 tests passed',
+    detail: 'Identity, assay, 4-aminophenol, loss on drying, sulphated ash, particle size',
+    waitingOn: null },
+  { key: 'sampling_recorded', met: true, blocking: false, sortOrder: 40,
+    title: 'Sampling recorded',
+    detail: 'SMP-26-0233 · 11 Oct 2026 · 6 of 20 containers', waitingOn: null },
+  { key: 'supplier_approved', met: true, blocking: false, sortOrder: 50,
+    title: 'Supplier approved',
+    detail: 'Kemchem Pharma · qualified to 30 Jun 2027', waitingOn: null },
+  { key: 'within_dating', met: true, blocking: false, sortOrder: 60,
+    title: 'Within expiry and retest',
+    detail: 'Retest 09 Oct 2028 · expiry 11 Sep 2029', waitingOn: null },
+  { key: 'qa_release_role', met: true, blocking: true, sortOrder: 70,
+    title: 'You hold the QA release role',
+    detail: 'Head of Quality · release needs your signature (D2.7)', waitingOn: null },
+];
+
+//  What each condition reads as once it passes. In the real screen
+//  these come from material_lot_release_conditions, which words a met
+//  condition differently from a blocking one.
+const MET_TITLES: Record<string, string> = {
+  certificate_verified: 'Supplier certificate verified',
+  tests_complete: '7 required tests performed',
+};
+const MET_DETAILS: Record<string, string> = {
+  certificate_verified: '1 certificate checked against the internal specification.',
+  tests_complete: 'Every test the specification requires has a result.',
+};
+
+const label = {
+  fontFamily: 'var(--nv-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+  textTransform: 'uppercase' as const, color: 'var(--nv-light-text-tertiary)',
+};
+
+const materials = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <QuarantineBanner since="10 Oct 2026 · 2 days" nextStep="QC records sampling, then tests." />
+
+    {/*  The two badges side by side. The design's NOT DONE IF is that
+        they must be distinct in greyscale too, so this pairing is the
+        thing to look at. */}
+    <div>
+      <p style={label}>Quarantine must not read as On hold</p>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <StateBadge state="quarantine">Quarantined</StateBadge>
+        <StateBadge state="on_hold">On hold</StateBadge>
+        <StateBadge state="pending">Under test</StateBadge>
+        <StateBadge state="released">Released</StateBadge>
+        <StateBadge state="rejected">Rejected</StateBadge>
+      </div>
+    </div>
+
+    <div>
+      <p style={label}>MT-06 · blocked, every condition shown before the attempt</p>
+      <ReleaseReadinessCard readiness={summarise(MT06)} onAct={() => {}} />
+    </div>
+
+    {/*  The met variant uses the titles the database returns once a
+        condition passes, not the blocked titles with a tick: "Supplier
+        certificate verified", not "Supplier certificate not verified
+        · MET". */}
+    <div>
+      <p style={label}>MT-07 · all conditions met</p>
+      <ReleaseReadinessCard
+        readiness={summarise(MT06.map((c) => ({
+          ...c, met: true, waitingOn: null,
+          title: MET_TITLES[c.key] ?? c.title,
+          detail: MET_DETAILS[c.key] ?? c.detail,
+        })))}
+        onAct={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>Readiness gap that does not stop release</p>
+      <ReleaseReadinessCard
+        readiness={summarise(MT06.map((c) => ({
+          ...c,
+          met: c.key !== 'sampling_recorded',
+          waitingOn: c.key === 'sampling_recorded' ? 'WAITING ON QC' : null,
+          title: c.key === 'sampling_recorded' ? 'No sampling record'
+            : MET_TITLES[c.key] ?? c.title,
+          detail: c.key === 'sampling_recorded'
+            ? 'Results have no recorded sampling behind them. Record how the lot was sampled.'
+            : MET_DETAILS[c.key] ?? c.detail,
+        })))}
+        onAct={() => {}} />
+    </div>
+  </div>
+);
+
+const page = screen === 'materials' ? materials
+  : screen === 'roles' ? roles
   : screen === 'access' ? access
   : screen === 'tracks' ? tracks : screen === 'banners' ? banners
   : screen === 'products'
@@ -341,5 +452,5 @@ const page = screen === 'roles' ? roles
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );

@@ -450,6 +450,18 @@
   --nv-light-state-overdue-border: #c62f1e;
   --nv-light-state-rejected-bg:    #c62f1e;
   --nv-light-state-rejected-text:  #ffffff;
+  /*  W4·15 · quarantine. Bound from badge/state State=quarantine
+      (node 119:1503) and the quarantine banner (124:770). It is the
+      ONE state drawn as a solid fill rather than a tint, because it is
+      the one state that stops work rather than delaying it — see
+      StateBadge for the greyscale reasoning. The banner's inner tile
+      and its body text are the two lighter navies beside it. */
+  --nv-light-state-quarantine-bg:    #183470;
+  --nv-light-state-quarantine-text:  #ffffff;
+  --nv-light-state-quarantine-tile:  #2a4a8c;
+  --nv-light-state-quarantine-body:  #d5dbea;
+  --nv-light-state-quarantine-meta:  #aeb9d3;
+
   --nv-light-state-hold-bg:        #e6e8ec;
   --nv-light-state-hold-text:      #183470;
   --nv-light-state-hold-border:    #7f8eae;
