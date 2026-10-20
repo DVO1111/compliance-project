@@ -466,6 +466,37 @@
   --nv-light-state-hold-text:      #183470;
   --nv-light-state-hold-border:    #7f8eae;
 
+  /*  W4·19 · the weight zones. Three pairs, not five: 2U and 2L share
+      a treatment and so do 3U and 3L, because the direction is carried
+      by the arrows and not by the colour — "zones distinguishable in
+      greyscale: 1 = light circle; 2U/2L = outlined square with one
+      arrow up/down; 3U/3L = dark solid square with two arrows. Colour
+      is secondary."
+
+      Zone 1 and zone 2 reuse the done and waiting badge families, as
+      the design file does. ZONE 3 IS ITS OWN VALUE: #7a1a10, which is
+      NOT --nv-light-state-rejected-bg (#c62f1e). That looks like a
+      drift to fix and is not. A zone 3 chip is 28 px tall with white
+      12 px type and two arrows inside it; at that size the brighter
+      red loses the arrows, and the arrows are what makes the chip
+      legible in greyscale. Literal in the design file too (the chips
+      bind no variable), so it is bound once here rather than inlined
+      at each of the four places a chip is drawn. */
+  --nv-light-zone-1-bg:      #e6f3ea;
+  --nv-light-zone-1-border:  #117a47;
+  --nv-light-zone-1-text:    #117a47;
+  --nv-light-zone-2-bg:      #fcf0e5;
+  --nv-light-zone-2-border:  #a35a20;
+  --nv-light-zone-2-text:    #a35a20;
+  --nv-light-zone-3-bg:      #7a1a10;
+  --nv-light-zone-3-border:  #7a1a10;
+  --nv-light-zone-3-text:    #ffffff;
+  /*  A zone the product has no limits for. Not a sixth zone: the
+      absence of one, and drawn as such rather than as a quiet zone 1. */
+  --nv-light-zone-none-bg:     #f4f1eb;
+  --nv-light-zone-none-border: #d4d4d5;
+  --nv-light-zone-none-text:   #6e6e73;
+
   /* ── Navy: type, per the design and the mobile adaptation rules ──
       title    Bricolage 32/38 desktop, 24/30 mobile
       body     Sora 15/22 desktop, 14/20 mobile

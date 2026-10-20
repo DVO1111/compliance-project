@@ -23,6 +23,13 @@ import SignOffPair from '../../src/components/Batch/SignOffPair';
 import CorrectionRecord from '../../src/components/Batch/CorrectionRecord';
 import FloorNotice from '../../src/components/Floor/FloorNotice';
 import ApprovedLotPicker from '../../src/components/Floor/ApprovedLotPicker';
+import ZoneChip, { ZoneKeyCard } from '../../src/components/Inprocess/ZoneChip';
+import SampleDuePrompt from '../../src/components/Inprocess/SampleDuePrompt';
+import ReadingEntry from '../../src/components/Inprocess/ReadingEntry';
+import SupervisorDecision from '../../src/components/Inprocess/SupervisorDecision';
+import YieldAccountCard from '../../src/components/Yield/YieldAccountCard';
+import type { ZoneBand, ZoneOrNone } from '../../src/lib/inprocess/zones';
+import type { AccountLine } from '../../src/lib/yield/yieldAccount';
 
 //  RA-02's own track: a NAPAMS application paused by a compliance
 //  directive raised at Division review.
@@ -706,7 +713,245 @@ const floor = (
   </div>
 );
 
-const page = screen === 'floor' ? floor
+//  W4·19. The three things the section turns on, each where it can be
+//  looked at rather than reasoned about: the five zone glyphs side by
+//  side in one row (the greyscale rule either holds at 28 px or it
+//  does not), the live typing panel with the gauge under it, and the
+//  yield account with its two different percentages.
+const BANDS: ZoneBand[] = [
+  { zone: '3L', action: 'resample', lowerBound: null, upperBound: 575,
+    lowerInclusive: false, upperInclusive: false, boundText: 'below 575 mg', sortOrder: 1 },
+  { zone: '2L', action: 'adjust', lowerBound: 575, upperBound: 590,
+    lowerInclusive: true, upperInclusive: false, boundText: '575 – 590 mg', sortOrder: 2 },
+  { zone: '1', action: 'accept', lowerBound: 590, upperBound: 620,
+    lowerInclusive: true, upperInclusive: true, boundText: '590 – 620 mg', sortOrder: 3 },
+  { zone: '2U', action: 'adjust', lowerBound: 620, upperBound: 635,
+    lowerInclusive: false, upperInclusive: true, boundText: '620 – 635 mg', sortOrder: 4 },
+  { zone: '3U', action: 'resample', lowerBound: 635, upperBound: null,
+    lowerInclusive: false, upperInclusive: false, boundText: 'above 635 mg', sortOrder: 5 },
+];
+
+const RECORDED = [
+  604, 611, 598, 607, 615, 602, 623, 609, 600, 612, 596, 618,
+].map((v, i) => ({
+  readingId: `r${i}`, sequenceNo: i + 1, value: v,
+  zone: (v > 635 ? '3U' : v > 620 ? '2U' : v >= 590 ? '1' : v >= 575 ? '2L' : '3L') as ZoneOrNone,
+}));
+
+const inprocess = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={label}>
+        The five zones at 28 px. Squint, or print this in black and white: circle · one
+        arrow up · one arrow down · two arrows up · two arrows down · no limits
+      </p>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
+                    padding: 14, borderRadius: 10, background: 'var(--nv-light-surface)',
+                    border: '1px solid var(--nv-light-border)' }}>
+        {(['1', '2U', '2L', '3U', '3L', 'none'] as ZoneOrNone[]).map((z) => (
+          <ZoneChip key={z} zone={z} />
+        ))}
+        <span style={{ width: 20 }} />
+        {(['1', '2U', '3L', 'none'] as ZoneOrNone[]).map((z) => (
+          <ZoneChip key={`f-${z}`} zone={z} size="focus" />
+        ))}
+      </div>
+    </div>
+
+    <div>
+      <p style={label}>IP-01 · the sample due prompt — the largest thing on the screen</p>
+      <SampleDuePrompt
+        headline="Weight check #14 · take 20 tablets from the press"
+        prompt={{ minutesOverdue: 2, intervalMinutes: 30, dueAt: '10:30',
+                  parameter: 'Tablet mass', checkNumber: 14,
+                  alsoChecking: ['Hardness', 'Thickness'] }}
+        onTakeSample={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>… and the same band while it is still counting down</p>
+      <SampleDuePrompt
+        headline="Weight check #15 · take 20 tablets from the press"
+        prompt={{ minutesOverdue: -22, intervalMinutes: 30, dueAt: '11:00',
+                  parameter: 'Tablet mass', checkNumber: 15, alsoChecking: [] }}
+        onTakeSample={() => {}} />
+    </div>
+
+    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 420px', minWidth: 300 }}>
+        <p style={label}>IP-02 / IP-03 · the zone shown as the value is typed, keypad active</p>
+        <ReadingEntry
+          parameter="Weight check #14"
+          unit="mg"
+          subtitle="20 tablets · target 605 mg · limits per this product's master formula"
+          requiredCount={20}
+          recorded={RECORDED}
+          text="627" value={627} zone="2U" zoneAction="adjust"
+          actionDetail="Adjust · reduce fill depth"
+          bands={BANDS}
+          conditions={[{ key: 'weight_zone_2u', severity: 'flagged',
+            title: 'Zone 2U — above the warning limit',
+            detail: '627 mg. This product’s configured response is to adjust.',
+            continueWith: 'Saving the reading and adjusting the machine before the next '
+              + 'sample.',
+            sortOrder: 22 }]}
+          needsAcknowledgement={false} acknowledged={false} onAcknowledge={() => {}}
+          onKey={() => {}} onSave={() => {}} onSaveAndEscalate={() => {}}
+          onCorrect={() => {}}
+          alsoInCheck={[
+            { key: 'h', parameter: 'Hardness', detail: 'after weights · 10 tablets' },
+            { key: 't', parameter: 'Thickness', detail: 'after weights · 10 tablets' },
+          ]} />
+      </div>
+
+      <div style={{ flex: '1 1 420px', minWidth: 300 }}>
+        <p style={label}>
+          IP-05 · a product attribute flagged, beside the machine-setting STOP as a
+          proposal. The live gate cannot produce the red one — the migration asserts it.
+        </p>
+        <ReadingEntry
+          parameter="Compression force"
+          unit="kN"
+          subtitle="Critical machine setting · 10 – 14 kN · set at the start of the stage"
+          requiredCount={1}
+          recorded={[]}
+          text="20" value={20} zone="none" zoneAction={null} actionDetail={null}
+          bands={[]}
+          conditions={[{ key: 'critical_machine_setting', severity: 'flagged',
+            title: 'Compression force is a critical machine setting',
+            detail: 'Whether a critical machine setting outside specification should stop '
+              + 'the stage is still being decided. Today it is flagged like any other '
+              + 'reading and nothing is stopped.',
+            continueWith: 'Saving the reading and escalating to a supervisor. No equipment '
+              + 'is interlocked.',
+            sortOrder: 30 }]}
+          proposal={{
+            condition: { key: 'proposed_interlock', severity: 'blocked',
+              title: 'Compression force is outside its critical range',
+              detail: '20 kN recorded against 10 to 14 kN. Under the proposed interlock the '
+                + 'stage would stop here until a supervisor released it.',
+              continueWith: null, sortOrder: 1 },
+            note: 'This is the interlock path from W4·19 decision 2. It is NOT built: '
+              + 'inprocess_reading_conditions() has no branch that returns a blocked '
+              + 'severity, and a deploy assertion fails if one is added. Damilola and '
+              + 'Aderoh decide whether it exists.' }}
+          needsAcknowledgement acknowledged={false} onAcknowledge={() => {}}
+          onKey={() => {}} onSave={() => {}} onSaveAndEscalate={() => {}}
+          onCorrect={() => {}} />
+      </div>
+    </div>
+
+    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 380px', minWidth: 280 }}>
+        <p style={label}>IP-01 · the zone key for the product, worst case at the top</p>
+        <ZoneKeyCard bands={[...BANDS].reverse().map((b) => ({
+          zone: b.zone as ZoneOrNone, boundText: b.boundText,
+          actionText: b.zone.startsWith('3')
+            ? 'Resample; reject since last good check if repeated'
+            : b.zone === '1' ? 'Accept'
+            : b.zone === '2U' ? 'Adjust: reduce fill depth' : 'Adjust: increase fill depth',
+        }))} />
+      </div>
+      <div style={{ flex: '1 1 380px', minWidth: 280 }}>
+        <p style={label}>… and for a product nobody has configured limits for</p>
+        <ZoneKeyCard bands={[]} />
+      </div>
+    </div>
+
+    <div>
+      <p style={label}>IP-04 · the supervisor's decision — recorded, and no deviation raised</p>
+      <SupervisorDecision
+        reading={{ parameter: 'Tablet mass', value: 641, unit: 'mg', sequenceNo: 13,
+                   zone: '3U', inSpecification: false,
+                   recordedBy: 'Musa Bello', recordedAt: '10:34' }}
+        raisedBy="Musa Bello"
+        raisedNote="Third sample running high since the hopper was topped up."
+        canDecide
+        onDecide={() => {}}
+        onRaiseDeviation={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>… and the same panel for the person who raised it: no controls, a reason</p>
+      <SupervisorDecision
+        reading={{ parameter: 'Tablet mass', value: 641, unit: 'mg', sequenceNo: 13,
+                   zone: '3U', inSpecification: false,
+                   recordedBy: 'Musa Bello', recordedAt: '10:34' }}
+        raisedBy="Musa Bello"
+        raisedNote={null}
+        canDecide={false}
+        onDecide={() => {}} />
+    </div>
+  </div>
+);
+
+//  W4·19 · YR-01. The two percentages are the thing to look at: 96.5 %
+//  is packed over theoretical and the threshold blocks on it; 2.4 % is
+//  material nobody can locate. They are not the same number.
+const YIELD_LINES: AccountLine[] = [
+  { key: 'theoretical', label: 'Theoretical yield', quantity: 300000, unit: 'tablets',
+    pctOfTheoretical: 100, kind: 'theoretical', mustExplain: false, sortOrder: 1 },
+  { key: 'packed', label: 'Packed, released to store', quantity: 289440, unit: 'tablets',
+    pctOfTheoretical: 96.48, kind: 'counted', mustExplain: false, sortOrder: 2 },
+  { key: 'samples', label: 'In-process and QC samples', quantity: 1260, unit: 'tablets',
+    pctOfTheoretical: 0.42, kind: 'counted', mustExplain: false, sortOrder: 3 },
+  { key: 'rejects', label: 'Counted rejects', quantity: 2100, unit: 'tablets',
+    pctOfTheoretical: 0.7, kind: 'counted', mustExplain: false, sortOrder: 4 },
+  { key: 'accounted', label: 'Accounted for', quantity: 292800, unit: 'tablets',
+    pctOfTheoretical: 97.6, kind: 'derived', mustExplain: false, sortOrder: 5 },
+  { key: 'unaccounted', label: 'Unaccounted', quantity: 7200, unit: 'tablets',
+    pctOfTheoretical: 2.4, kind: 'derived', mustExplain: false, sortOrder: 6 },
+];
+
+const yieldScreen = (
+  <div style={{ background: 'var(--nv-light-ground)', padding: 24, borderRadius: 16,
+                display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div>
+      <p style={label}>YR-01 · the variance blocks stage completion</p>
+      <YieldAccountCard
+        stageName="Packing" stageSequence={7}
+        lines={YIELD_LINES}
+        verdict={{ yieldPct: 96.48, variancePct: -3.52, thresholdPct: 2,
+                   withinThreshold: false, investigationRequired: false,
+                   authorised: false }}
+        window={{ lower: 98, upper: 101 }}
+        onFlagInvestigation={() => {}} onRecount={() => {}} onComplete={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>… once investigated and authorised: the variance stays on the record</p>
+      <YieldAccountCard
+        stageName="Packing" stageSequence={7}
+        lines={YIELD_LINES}
+        verdict={{ yieldPct: 96.48, variancePct: -3.52, thresholdPct: 2,
+                   withinThreshold: false, investigationRequired: true, authorised: true }}
+        window={{ lower: 98, upper: 101 }}
+        onFlagInvestigation={() => {}} onRecount={() => {}} onComplete={() => {}} />
+    </div>
+
+    <div>
+      <p style={label}>
+        … and a reconciliation recorded as a single figure: the lines nobody counted are
+        blank, and the yield is unaffected
+      </p>
+      <YieldAccountCard
+        stageName="Granulation" stageSequence={3}
+        lines={YIELD_LINES.map((l) =>
+          ['samples', 'rejects', 'accounted', 'unaccounted'].includes(l.key)
+            ? { ...l, quantity: null, pctOfTheoretical: null } : l)}
+        verdict={{ yieldPct: 99.2, variancePct: -0.8, thresholdPct: 2,
+                   withinThreshold: true, investigationRequired: false,
+                   authorised: false }}
+        window={{ lower: 98, upper: 102 }}
+        onFlagInvestigation={() => {}} onRecount={() => {}} onComplete={() => {}} />
+    </div>
+  </div>
+);
+
+const page = screen === 'inprocess' ? inprocess
+  : screen === 'yield' ? yieldScreen
+  : screen === 'floor' ? floor
   : screen === 'batch' ? batch
   : screen === 'formula' ? formula
   : screen === 'materials' ? materials
@@ -718,5 +963,5 @@ const page = screen === 'floor' ? floor
     : <FirstRunDashboard companyId="c1" userId="u1" onAddProduct={() => {}} onImportSpreadsheet={() => {}} onOpenRow={() => {}} />;
 
 createRoot(document.getElementById('root')!).render(
-  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
+  <MainLayout currentPage={(['banners','tracks','access','roles','materials','formula','batch','floor','inprocess','yield'].includes(screen) ? 'dashboard' : screen) as any} onNavigate={() => {}}>{page}</MainLayout>,
 );
