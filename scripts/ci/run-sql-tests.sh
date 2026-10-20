@@ -7,8 +7,21 @@
 #  passes on a developer's machine and not in CI is worth less than one
 #  that runs the same way in both. Point it at any disposable database.
 #
-#      PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres \
-#        scripts/ci/run-sql-tests.sh
+#      PGHOST=127.0.0.1 PGUSER=postgres scripts/ci/run-sql-tests.sh
+#
+#  IT HAS TO BE PORT 5432, AND THAT IS NOT A PREFERENCE.
+#  --------------------------------------------------
+#  dispensing_test.sql and inprocess_control_test.sql use dblink to
+#  open a SECOND connection to the same database, and they build its
+#  connection string from the defaults rather than from PGPORT. Point
+#  this script at a server on any other port and those two suites fail
+#  with what looks like a dropped connection — not a configuration
+#  error — which is how they can go unrun for weeks while the summary
+#  still prints a total.
+#
+#  This header used to carry PGPORT=55432 as its example, which is the
+#  one thing that does not work. If you need another port, teach those
+#  two suites to pass PGPORT into their dblink string first.
 #
 #  WHY THE DATABASE IS CALLED criateur_local
 #  -----------------------------------------

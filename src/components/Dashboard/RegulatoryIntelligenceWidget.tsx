@@ -19,7 +19,12 @@ import { useJurisdictionStore } from '../../stores/jurisdictionStore';
 import type { Jurisdiction } from '../../lib/rules/types';
 
 type CircularRow = Database['public']['Tables']['regulatory_circulars']['Row'];
-type Circular = CircularRow & { document_type?: string; topics?: string[] };
+//  No widening any more. document_type and topics are real columns on
+//  regulatory_circulars; they were added here only because the
+//  hand-maintained database.types.ts predated them, and the optional
+//  `?: string` conflicted with the column's own `string | null` the
+//  moment the types were regenerated.
+type Circular = CircularRow;
 
 const PRODUCT_CATEGORIES = ['Drugs', 'Medical Devices', 'Cosmetics', 'Food & Supplements', 'Biologics', 'OTC Products'] as const;
 type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
