@@ -119,7 +119,7 @@ export function formatQuantity(q: number | null, unit: string): string {
   //  leaving a column of bare numbers above a column of bare units.
   //  With this, the only place a figure can break is the "·" in the
   //  unaccounted line, which is where a break makes sense.
-  return `${n} ${unit}`;
+  return `${n}\u00a0${unit}`;
 }
 
 /** Percentages to one decimal place, as the design shows them

@@ -36,7 +36,7 @@ import { summarise, type ReleaseCondition, type Readiness } from './releaseReadi
  * below are declared rather than inferred, so a renamed column still
  * breaks the screens that read it.
  */
-async function db(): Promise<any> {
+async function db() {
   const { supabase } = await import('../supabase');
   return supabase;
 }
@@ -205,9 +205,9 @@ export async function recordSampling(params: {
       p_lot_id: params.lotId,
       p_containers_sampled: params.containersSampled,
       p_containers_total: params.containersTotal,
-      p_sampling_plan: params.samplingPlan ?? null,
-      p_sampled_on: params.sampledOn ?? null,
-      p_note: params.note ?? null,
+      p_sampling_plan: params.samplingPlan ?? undefined,
+      p_sampled_on: params.sampledOn ?? undefined,
+      p_note: params.note ?? undefined,
     });
     if (error) return fail('recordSampling', error);
     return { ok: true, data: data as SamplingRow };
@@ -225,11 +225,11 @@ export async function recordTestResult(params: {
     const { data, error } = await supabase.rpc('material_test_record_result', {
       p_lot_id: params.lotId,
       p_test_def_id: params.testDefinitionId,
-      p_actual_value: params.actualValue ?? null,
-      p_actual_text: params.actualText ?? null,
-      p_test_date: params.testDate ?? null,
-      p_method: params.method ?? null,
-      p_instrument: params.instrument ?? null,
+      p_actual_value: params.actualValue ?? undefined,
+      p_actual_text: params.actualText ?? undefined,
+      p_test_date: params.testDate ?? undefined,
+      p_method: params.method ?? undefined,
+      p_instrument: params.instrument ?? undefined,
     });
     if (error) return fail('recordTestResult', error);
     return { ok: true, data };
@@ -280,9 +280,9 @@ export async function signAndRelease(params: {
       p_lot_id: params.lotId,
       p_signature_id: signed.signatureId,
       p_release_type: params.releaseType ?? 'full',
-      p_justification: params.justification ?? null,
-      p_authorised_by: params.authorisedBy ?? null,
-      p_comment: params.comment ?? null,
+      p_justification: params.justification ?? undefined,
+      p_authorised_by: params.authorisedBy ?? undefined,
+      p_comment: params.comment ?? undefined,
     });
     if (error) return fail('signAndRelease', error);
     return { ok: true, data };
@@ -326,7 +326,7 @@ export async function signAndReject(params: {
       p_lot_id: params.lotId,
       p_disposition: params.disposition,
       p_reason: params.reason,
-      p_note: params.note ?? null,
+      p_note: params.note ?? undefined,
       p_signature_id: signed.signatureId,
     });
     if (error) return fail('signAndReject', error);

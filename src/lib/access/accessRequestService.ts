@@ -45,7 +45,7 @@ import type {
  * Regenerating the types removes the need for this. Until then, the
  * SQL suite is what holds the shapes honest.
  */
-async function db(): Promise<any> {
+async function db() {
   const { supabase } = await import('../supabase');
   return supabase;
 }
@@ -255,7 +255,14 @@ export async function raiseRequest(params: {
       p_section_key: request.section,
       p_level: request.level,
       p_scope: request.scope,
-      p_until: request.until,
+      //  `access_request_raise` gives p_until no DEFAULT, so the
+      //  generated types call it `string` — the generator has no way
+      //  to say "required, and may be NULL". The SQL parameter is
+      //  plain `date` and an open-ended request passes NULL for it,
+      //  which is the commonest case. The cast says that, rather than
+      //  inventing a date or an empty string the function would then
+      //  have to parse.
+      p_until: request.until as unknown as string,
       p_reason: request.reason,
       p_work_role: workRole,
     });
@@ -273,15 +280,23 @@ export async function decide(
   //  The Decision union the UI carries and the three words the function
   //  takes are mapped here, in one place. The UI's names describe what
   //  the admin chose; the function's describe what it does.
+  //  `undefined`, not `null`. access_decide gives p_level, p_scope,
+  //  p_until and p_note DEFAULT NULL; PostgREST omits an undefined key
+  //  so the default applies, and sends an explicit null for a null —
+  //  which for these four happens to be the same value, and for a
+  //  parameter with a real default (material_lot_record_sampling's
+  //  p_sampled_on DEFAULT current_date) is not.
   const args = decision.kind === 'decline'
-    ? { p_decision: 'decline', p_level: null, p_scope: null, p_until: null, p_note: decision.reason }
+    ? { p_decision: 'decline', p_level: undefined, p_scope: undefined,
+        p_until: undefined, p_note: decision.reason }
     : decision.kind === 'grant_as_asked'
-      ? { p_decision: 'grant', p_level: null, p_scope: null, p_until: null, p_note: null }
+      ? { p_decision: 'grant', p_level: undefined, p_scope: undefined,
+          p_until: undefined, p_note: undefined }
       : {
         p_decision: 'narrow',
         p_level: decision.level,
         p_scope: decision.scope,
-        p_until: decision.until,
+        p_until: decision.until ?? undefined,
         p_note: decision.note,
       };
 

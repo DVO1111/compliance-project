@@ -157,7 +157,6 @@ export default function ReadingEntry(p: ReadingEntryProps) {
           is a column an operator has to classify in their head. */}
       <section style={{ ...grid, ...(phone ? gridPhone : null) }}
                aria-label={`${p.parameter} recorded so far`}>
-        {/* eslint-disable-next-line no-nested-ternary */}
         {p.recorded.length === 0 ? (
           <p style={gridEmpty}>Nothing recorded yet for this check.</p>
         ) : p.recorded.map((r) => (
