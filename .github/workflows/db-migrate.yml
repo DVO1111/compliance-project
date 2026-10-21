@@ -56,6 +56,12 @@ jobs:
     # this job names it so the gate has somewhere to attach.
     environment: production-database
 
+    # Lifted to the job so step-level `if:` can test it. The secrets
+    # context is not available in `if`, but the env context is, which is
+    # the only way to skip a step when a secret has not been set.
+    env:
+      DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -84,13 +90,176 @@ jobs:
       # What the database believes it has. Read this before anything
       # else: it is the table that decides what a push will attempt, and
       # the dry run below is only meaningful beside it.
+      #
+      # `supabase migration list` prints one row per LOCAL file — about
+      # 190 lines — with the answer in a middle column that is mostly
+      # blank. So this filters its own output rather than asking the
+      # database separately: the CLI is already authenticated by the
+      # link above, which means this step needs no connection string and
+      # works with only the access token and database password set.
       - name: Migration history, as the database records it
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase migration list --linked
+        run: |
+          supabase migration list --linked > /tmp/ml.txt 2>&1 || true
+          # Columns are `Local` | `Remote` | `Time`, backtick-quoted.
+          awk -F'|' '$2 ~ /[0-9]/ {gsub(/[` ]/,"",$2); print $2}' /tmp/ml.txt \
+            | sort -u > /tmp/remote.txt
+          awk -F'|' '$1 ~ /[0-9]/ && $2 !~ /[0-9]/ {gsub(/[` ]/,"",$1); print $1}' /tmp/ml.txt \
+            | sort -u > /tmp/localonly.txt
+          echo "RECORDED REMOTE: $(wc -l < /tmp/remote.txt) versions"
+          echo "LOCAL ONLY (no remote record): $(wc -l < /tmp/localonly.txt) files"
+          echo
+          echo "--- every version the remote records, oldest first:"
+          tr '\n' ' ' < /tmp/remote.txt; echo
+          echo
+          echo "--- local files with no remote record, oldest first:"
+          tr '\n' ' ' < /tmp/localonly.txt; echo
 
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      # FINDS THE HOST INSTEAD OF ASKING SOMEBODY TO LOOK IT UP.
+      #
+      # The dashboard has moved the connection string more than once —
+      # it is behind the "Connect" button now, not under Settings ->
+      # Database — so a secret whose value a person has to go and find
+      # is a standing tax on every future run. The access token already
+      # set for the link step can ask the Management API for the project,
+      # which returns its direct host and its region, and the pooler
+      # hostname is derivable from the region.
+      #
+      # Both forms are tried because which one answers depends on the
+      # project's age: direct connections are IPv6-only on projects
+      # created after early 2024 unless they carry the IPv4 add-on, and
+      # a GitHub runner cannot reach IPv6. The pooler always has IPv4.
+      # The user differs between them — `postgres` direct, but
+      # `postgres.<ref>` through the pooler — which is a mismatch that
+      # otherwise presents as an authentication failure rather than as a
+      # wrong hostname.
+      #
+      # SUPABASE_DB_HOST still wins when it is set, so nothing here
+      # overrides a host somebody has deliberately pinned.
+      - name: Find the database host
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGCONNECT_TIMEOUT: '10'
+        run: |
+          set -u
+          candidates=""
+          if [ -n "${DB_HOST:-}" ]; then
+            echo "SUPABASE_DB_HOST is set; trying it first."
+            candidates="postgres.$REF@$DB_HOST"
+          fi
+
+          meta=$(curl -sS --max-time 20 \
+                   -H "Authorization: Bearer $TOKEN" \
+                   "https://api.supabase.com/v1/projects/$REF" || echo '')
+          direct=$(printf '%s' "$meta" | python3 -c \
+            'import sys,json;d=json.load(sys.stdin);print((d.get("database") or {}).get("host") or "")' \
+            2>/dev/null || true)
+          region=$(printf '%s' "$meta" | python3 -c \
+            'import sys,json;print(json.load(sys.stdin).get("region") or "")' \
+            2>/dev/null || true)
+          if [ -z "$direct" ] && [ -z "$region" ]; then
+            echo "::warning::The Management API returned nothing usable for project $REF."
+            echo "Either the access token lacks project read scope, or the ref is wrong."
+          else
+            echo "Management API says: region=${region:-unknown}"
+          fi
+
+          [ -n "$direct" ] && candidates="$candidates postgres@$direct"
+          for p in aws-0 aws-1; do
+            [ -n "$region" ] && candidates="$candidates postgres.$REF@$p-$region.pooler.supabase.com"
+          done
+
+          found=''
+          for c in $candidates; do
+            host=${c#*@}
+            printf 'trying %s ... ' "$host"
+            if psql "postgresql://$c:5432/postgres" -Atc 'select 1' >/dev/null 2>&1; then
+              echo 'reachable'
+              found="$c"
+              break
+            fi
+            echo 'no'
+          done
+
+          if [ -z "$found" ]; then
+            echo "::warning::No database host answered, so the preflights are skipped."
+            echo "Tried: $candidates"
+            echo "Set SUPABASE_DB_HOST from the dashboard's Connect button ->"
+            echo "Session pooler -> the part between '@' and ':5432'."
+            exit 0
+          fi
+          echo "CONN=postgresql://$found:5432/postgres" >> "$GITHUB_ENV"
+
+      # Both preflights are read-only, so a dry run is the right place
+      # for them: they report the live state without changing it, and
+      # the push plan below is only interpretable beside them.
+      #
+      # SKIPPED RATHER THAN FAILED when no host answered. These need a
+      # connection string, which the CLI steps above do not. An earlier
+      # version built one from a secret that had not been set, producing
+      # `postgresql://postgres.***@:5432/...` — which psql reads as a
+      # local socket and reports as "is the server running locally?", a
+      # message that sends you looking somewhere the problem never was.
+      - name: Preflight — objects, and data against the new constraints
+        if: env.CONN != ''
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          # -At everywhere: aligned output pads every field, so a later
+          # `$4 == "applied"` compares against " applied " and silently
+          # never matches. That exact mistake produced an empty repair
+          # list on the first run against live.
+          echo '=== 02 OBJECTS'
+          psql "$CONN" -At -F'|' -f scripts/fix/02-pharma-preflight.sql > /tmp/p02.txt
+          echo "present: $(grep -c '|t$' /tmp/p02.txt)   absent: $(grep -c '|f$' /tmp/p02.txt)"
+          echo '--- absent:'
+          grep '|f$' /tmp/p02.txt | sed 's/^/  /' || echo '  none'
+
+          echo
+          echo '=== 03 DATA vs THE NEW CONSTRAINTS'
+          psql "$CONN" -At -F'|' -f scripts/fix/03-constraint-preflight.sql | sed 's/^/  /'
+
+          echo
+          echo '=== 04 MIGRATION EVIDENCE'
+          psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
+          echo '--- verdicts:'
+          awk -F'|' 'NF>=4{print $4}' /tmp/ev.txt | sort | uniq -c | sed 's/^/  /'
+          echo '--- NOT cleanly applied (stay out of the repair list):'
+          awk -F'|' 'NF>=5 && $4!="applied" {printf "  %s  %s/%s  %-30s %s\n",$1,$3,$2,$4,$5}' /tmp/ev.txt | head -60
+          echo '--- nothing probeable (need a human decision):'
+          awk -F'|' 'NF==3{printf "  %s  %s\n",$1,$3}' /tmp/ev.txt | head -50
+          echo '--- shared timestamps (one repair marks both files):'
+          grep 'SHARED TIMESTAMP' /tmp/ev.txt | sed 's/^/  /' || echo '  none'
+          echo
+          echo "--- repair commands, for the $(awk -F'|' 'NF>=5 && $4=="applied"' /tmp/ev.txt | sort -u -t'|' -k1,1 | wc -l) distinct versions that read applied:"
+          awk -F'|' 'NF>=5 && $4=="applied" {print $1}' /tmp/ev.txt | sort -u \
+            | while read v; do echo "supabase migration repair --status applied $v"; done
+
+      - name: Preflight skipped — no database host answered
+        if: env.CONN == ''
+        run: |
+          echo "::warning::No reachable database host, so the preflights were skipped."
+          echo "The step above lists what it tried. To pin one by hand, set"
+          echo "SUPABASE_DB_HOST from the dashboard's Connect button ->"
+          echo "Session pooler -> the part between '@' and ':5432'."
+          echo "The migration history above does not need it; the preflights do."
+
+      # `continue-on-error` because a refusal here is INFORMATION, not a
+      # fault. The CLI exits non-zero when it finds local files dated
+      # before the remote high-water mark — which is precisely the
+      # condition this project is in, and precisely what the run is for.
+      # Failing the job on it would hide the steps above.
       - name: Dry run — what a push WOULD apply
+        continue-on-error: true
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -108,12 +277,12 @@ jobs:
       # exactly the failure this repository has already been bitten by:
       # 20260921000000_licence_lifecycle was absent for weeks and
       # surfaced as "starter licences cannot be saved".
+      # Uses the CONN the discovery step established, so the host is
+      # never guessed at the end of an otherwise successful apply.
       - name: Verify — re-run the preflight against the project
         if: inputs.mode == 'apply'
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
-          psql "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@aws-0-${{ secrets.SUPABASE_REGION }}.pooler.supabase.com:5432/postgres" \
-            -f scripts/fix/02-pharma-preflight.sql
+          psql "$CONN" -f scripts/fix/02-pharma-preflight.sql
+          psql "$CONN" -f scripts/fix/03-constraint-preflight.sql
