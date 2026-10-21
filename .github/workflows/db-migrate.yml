@@ -214,18 +214,31 @@ jobs:
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          psql "$CONN" -f scripts/fix/02-pharma-preflight.sql
-          psql "$CONN" -f scripts/fix/03-constraint-preflight.sql
+          # -At everywhere: aligned output pads every field, so a later
+          # `$4 == "applied"` compares against " applied " and silently
+          # never matches. That exact mistake produced an empty repair
+          # list on the first run against live.
+          echo '=== 02 OBJECTS'
+          psql "$CONN" -At -F'|' -f scripts/fix/02-pharma-preflight.sql > /tmp/p02.txt
+          echo "present: $(grep -c '|t$' /tmp/p02.txt)   absent: $(grep -c '|f$' /tmp/p02.txt)"
+          echo '--- absent:'
+          grep '|f$' /tmp/p02.txt | sed 's/^/  /' || echo '  none'
+
           echo
-          echo '=== MIGRATION EVIDENCE — which migrations can safely be repaired'
-          psql "$CONN" -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
-          echo '--- verdict counts:'
-          awk -F'|' 'NF>=4{print $4}' /tmp/ev.txt | sort | uniq -c
+          echo '=== 03 DATA vs THE NEW CONSTRAINTS'
+          psql "$CONN" -At -F'|' -f scripts/fix/03-constraint-preflight.sql | sed 's/^/  /'
+
           echo
-          echo '--- anything NOT cleanly applied (these stay out of the repair list):'
-          grep -E 'PARTIAL|absent|nothing probeable' /tmp/ev.txt || echo '  none'
+          echo '=== 04 MIGRATION EVIDENCE'
+          psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
+          echo '--- verdicts:'
+          awk -F'|' 'NF>=4{print $4}' /tmp/ev.txt | sort | uniq -c | sed 's/^/  /'
+          echo '--- NOT cleanly applied (stay out of the repair list):'
+          awk -F'|' 'NF>=4 && $4!="applied" {printf "  %s  %s/%s  %s\n",$1,$3,$2,$4}' /tmp/ev.txt | head -60
+          echo '--- nothing probeable (need a human decision):'
+          awk -F'|' 'NF==3{printf "  %s  %s\n",$1,$3}' /tmp/ev.txt | head -50
           echo
-          echo '--- the repair command for every migration that reads applied:'
+          echo "--- repair commands, for the $(awk -F'|' 'NF>=4 && $4=="applied"' /tmp/ev.txt | wc -l) that read applied:"
           awk -F'|' 'NF>=4 && $4=="applied" {printf "supabase migration repair --status applied %s\n", $1}' /tmp/ev.txt
 
       - name: Preflight skipped — no database host answered
