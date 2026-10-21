@@ -141,6 +141,17 @@ jobs:
         run: |
           psql "$CONN" -f scripts/fix/02-pharma-preflight.sql
           psql "$CONN" -f scripts/fix/03-constraint-preflight.sql
+          echo
+          echo '=== MIGRATION EVIDENCE — which migrations can safely be repaired'
+          psql "$CONN" -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
+          echo '--- verdict counts:'
+          awk -F'|' 'NF>=4{print $4}' /tmp/ev.txt | sort | uniq -c
+          echo
+          echo '--- anything NOT cleanly applied (these stay out of the repair list):'
+          grep -E 'PARTIAL|absent|nothing probeable' /tmp/ev.txt || echo '  none'
+          echo
+          echo '--- the repair command for every migration that reads applied:'
+          awk -F'|' 'NF>=4 && $4=="applied" {printf "supabase migration repair --status applied %s\n", $1}' /tmp/ev.txt
 
       - name: Preflight skipped — SUPABASE_DB_HOST is not set
         if: env.DB_HOST == ''
