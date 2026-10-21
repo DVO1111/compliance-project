@@ -372,6 +372,24 @@ FROM nothing_probeable
 WHERE version IS NOT NULL
 ORDER BY version;
 
+-- TIMESTAMPS SHARED BY TWO FILES. supabase_migrations keys on the
+-- version alone, so one repair marks BOTH files and a later push skips
+-- both. Where the pair disagree, that is a gap the history cannot
+-- express, and renaming one of the files is the only real fix.
+WITH shared_timestamps(version, files) AS (
+  VALUES
+    ('20260226200000', '20260226200000_content_calendar.sql + 20260226200000_team_chat.sql'),
+    ('20260227100000', '20260227100000_fix_custom_roles_403.sql + 20260227100000_fix_dash_rpcs.sql'),
+    ('20260301000000', '20260301000000_calendar_deadline_reminders.sql + 20260301000000_update_activity_feed_limit.sql'),
+    ('20260305100000', '20260305100000_create_legal_partner_tables.sql + 20260305100000_policy_attestation_enhancements.sql'),
+    ('20260306180000', '20260306180000_governance_hardening.sql + 20260306180000_governance_jobs.sql'),
+    ('20260306190000', '20260306190000_ai_asset_inventory.sql + 20260306190000_retention_legal_hold.sql')
+)
+SELECT version, 'SHARED TIMESTAMP' AS verdict, files
+FROM shared_timestamps
+WHERE version IS NOT NULL
+ORDER BY version;
+
 -- WHAT TO DO WITH THE RESULT
 --
 -- Every 'applied' row is a candidate for:

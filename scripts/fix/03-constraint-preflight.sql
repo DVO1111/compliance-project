@@ -100,10 +100,19 @@ check_constraints(sort, label, tbl, col, conname, expr) AS (
 -- ── UNIQUE constraints ───────────────────────────────────────────────
 -- Counts the duplicate GROUPS, not the rows: two departments sharing a
 -- code is one collision to resolve.
-unique_constraints(sort, label, tbl, conname, cols) AS (
+-- NULLS MUST BE EXCLUDED, OR THE COUNT IS A LIE. A UNIQUE constraint
+-- treats NULLs as distinct, so ten departments with code IS NULL in one
+-- company satisfy it — while a plain GROUP BY counts them as one
+-- duplicate group. Run against live, the first version of this file
+-- reported 5 duplicate groups on a constraint it ALSO reported as
+-- already enforced, which cannot both be true: Postgres would not have
+-- allowed the rows in. The `enforced` column is what exposed it.
+-- nullfilter keeps the count to rows the constraint actually governs.
+unique_constraints(sort, label, tbl, conname, cols, nullfilter) AS (
   VALUES
     (10, '20261019 sites_and_department_codes: departments (company_id, code) duplicates',
-         'departments', 'departments_code_unique_per_company', 'company_id, code')
+         'departments', 'departments_code_unique_per_company', 'company_id, code',
+         'company_id IS NOT NULL AND code IS NOT NULL')
 ),
 
 -- ── FOREIGN KEY constraints ──────────────────────────────────────────
@@ -158,8 +167,8 @@ SELECT sort, label, enforced, violating FROM (
     CASE
       WHEN to_regclass('public.' || tbl) IS NULL THEN 'table absent'
       ELSE (xpath('/row/c/text()', query_to_xml(
-        format('SELECT count(*) AS c FROM (SELECT %s FROM public.%I GROUP BY %s HAVING count(*) > 1) d',
-               cols, tbl, cols),
+        format('SELECT count(*) AS c FROM (SELECT %s FROM public.%I WHERE %s GROUP BY %s HAVING count(*) > 1) d',
+               cols, tbl, nullfilter, cols),
         false, true, '')))[1]::text
     END
   FROM unique_constraints

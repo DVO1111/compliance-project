@@ -90,6 +90,22 @@ const files = readdirSync(MIGRATIONS)
   .sort()
   .filter((f) => f.slice(0, 14) < CUTOFF);
 
+// SIX TIMESTAMPS ARE SHARED BY TWO FILES EACH. supabase_migrations
+// keys on the version alone, so the history physically cannot
+// distinguish them: one `migration repair --status applied
+// 20260226200000` marks BOTH content_calendar and team_chat, and a
+// later push skips both. Where the two files disagree — team_chat is
+// pinned as not applying while content_calendar applies fine — that
+// is a gap the history can never express. Flagged in the output rather
+// than silently emitted as two identical repair commands, which is
+// what the first run against live printed.
+const byVersion = new Map();
+for (const f of files) {
+  const v = f.slice(0, 14);
+  byVersion.set(v, [...(byVersion.get(v) ?? []), f]);
+}
+const shared = [...byVersion.entries()].filter(([, fs]) => fs.length > 1);
+
 const rows = [];
 const nothing = [];
 for (const f of files) {
@@ -106,6 +122,9 @@ const lit = (s) => `'${String(s).replace(/'/g, "''")}'`;
 const values = rows
   .map(([v, f, k, i]) => `    (${lit(v)}, ${lit(f)}, ${lit(k)}, ${lit(i)})`)
   .join(',\n');
+const sharedValues = shared.length
+  ? shared.map(([v, fs]) => `    (${lit(v)}, ${lit(fs.join(' + '))})`).join(',\n')
+  : `    (NULL, NULL)`;
 const nothingValues = nothing.length
   ? nothing.map(([v, f]) => `    (${lit(v)}, ${lit(f)})`).join(',\n')
   : `    (NULL, NULL)`;
@@ -182,6 +201,19 @@ ${nothingValues}
 )
 SELECT version, 'nothing probeable' AS verdict, file
 FROM nothing_probeable
+WHERE version IS NOT NULL
+ORDER BY version;
+
+-- TIMESTAMPS SHARED BY TWO FILES. supabase_migrations keys on the
+-- version alone, so one repair marks BOTH files and a later push skips
+-- both. Where the pair disagree, that is a gap the history cannot
+-- express, and renaming one of the files is the only real fix.
+WITH shared_timestamps(version, files) AS (
+  VALUES
+${sharedValues}
+)
+SELECT version, 'SHARED TIMESTAMP' AS verdict, files
+FROM shared_timestamps
 WHERE version IS NOT NULL
 ORDER BY version;
 
