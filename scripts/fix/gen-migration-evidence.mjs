@@ -64,7 +64,19 @@ function decomment(sql) {
     .replace(/--[^\n]*/g, ' ');
 }
 
-/** Objects a migration creates, as [kind, identifier] pairs. */
+/** Objects a migration creates, as [kind, identifier] pairs.
+ *
+ * TABLES AND FUNCTIONS ARE NOT ENOUGH. Probing only those left 43 of
+ * 132 migrations unverifiable, because a migration that adds a column,
+ * writes a policy, builds an index or installs a trigger creates
+ * nothing a `to_regclass` can see — and "unverifiable" is the one
+ * verdict that cannot be acted on. Each of those IS visible in the
+ * catalogue, just in a different table, so they are extracted here too.
+ *
+ * What genuinely cannot be checked this way is a migration whose whole
+ * body is an UPDATE, an INSERT, a GRANT or a DROP. Those still report
+ * 'nothing probeable', and they need a human rather than a count.
+ */
 function objectsOf(sql) {
   const s = decomment(sql);
   const out = [];
@@ -81,6 +93,26 @@ function objectsOf(sql) {
   }
   for (const m of s.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(\w+)"?/gi)) {
     add('function', m[1]);
+  }
+  // A column, as table.column. Several ADD COLUMNs can share one ALTER.
+  for (const m of s.matchAll(/\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?:public\.)?"?(\w+)"?([\s\S]*?);/gi)) {
+    const tbl = m[1];
+    for (const c of m[2].matchAll(/\bADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?\s+(?!CONSTRAINT\b)[a-z]/gi)) {
+      if (!/^(constraint|primary|foreign|unique|check|column)$/i.test(c[1])) add('column', `${tbl}.${c[1]}`);
+    }
+    for (const c of m[2].matchAll(/\bADD\s+CONSTRAINT\s+"?(\w+)"?/gi)) add('constraint', c[1]);
+  }
+  for (const m of s.matchAll(/\bCREATE\s+POLICY\s+"?([^"\n]+?)"?\s+ON\s+(?:public\.)?"?(\w+)"?/gi)) {
+    add('policy', `${m[2]}:${m[1].trim()}`);
+  }
+  for (const m of s.matchAll(/\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?/gi)) {
+    add('index', m[1]);
+  }
+  for (const m of s.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER\s+"?(\w+)"?/gi)) {
+    add('trigger', m[1]);
+  }
+  for (const m of s.matchAll(/\bCREATE\s+TYPE\s+(?:public\.)?"?(\w+)"?/gi)) {
+    add('type', m[1]);
   }
   return out;
 }
@@ -175,20 +207,60 @@ found AS (
         SELECT 1 FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public' AND p.proname = e.ident)
+      WHEN 'column' THEN EXISTS (
+        SELECT 1 FROM information_schema.columns c
+        WHERE c.table_schema = 'public'
+          AND c.table_name  = split_part(e.ident, '.', 1)
+          AND c.column_name = split_part(e.ident, '.', 2))
+      WHEN 'policy' THEN EXISTS (
+        SELECT 1 FROM pg_policies pol
+        WHERE pol.schemaname = 'public'
+          AND pol.tablename  = split_part(e.ident, ':', 1)
+          AND lower(pol.policyname) = split_part(e.ident, ':', 2))
+      WHEN 'index' THEN EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'i' AND c.relname = e.ident)
+      WHEN 'trigger' THEN EXISTS (
+        SELECT 1 FROM pg_trigger t WHERE NOT t.tgisinternal AND t.tgname = e.ident)
+      WHEN 'type' THEN EXISTS (
+        SELECT 1 FROM pg_type ty
+        JOIN pg_namespace n ON n.oid = ty.typnamespace
+        WHERE n.nspname = 'public' AND ty.typname = e.ident)
+      WHEN 'constraint' THEN EXISTS (
+        SELECT 1 FROM pg_constraint co WHERE co.conname = e.ident)
       ELSE to_regclass('public.' || quote_ident(e.ident)) IS NOT NULL
     END AS present
   FROM expected e
 ),
+-- A MISSING POLICY IS WEAK EVIDENCE, SO IT DOES NOT DECIDE THE VERDICT.
+-- Row-level security policies are routinely dropped and recreated under
+-- new names by later hardening migrations, so a policy this migration
+-- created may legitimately be gone from a database that DID run it.
+-- Measured on the replica, every newly surfaced PARTIAL was policies
+-- and nothing else: 20260603100000 was missing four policies on
+-- batch_records and batch_qc_results while all ten of its tables and
+-- columns were present.
+--
+-- So the verdict is decided on the objects that persist — tables,
+-- views, functions, columns, indexes, triggers, types, constraints —
+-- and any policy shortfall is reported in its own column rather than
+-- downgrading the migration.
 rollup AS (
   SELECT version, file,
-         count(*) AS objects,
-         count(*) FILTER (WHERE present) AS present
+         count(*) FILTER (WHERE kind <> 'policy')                       AS hard,
+         count(*) FILTER (WHERE kind <> 'policy' AND present)           AS hard_present,
+         count(*) FILTER (WHERE kind =  'policy')                       AS pol,
+         count(*) FILTER (WHERE kind =  'policy' AND NOT present)       AS pol_missing
   FROM found GROUP BY version, file
 )
-SELECT version, objects, present,
-       CASE WHEN present = objects THEN 'applied'
-            WHEN present = 0       THEN 'absent'
+SELECT version, hard AS objects, hard_present AS present,
+       CASE WHEN hard = 0            THEN 'policies only - weak evidence'
+            WHEN hard_present = hard THEN 'applied'
+            WHEN hard_present = 0    THEN 'absent'
             ELSE 'PARTIAL' END AS verdict,
+       CASE WHEN pol = 0 THEN '' ELSE pol_missing || '/' || pol || ' policies missing' END
+         AS policies,
        file
 FROM rollup
 ORDER BY version;
