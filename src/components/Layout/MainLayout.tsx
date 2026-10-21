@@ -237,22 +237,40 @@ const CATEGORY_ORDER = [
  * which heading each surviving item sits under. A design that hides
  * working pages is a design that loses them.
  *
- * FOUR OF THE DESIGN'S ITEMS ARE NOT HERE: My tasks, Materials, Batch
- * Records and Products. No page exists for any of them yet. A nav item
- * pointing at nothing is worse than its absence — it looks like a
- * feature until you click it — so they arrive when their pages do.
+ * A PAGE THAT IS NOT IN THIS MAP LANDS UNDER "More", WHICH STARTS
+ * COLLAPSED. That is the whole behaviour, and it is easy to miss when
+ * adding a page: the route works, the item is in the list below, the
+ * `hidden` test passes — and the only way to reach it is to scroll to
+ * the bottom of the sidebar and expand a group. It reads as missing.
+ *
+ * That is exactly what happened to Materials, Instruments, In-Process
+ * Checks and Roles & Access. They were built, routed and listed, and
+ * none of them was in here, so all four sat collapsed under More while
+ * being reported as not existing. They are now placed above, in the
+ * order a batch moves through them.
+ *
+ * So: ADDING A PAGE MEANS ADDING IT HERE TOO, or deciding on purpose
+ * that it belongs under More. The earlier note said no page existed for
+ * Materials; one does now, and the note outlived it.
  */
 const ONB08_NAV: Record<string, { group: string; label?: string; order: number }> = {
   'dashboard':          { group: 'Overview', order: 1 },
 
-  'batch-release':      { group: 'Manufacturing & Quality', order: 1 },
-  'batch-execution':    { group: 'Manufacturing & Quality', order: 2 },
-  'deviations':         { group: 'Manufacturing & Quality', order: 3 },
-  'capa-management':    { group: 'Manufacturing & Quality', order: 4 },
-  'master-formulas':    { group: 'Manufacturing & Quality', order: 5 },
-  'change-control':     { group: 'Manufacturing & Quality', order: 3 },
-  'sop-library':        { group: 'Manufacturing & Quality', order: 4 },
-  'gmp-inspection':     { group: 'Manufacturing & Quality', order: 5 },
+  //  In the order a batch actually moves: the materials arrive and are
+  //  released, the line and its instruments are fit to run, the batch
+  //  runs and is checked while it runs, then QA releases it. Anything
+  //  that went wrong on the way is a deviation.
+  'materials':          { group: 'Manufacturing & Quality', order: 1 },
+  'instruments':        { group: 'Manufacturing & Quality', order: 2 },
+  'master-formulas':    { group: 'Manufacturing & Quality', order: 3 },
+  'batch-execution':    { group: 'Manufacturing & Quality', order: 4 },
+  'in-process':         { group: 'Manufacturing & Quality', order: 5 },
+  'batch-release':      { group: 'Manufacturing & Quality', order: 6 },
+  'deviations':         { group: 'Manufacturing & Quality', order: 7 },
+  'capa-management':    { group: 'Manufacturing & Quality', order: 8 },
+  'change-control':     { group: 'Manufacturing & Quality', order: 9 },
+  'sop-library':        { group: 'Manufacturing & Quality', order: 10 },
+  'gmp-inspection':     { group: 'Manufacturing & Quality', order: 11 },
 
   //  The design's Regulatory group holds Products and Registrations &
   //  Licences, and nothing else. Licence Vault is a real page but it is
@@ -265,6 +283,11 @@ const ONB08_NAV: Record<string, { group: string; label?: string; order: number }
   'obligations':        { group: 'Governance', order: 1 },
   'risk-register':      { group: 'Governance', order: 2 },
   'policies':           { group: 'Governance', order: 3 },
+  //  W2·0. Who may act where, and the requests waiting on somebody.
+  //  Governance rather than Manufacturing & Quality because every
+  //  workspace has people and permissions whether or not it runs a
+  //  batch — which is also why its route carries no industry gate.
+  'access-control':     { group: 'Governance', label: 'Roles & Access', order: 4 },
 };
 
 /** Everything the design does not name starts collapsed. */
