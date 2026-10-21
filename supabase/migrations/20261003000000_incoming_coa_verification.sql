@@ -200,7 +200,24 @@ AS $$
   SELECT cm.user_id
     FROM public.company_members cm
    WHERE cm.company_id = p_company_id
-     AND cm.role = ANY (ARRAY['owner','admin'])
+     --  ::text BECAUSE THIS COLUMN IS NOT THE SAME TYPE IN EVERY
+     --  DATABASE THIS RUNS AGAINST. 20260329000000 creates the table
+     --  with `role text` under CREATE TABLE IF NOT EXISTS, so any
+     --  from-scratch build — CI, and the local harness — gets text. On
+     --  the live project the table already existed, so that CREATE was
+     --  a no-op and the column is still the company_role enum.
+     --
+     --  Uncast, `= ANY (ARRAY['owner','admin'])` resolves the array to
+     --  text[] on its own and then asks for a company_role = text
+     --  operator, which does not exist. That is the error that stopped
+     --  the apply against live on 2026-10-21; it cannot reproduce in a
+     --  harness that always builds the schema from scratch.
+     --
+     --  Casting the column compares enum labels and is correct for both
+     --  shapes. `IN ('owner','admin')` would also work — bare literals
+     --  coerce to the enum — but it would work by accident and hide
+     --  the hazard from the next person.
+     AND cm.role::text = ANY (ARRAY['owner','admin'])
      AND NOT EXISTS (SELECT 1 FROM public.material_notification_recipients r2
                       WHERE r2.company_id = p_company_id AND r2.purpose = p_purpose);
 $$;

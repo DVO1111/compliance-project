@@ -289,6 +289,52 @@ jobs:
             | tr '|' '\n' | sed 's/^/  /'
 
           echo
+          echo '=== COLUMN TYPES a from-scratch build and live disagree about'
+          #  company_members.role is `text` in a from-scratch build and
+          #  the company_role enum here, because 20260329000000 creates
+          #  that table under CREATE TABLE IF NOT EXISTS and on live the
+          #  table already existed. That divergence stopped the apply at
+          #  20261003000000, and it is structurally invisible to a
+          #  harness that always builds from scratch — the same shape of
+          #  problem as app_is_service_context() testing rolsuper. So the
+          #  real types are printed rather than assumed.
+          psql "$CONN" -At -F'|' -c "
+            SELECT table_name||'.'||column_name||' is '||data_type
+                     ||' ('||udt_name||')'
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND column_name IN ('role','status')
+               AND table_name IN ('company_members','profiles')
+             ORDER BY table_name, column_name;" | sed 's/^/  /'
+
+          echo
+          echo '--- app_has_company_role, which guards RLS on the quality tables:'
+          #  Its body is `role = ANY (p_roles)` with p_roles declared
+          #  text[]. Where role is the enum that comparison raises at
+          #  RUNTIME even though the function exists and every policy
+          #  referencing it was created without complaint — creating a
+          #  policy only needs the signature, not a body that runs. If
+          #  that is the state here, those policies fail closed for real
+          #  users. Evaluated rather than reasoned about; the DO block
+          #  catches the error so the probe always reports.
+          psql "$CONN" -q -c "
+            DO \$probe\$
+            DECLARE r text;
+            BEGIN
+              BEGIN
+                PERFORM public.app_has_company_role(
+                  '00000000-0000-0000-0000-000000000000'::uuid,
+                  ARRAY['owner','admin']);
+                r := 'evaluates without error';
+              EXCEPTION WHEN undefined_function THEN
+                r := 'ABSENT from this database';
+              WHEN others THEN
+                r := 'RAISES: '||SQLERRM;
+              END;
+              RAISE NOTICE '%', r;
+            END \$probe\$;" 2>&1 | sed 's/^/  /'
+
+          echo
           echo '=== 04 MIGRATION EVIDENCE'
           psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
           echo '--- verdicts:'

@@ -299,8 +299,28 @@ export default function MainLayout({
   // food, cosmetics, medical devices (life_sciences) and logistics. Sectors like
   // finance or advertising don't use it, so the whole section is hidden for them.
   const industryCategory = getIndustryCategory(industryType);
+  //  NAMED EXCLUSIONS, NOT A NAMED ALLOW-LIST, AND THAT IS THE WHOLE
+  //  POINT. This used to read `=== 'life_sciences' || === 'logistics'`,
+  //  which meant 'generic' hid the entire Quality Operations section —
+  //  every screen built from the design file, plus batch release, SOPs,
+  //  deviations and CAPA.
+  //
+  //  'generic' is what categorize() returns for an EMPTY industry_type
+  //  and for the literal option "Other". So an account created before
+  //  that field existed, or one whose owner picked Other, loses half
+  //  the product with no message, no empty state and nothing in the
+  //  sidebar to suggest anything is missing. It looks like the features
+  //  were never built.
+  //
+  //  Hiding a nav item is not a security control — row-level security
+  //  is, and it does not consult this. So the failure modes are not
+  //  symmetric: showing a section to a company that has no use for it
+  //  is clutter, while hiding it from a company that lives on it is
+  //  indistinguishable from the work not existing. This fails open and
+  //  excludes only the two categories we can positively say do not
+  //  manufacture or move goods.
   const usesManufacturingQuality =
-    industryCategory === 'life_sciences' || industryCategory === 'logistics';
+    industryCategory !== 'financial' && industryCategory !== 'advertising';
   const perms = getPermissions({
     profileRole: profile?.role,
     customPermissions: (profile as any)?.customPermissions,
@@ -360,11 +380,11 @@ export default function MainLayout({
       //  W4·18's clearance conditions. Distinct from Batch Release,
       //  which is QA deciding on a finished batch — this is the stages
       //  being run.
-      { id: 'materials', label: 'Materials', icon: PackageCheck, category: 'Quality Operations', hidden: !usesManufacturingQuality },
-      { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: !usesManufacturingQuality },
-      { id: 'in-process', label: 'In-Process Checks', icon: Gauge, category: 'Quality Operations', hidden: !usesManufacturingQuality },
-      { id: 'batch-execution', label: 'Batch Execution', icon: FlaskConical, category: 'Quality Operations', hidden: !usesManufacturingQuality },
-      { id: 'master-formulas', label: 'Master Formulas', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
+      { id: 'materials', label: 'Materials', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'in-process', label: 'In-Process Checks', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'batch-execution', label: 'Batch Execution', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'master-formulas', label: 'Master Formulas', icon: BookMarked, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
 
       //  Deviations and CAPA are two registers, not one. This item
       //  read "Deviation / CAPA" while pointing only at the CAPA page,
