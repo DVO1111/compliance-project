@@ -40,8 +40,8 @@ on:
         description: 'For repair and apply: type the project ref to confirm. Ignored on a dry run.'
         required: false
         type: string
-      backup_confirmed:
-        description: 'For apply only: a backup of the live database has been taken'
+      skip_backup:
+        description: 'For apply only: skip the pre-apply dump (NOT recommended)'
         required: false
         default: false
         type: boolean
@@ -85,17 +85,11 @@ jobs:
             echo "::error::The confirm input must be the project ref. Nothing was written."
             exit 1
           fi
-          #  A BACKUP IS A PRECONDITION, NOT A REMINDER. The apply runs
-          #  fifty migrations against a database holding real customer
-          #  workspaces, three of them row-level security changes. The
-          #  job cannot verify a backup exists, so it requires somebody
-          #  to state that one does — which at least makes skipping it a
-          #  decision rather than an oversight.
-          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.backup_confirmed }}" != "true" ]; then
-            echo "::error::Tick backup_confirmed. Take a backup first: Supabase dashboard ->"
-            echo "::error::Database -> Backups. Nothing was applied."
-            exit 1
-          fi
+          #  The backup is no longer something somebody has to have
+          #  done elsewhere. Supabase's automatic backups are a paid
+          #  feature and this project is on the free plan, so asking for
+          #  one was asking for something unavailable. pg_dump is not
+          #  gated, so the job takes its own — see the dump step below.
 
       - name: Link the project
         env:
@@ -133,10 +127,36 @@ jobs:
           echo "--- local files with no remote record, oldest first:"
           tr '\n' ' ' < /tmp/localonly.txt; echo
 
+      # CLIENT 17, NOT THE RUNNER'S DEFAULT. pg_dump refuses outright
+      # when the server is newer than itself ("server version mismatch"),
+      # and the runner ships the client for its own Ubuntu release while
+      # Supabase chooses the server version. Taking the newest client
+      # removes a failure that would otherwise land on the backup step —
+      # the one step whose failure must not be the thing that stops an
+      # apply halfway.
       - name: Install psql client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo apt-get install -y -qq curl ca-certificates gnupg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          #  Not fatal if it fails: `supabase db dump` is the primary
+          #  path and matches the server version itself. This is only
+          #  the fallback, and psql (which does not care about the
+          #  server being newer) is already on the runner.
+          sudo apt-get install -y -qq postgresql-client-17 || \
+            echo '::warning::postgresql-client-17 did not install.'
+          echo "psql on PATH:    $(psql --version)"
+          echo "pg_dump on PATH: $(pg_dump --version)"
+          if [ -x /usr/lib/postgresql/17/bin/pg_dump ]; then
+            echo "pg_dump 17:      $(/usr/lib/postgresql/17/bin/pg_dump --version)"
+          else
+            echo 'pg_dump 17:      not present'
+          fi
 
       # FINDS THE HOST INSTEAD OF ASKING SOMEBODY TO LOOK IT UP.
       #
@@ -245,6 +265,30 @@ jobs:
           psql "$CONN" -At -F'|' -f scripts/fix/03-constraint-preflight.sql | sed 's/^/  /'
 
           echo
+          echo '=== SESSION SHAPE, as the live database sees this connection'
+          #  app_is_service_context() decides whether a migration may act
+          #  on another user's behalf, and it was FALSE for the apply —
+          #  which is how 20260919 stopped with LIFECYCLE_NOT_AUTHENTICATED.
+          #  Its superuser test is false on Supabase because the postgres
+          #  role is not a superuser there. 20260918500000 adds a
+          #  service_role-membership alternative, but that only engages
+          #  when no role is set on the session, and whether the pooler
+          #  sets one is not knowable from outside. So it is printed.
+          psql "$CONN" -At -F'|' -c "
+            SELECT 'session_user='||session_user,
+                   'current_user='||current_user,
+                   'role='||coalesce(current_setting('role',true),'(unset)'),
+                   'rolsuper='||coalesce((SELECT rolsuper FROM pg_roles
+                                          WHERE rolname=session_user),false)::text,
+                   'can_assume_service_role='||
+                     coalesce((SELECT pg_has_role(session_user,'service_role','USAGE')
+                               WHERE EXISTS (SELECT 1 FROM pg_roles
+                                             WHERE rolname='service_role')),false)::text,
+                   'app_is_service_context='||
+                     coalesce((SELECT public.app_is_service_context()::text),'(absent)');" \
+            | tr '|' '\n' | sed 's/^/  /'
+
+          echo
           echo '=== 04 MIGRATION EVIDENCE'
           psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
           echo '--- verdicts:'
@@ -269,6 +313,124 @@ jobs:
           echo "Session pooler -> the part between '@' and ':5432'."
           echo "The migration history above does not need it; the preflights do."
 
+      # TAKES ITS OWN BACKUP, because Supabase's automatic backups are a
+      # paid feature and this project is on the free plan — so requiring
+      # a backup that cannot be taken was requiring nothing.
+      #
+      # THE DUMP CONTAINS REAL CUSTOMER DATA. Two live GMP workspaces,
+      # in a GitHub Actions artifact. Artifacts on a private repository
+      # are restricted to people with repository access and expire with
+      # the retention period, which makes this a point-in-time safety
+      # net for this one change rather than a backup policy. It is the
+      # lesser risk than applying fifty migrations with no way back, but
+      # it is a real one and it is recorded here rather than buried.
+      #
+      # Schema and data separately, so a structural failure — which is
+      # what a bad RLS or constraint migration causes — can be diffed
+      # and repaired from the schema file alone without anybody opening
+      # the data.
+      - name: Back up before applying
+        if: inputs.mode == 'apply' && inputs.skip_backup != true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -u
+          mkdir -p backup
+          stamp=$(date -u +%Y%m%dT%H%M%SZ)
+
+          #  `supabase db dump` RATHER THAN pg_dump DIRECTLY. The live
+          #  server is PostgreSQL 17.6 and pg_dump refuses a server
+          #  newer than itself. Adding the PGDG repo was not enough: the
+          #  runner ships postgresql-client-16 and its wrapper wins on
+          #  PATH, so the first attempt still called 16.15 and stopped
+          #  with "server version mismatch". The CLI matches the server
+          #  version itself, which is the whole reason it has this
+          #  command.
+          #
+          #  The versioned binary is kept as a fallback, called by its
+          #  absolute path so no wrapper can choose a different one.
+          dump() {
+            local what="$1" out="$2"; shift 2
+            if supabase db dump --linked --file "$out" "$@"; then
+              echo "  $what: via supabase db dump"
+              return 0
+            fi
+            echo "::warning::supabase db dump failed for $what; trying pg_dump 17 directly."
+            local pgd=/usr/lib/postgresql/17/bin/pg_dump
+            if [ ! -x "$pgd" ]; then
+              echo "::error::$pgd is not present either, so no $what backup could be taken."
+              return 1
+            fi
+            local extra=""
+            [ "$what" = "data" ] && extra="--data-only"
+            [ "$what" = "schema" ] && extra="--schema-only"
+            "$pgd" "$CONN" $extra --no-owner --no-privileges > "$out" || return 1
+            echo "  $what: via $pgd"
+          }
+
+          echo 'Dumping schema…'
+          dump schema "backup/schema-$stamp.sql" || {
+            echo '::error::Nothing was applied.'; exit 1; }
+          echo 'Dumping data…'
+          dump data "backup/data-$stamp.sql" --data-only || {
+            echo '::error::Nothing was applied.'; exit 1; }
+
+          ls -lh backup/ | sed 's/^/  /'
+          #  A dump that failed halfway is worse than no dump, because it
+          #  looks like one. Both files must be non-trivial, and the
+          #  schema file must carry a marker only a finished dump has.
+          for f in "backup/schema-$stamp.sql" "backup/data-$stamp.sql"; do
+            size=$(stat -c%s "$f")
+            if [ "$size" -lt 2000 ]; then
+              echo "::error::$f is only $size bytes — the dump did not complete."
+              echo '::error::Nothing was applied.'
+              exit 1
+            fi
+          done
+          #  CHECKED BY CONTENT, NOT BY A MARKER STRING. The first
+          #  version grepped for pg_dump's "PostgreSQL database dump
+          #  complete" footer, and `supabase db dump` does not write it —
+          #  so a complete 538K schema dump and a complete 1.2M data
+          #  dump were both rejected as unfinished. A check that fails
+          #  on good output is worse than no check, because it stops the
+          #  thing it was meant to protect.
+          #
+          #  So: does the schema file actually define this schema, and
+          #  does the data file actually carry rows? Both are true of a
+          #  finished dump and false of a truncated or empty one,
+          #  whichever tool produced it.
+          tables=$(grep -c '^CREATE TABLE' "backup/schema-$stamp.sql" || true)
+          echo "  schema dump defines $tables tables"
+          if [ "$tables" -lt 50 ]; then
+            echo "::error::Only $tables CREATE TABLE statements — this database has"
+            echo "::error::far more than that, so the schema dump is incomplete."
+            echo '::error::Nothing was applied.'
+            exit 1
+          fi
+          if ! grep -q 'public.companies' "backup/schema-$stamp.sql"; then
+            echo '::error::The schema dump does not mention public.companies.'
+            echo '::error::Nothing was applied.'
+            exit 1
+          fi
+          rows=$(grep -cE '^COPY |^INSERT INTO ' "backup/data-$stamp.sql" || true)
+          echo "  data dump carries $rows COPY/INSERT blocks"
+          if [ "$rows" -lt 1 ]; then
+            echo '::error::The data dump carries no rows at all. Nothing was applied.'
+            exit 1
+          fi
+          echo "backup taken: $stamp"
+
+      - name: Keep the backup
+        if: inputs.mode == 'apply' && inputs.skip_backup != true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-apply-backup
+          path: backup/
+          retention-days: 90
+          if-no-files-found: error
+
       # WRITES HISTORY, EXECUTES NO SQL. `migration repair` inserts rows
       # into supabase_migrations.schema_migrations so a later push knows
       # what it does not need to run. It changes no table and no
@@ -291,6 +453,11 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          #  PGPASSWORD AS WELL, and they are not interchangeable:
+          #  SUPABASE_DB_PASSWORD is what the CLI reads, PGPASSWORD is
+          #  what libpq reads. The first run of this step carried only
+          #  the former and psql stopped with "no password supplied".
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -u
           if [ -z "${CONN:-}" ]; then
@@ -298,7 +465,13 @@ jobs:
             echo "::error::Nothing was repaired."
             exit 1
           fi
-          psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
+          #  Checked explicitly rather than left to `bash -e`, which
+          #  kills the step on psql's own error and reports psql's
+          #  message instead of what it meant for the repair.
+          if ! psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt; then
+            echo "::error::The evidence probe could not run, so nothing was repaired."
+            exit 1
+          fi
           awk -F'|' 'NF>=5 && $4=="applied" {print $1}' /tmp/ev.txt | sort -u > /tmp/apply.txt
           count=$(wc -l < /tmp/apply.txt)
           if [ "$count" -eq 0 ]; then
@@ -339,20 +512,99 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase db push --linked --dry-run
 
-      - name: Apply
+      # APPLIES THE MIGRATIONS DIRECTLY, NOT WITH `db push`.
+      #
+      # `db push` refuses while any local file predates the remote
+      # high-water mark, and after the repair 37 files legitimately sit
+      # there — partially applied, never applied, or creating only
+      # policies a later migration replaced. Recording those as applied
+      # to satisfy the ordering rule would hide real gaps forever, so
+      # they stay unrecorded and push stays blocked.
+      #
+      # AND `--include-all` IS NOT AN OPTION, for a reason that has
+      # nothing to do with ordering. Among the files it would replay is
+      # 20260603600000_seed_nasco_demo_data.sql, whose own comment says
+      # it "picks its target with SELECT id FROM companies ORDER BY
+      # created_at LIMIT 1 — whatever company happens to be oldest,
+      # which on a production database is a real customer". On a GMP
+      # system that is fabricated records written into a regulated
+      # workspace. That route is closed permanently, not pending a
+      # backup.
+      #
+      # So this applies only the files dated at or after the cutoff: the
+      # ones the evidence shows are genuinely missing, none of which is
+      # a seed and none of which the harness pins as failing. Each runs
+      # in ONE TRANSACTION together with its own history row, so a
+      # migration either lands and is recorded or does nothing at all —
+      # the half-applied-and-unrecorded state is the one that took this
+      # project seven months to notice.
+      #
+      # ON_ERROR_STOP and a hard stop at the first failure: migrations
+      # depend on each other, so carrying on past a failure applies
+      # files to a schema their author never saw.
+      - name: Apply the missing migrations
         if: inputs.mode == 'apply'
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase db push --linked
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          CUTOFF: '20260905000000'
+        run: |
+          set -u
+          if [ -z "${CONN:-}" ]; then
+            echo "::error::No database connection. Nothing was applied."
+            exit 1
+          fi
 
-      # Proves the apply took, rather than trusting that it did. A
+          #  What the database already records, so a re-run is a no-op
+          #  rather than a second attempt.
+          psql "$CONN" -At -c \
+            "SELECT version FROM supabase_migrations.schema_migrations" \
+            | sort -u > /tmp/recorded.txt
+          echo "already recorded: $(wc -l < /tmp/recorded.txt)"
+
+          : > /tmp/todo.txt
+          for f in $(ls supabase/migrations/*.sql | xargs -n1 basename \
+                      | grep -E '^[0-9]{14}_' | sort); do
+            v="${f%%_*}"
+            [ "$v" \< "$CUTOFF" ] && continue
+            grep -qx "$v" /tmp/recorded.txt && continue
+            echo "$f" >> /tmp/todo.txt
+          done
+
+          count=$(wc -l < /tmp/todo.txt)
+          echo "to apply: $count"
+          sed 's/^/  /' /tmp/todo.txt
+          if [ "$count" -eq 0 ]; then
+            echo 'Nothing to apply — every migration at or after the cutoff is recorded.'
+            exit 0
+          fi
+
+          applied=0
+          while read -r f; do
+            v="${f%%_*}"
+            name="${f#*_}"; name="${name%.sql}"
+            echo "──── $f"
+            #  The migration and its history row in one transaction.
+            if psql "$CONN" -v ON_ERROR_STOP=1 --single-transaction -q \
+                 -f "supabase/migrations/$f" \
+                 -c "INSERT INTO supabase_migrations.schema_migrations(version, name)
+                     VALUES ('$v', '$name')
+                     ON CONFLICT (version) DO NOTHING;"; then
+              applied=$((applied + 1))
+              echo "     applied and recorded"
+            else
+              echo "::error::$f FAILED. It was rolled back and is not recorded."
+              echo "::error::$applied migration(s) applied before it, each recorded."
+              echo "::error::Stopping here — the files after this one depend on it."
+              exit 1
+            fi
+          done < /tmp/todo.txt
+
+          echo
+          echo "applied $applied of $count"
+
+      # PROVES THE APPLY TOOK rather than trusting that it did. A
       # migration that reported success and left an object uncreated is
-      # exactly the failure this repository has already been bitten by:
-      # 20260921000000_licence_lifecycle was absent for weeks and
-      # surfaced as "starter licences cannot be saved".
-      # Uses the CONN the discovery step established, so the host is
-      # never guessed at the end of an otherwise successful apply.
+      # exactly what cost this project two workspaces.
       - name: Verify — re-run the preflight against the project
         if: inputs.mode == 'apply'
         env:
