@@ -40,8 +40,8 @@ on:
         description: 'For repair and apply: type the project ref to confirm. Ignored on a dry run.'
         required: false
         type: string
-      backup_confirmed:
-        description: 'For apply only: a backup of the live database has been taken'
+      skip_backup:
+        description: 'For apply only: skip the pre-apply dump (NOT recommended)'
         required: false
         default: false
         type: boolean
@@ -85,17 +85,11 @@ jobs:
             echo "::error::The confirm input must be the project ref. Nothing was written."
             exit 1
           fi
-          #  A BACKUP IS A PRECONDITION, NOT A REMINDER. The apply runs
-          #  fifty migrations against a database holding real customer
-          #  workspaces, three of them row-level security changes. The
-          #  job cannot verify a backup exists, so it requires somebody
-          #  to state that one does — which at least makes skipping it a
-          #  decision rather than an oversight.
-          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.backup_confirmed }}" != "true" ]; then
-            echo "::error::Tick backup_confirmed. Take a backup first: Supabase dashboard ->"
-            echo "::error::Database -> Backups. Nothing was applied."
-            exit 1
-          fi
+          #  The backup is no longer something somebody has to have
+          #  done elsewhere. Supabase's automatic backups are a paid
+          #  feature and this project is on the free plan, so asking for
+          #  one was asking for something unavailable. pg_dump is not
+          #  gated, so the job takes its own — see the dump step below.
 
       - name: Link the project
         env:
@@ -133,10 +127,26 @@ jobs:
           echo "--- local files with no remote record, oldest first:"
           tr '\n' ' ' < /tmp/localonly.txt; echo
 
+      # CLIENT 17, NOT THE RUNNER'S DEFAULT. pg_dump refuses outright
+      # when the server is newer than itself ("server version mismatch"),
+      # and the runner ships the client for its own Ubuntu release while
+      # Supabase chooses the server version. Taking the newest client
+      # removes a failure that would otherwise land on the backup step —
+      # the one step whose failure must not be the thing that stops an
+      # apply halfway.
       - name: Install psql client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo apt-get install -y -qq curl ca-certificates gnupg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          psql --version
+          pg_dump --version
 
       # FINDS THE HOST INSTEAD OF ASKING SOMEBODY TO LOOK IT UP.
       #
@@ -269,6 +279,67 @@ jobs:
           echo "Session pooler -> the part between '@' and ':5432'."
           echo "The migration history above does not need it; the preflights do."
 
+      # TAKES ITS OWN BACKUP, because Supabase's automatic backups are a
+      # paid feature and this project is on the free plan — so requiring
+      # a backup that cannot be taken was requiring nothing.
+      #
+      # THE DUMP CONTAINS REAL CUSTOMER DATA. Two live GMP workspaces,
+      # in a GitHub Actions artifact. Artifacts on a private repository
+      # are restricted to people with repository access and expire with
+      # the retention period, which makes this a point-in-time safety
+      # net for this one change rather than a backup policy. It is the
+      # lesser risk than applying fifty migrations with no way back, but
+      # it is a real one and it is recorded here rather than buried.
+      #
+      # Schema and data separately, so a structural failure — which is
+      # what a bad RLS or constraint migration causes — can be diffed
+      # and repaired from the schema file alone without anybody opening
+      # the data.
+      - name: Back up before applying
+        if: inputs.mode == 'apply' && inputs.skip_backup != true
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -u
+          if [ -z "${CONN:-}" ]; then
+            echo "::error::No database connection, so no backup could be taken."
+            echo "::error::Nothing was applied."
+            exit 1
+          fi
+          mkdir -p backup
+          stamp=$(date -u +%Y%m%dT%H%M%SZ)
+          echo "Dumping schema…"
+          pg_dump "$CONN" --schema-only --no-owner --no-privileges \
+            > "backup/schema-$stamp.sql"
+          echo "Dumping data…"
+          pg_dump "$CONN" --data-only --no-owner --no-privileges \
+            > "backup/data-$stamp.sql"
+          ls -lh backup/ | sed 's/^/  /'
+          #  A dump that failed halfway is worse than no dump, because it
+          #  looks like one. Both files must be non-trivial.
+          for f in backup/schema-$stamp.sql backup/data-$stamp.sql; do
+            size=$(stat -c%s "$f")
+            if [ "$size" -lt 2000 ]; then
+              echo "::error::$f is only $size bytes — the dump did not complete."
+              echo "::error::Nothing was applied."
+              exit 1
+            fi
+          done
+          grep -q 'PostgreSQL database dump complete' "backup/schema-$stamp.sql" || {
+            echo '::error::The schema dump has no completion marker. Nothing was applied.'
+            exit 1
+          }
+          echo "backup taken: $stamp"
+
+      - name: Keep the backup
+        if: inputs.mode == 'apply' && inputs.skip_backup != true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-apply-backup
+          path: backup/
+          retention-days: 90
+          if-no-files-found: error
+
       # WRITES HISTORY, EXECUTES NO SQL. `migration repair` inserts rows
       # into supabase_migrations.schema_migrations so a later push knows
       # what it does not need to run. It changes no table and no
@@ -350,20 +421,99 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase db push --linked --dry-run
 
-      - name: Apply
+      # APPLIES THE MIGRATIONS DIRECTLY, NOT WITH `db push`.
+      #
+      # `db push` refuses while any local file predates the remote
+      # high-water mark, and after the repair 37 files legitimately sit
+      # there — partially applied, never applied, or creating only
+      # policies a later migration replaced. Recording those as applied
+      # to satisfy the ordering rule would hide real gaps forever, so
+      # they stay unrecorded and push stays blocked.
+      #
+      # AND `--include-all` IS NOT AN OPTION, for a reason that has
+      # nothing to do with ordering. Among the files it would replay is
+      # 20260603600000_seed_nasco_demo_data.sql, whose own comment says
+      # it "picks its target with SELECT id FROM companies ORDER BY
+      # created_at LIMIT 1 — whatever company happens to be oldest,
+      # which on a production database is a real customer". On a GMP
+      # system that is fabricated records written into a regulated
+      # workspace. That route is closed permanently, not pending a
+      # backup.
+      #
+      # So this applies only the files dated at or after the cutoff: the
+      # ones the evidence shows are genuinely missing, none of which is
+      # a seed and none of which the harness pins as failing. Each runs
+      # in ONE TRANSACTION together with its own history row, so a
+      # migration either lands and is recorded or does nothing at all —
+      # the half-applied-and-unrecorded state is the one that took this
+      # project seven months to notice.
+      #
+      # ON_ERROR_STOP and a hard stop at the first failure: migrations
+      # depend on each other, so carrying on past a failure applies
+      # files to a schema their author never saw.
+      - name: Apply the missing migrations
         if: inputs.mode == 'apply'
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase db push --linked
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          CUTOFF: '20260905000000'
+        run: |
+          set -u
+          if [ -z "${CONN:-}" ]; then
+            echo "::error::No database connection. Nothing was applied."
+            exit 1
+          fi
 
-      # Proves the apply took, rather than trusting that it did. A
+          #  What the database already records, so a re-run is a no-op
+          #  rather than a second attempt.
+          psql "$CONN" -At -c \
+            "SELECT version FROM supabase_migrations.schema_migrations" \
+            | sort -u > /tmp/recorded.txt
+          echo "already recorded: $(wc -l < /tmp/recorded.txt)"
+
+          : > /tmp/todo.txt
+          for f in $(ls supabase/migrations/*.sql | xargs -n1 basename \
+                      | grep -E '^[0-9]{14}_' | sort); do
+            v="${f%%_*}"
+            [ "$v" \< "$CUTOFF" ] && continue
+            grep -qx "$v" /tmp/recorded.txt && continue
+            echo "$f" >> /tmp/todo.txt
+          done
+
+          count=$(wc -l < /tmp/todo.txt)
+          echo "to apply: $count"
+          sed 's/^/  /' /tmp/todo.txt
+          if [ "$count" -eq 0 ]; then
+            echo 'Nothing to apply — every migration at or after the cutoff is recorded.'
+            exit 0
+          fi
+
+          applied=0
+          while read -r f; do
+            v="${f%%_*}"
+            name="${f#*_}"; name="${name%.sql}"
+            echo "──── $f"
+            #  The migration and its history row in one transaction.
+            if psql "$CONN" -v ON_ERROR_STOP=1 --single-transaction -q \
+                 -f "supabase/migrations/$f" \
+                 -c "INSERT INTO supabase_migrations.schema_migrations(version, name)
+                     VALUES ('$v', '$name')
+                     ON CONFLICT (version) DO NOTHING;"; then
+              applied=$((applied + 1))
+              echo "     applied and recorded"
+            else
+              echo "::error::$f FAILED. It was rolled back and is not recorded."
+              echo "::error::$applied migration(s) applied before it, each recorded."
+              echo "::error::Stopping here — the files after this one depend on it."
+              exit 1
+            fi
+          done < /tmp/todo.txt
+
+          echo
+          echo "applied $applied of $count"
+
+      # PROVES THE APPLY TOOK rather than trusting that it did. A
       # migration that reported success and left an object uncreated is
-      # exactly the failure this repository has already been bitten by:
-      # 20260921000000_licence_lifecycle was absent for weeks and
-      # surfaced as "starter licences cannot be saved".
-      # Uses the CONN the discovery step established, so the host is
-      # never guessed at the end of an otherwise successful apply.
+      # exactly what cost this project two workspaces.
       - name: Verify — re-run the preflight against the project
         if: inputs.mode == 'apply'
         env:
