@@ -265,6 +265,30 @@ jobs:
           psql "$CONN" -At -F'|' -f scripts/fix/03-constraint-preflight.sql | sed 's/^/  /'
 
           echo
+          echo '=== SESSION SHAPE, as the live database sees this connection'
+          #  app_is_service_context() decides whether a migration may act
+          #  on another user's behalf, and it was FALSE for the apply —
+          #  which is how 20260919 stopped with LIFECYCLE_NOT_AUTHENTICATED.
+          #  Its superuser test is false on Supabase because the postgres
+          #  role is not a superuser there. 20260918500000 adds a
+          #  service_role-membership alternative, but that only engages
+          #  when no role is set on the session, and whether the pooler
+          #  sets one is not knowable from outside. So it is printed.
+          psql "$CONN" -At -F'|' -c "
+            SELECT 'session_user='||session_user,
+                   'current_user='||current_user,
+                   'role='||coalesce(current_setting('role',true),'(unset)'),
+                   'rolsuper='||coalesce((SELECT rolsuper FROM pg_roles
+                                          WHERE rolname=session_user),false)::text,
+                   'can_assume_service_role='||
+                     coalesce((SELECT pg_has_role(session_user,'service_role','USAGE')
+                               WHERE EXISTS (SELECT 1 FROM pg_roles
+                                             WHERE rolname='service_role')),false)::text,
+                   'app_is_service_context='||
+                     coalesce((SELECT public.app_is_service_context()::text),'(absent)');" \
+            | tr '|' '\n' | sed 's/^/  /'
+
+          echo
           echo '=== 04 MIGRATION EVIDENCE'
           psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
           echo '--- verdicts:'
