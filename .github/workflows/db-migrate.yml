@@ -56,6 +56,12 @@ jobs:
     # this job names it so the gate has somewhere to attach.
     environment: production-database
 
+    # Lifted to the job so step-level `if:` can test it. The secrets
+    # context is not available in `if`, but the env context is, which is
+    # the only way to skip a step when a secret has not been set.
+    env:
+      DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -84,46 +90,66 @@ jobs:
       # What the database believes it has. Read this before anything
       # else: it is the table that decides what a push will attempt, and
       # the dry run below is only meaningful beside it.
+      #
+      # `supabase migration list` prints one row per LOCAL file — about
+      # 190 lines — with the answer in a middle column that is mostly
+      # blank. So this filters its own output rather than asking the
+      # database separately: the CLI is already authenticated by the
+      # link above, which means this step needs no connection string and
+      # works with only the access token and database password set.
       - name: Migration history, as the database records it
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase migration list --linked
+        run: |
+          supabase migration list --linked > /tmp/ml.txt 2>&1 || true
+          # Columns are `Local` | `Remote` | `Time`, backtick-quoted.
+          awk -F'|' '$2 ~ /[0-9]/ {gsub(/[` ]/,"",$2); print $2}' /tmp/ml.txt \
+            | sort -u > /tmp/remote.txt
+          awk -F'|' '$1 ~ /[0-9]/ && $2 !~ /[0-9]/ {gsub(/[` ]/,"",$1); print $1}' /tmp/ml.txt \
+            | sort -u > /tmp/localonly.txt
+          echo "RECORDED REMOTE: $(wc -l < /tmp/remote.txt) versions"
+          echo "LOCAL ONLY (no remote record): $(wc -l < /tmp/localonly.txt) files"
+          echo
+          echo "--- every version the remote records, oldest first:"
+          tr '\n' ' ' < /tmp/remote.txt; echo
+          echo
+          echo "--- local files with no remote record, oldest first:"
+          tr '\n' ' ' < /tmp/localonly.txt; echo
 
       - name: Install psql client
+        if: env.DB_HOST != ''
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
 
-      # `supabase migration list` prints one row per local file, which is
-      # ~190 lines and buries the answer. This prints only what the
-      # database itself records, which is the fact that decides what a
-      # push will attempt.
-      - name: Migration history, compactly
-        env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          CONN: postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres
-        run: |
-          psql "$CONN" -At -c "
-            SELECT 'recorded=' || count(*)
-                 || '  earliest=' || coalesce(min(version),'none')
-                 || '  latest='   || coalesce(max(version),'none')
-            FROM supabase_migrations.schema_migrations;"
-          echo '--- every recorded version, oldest first:'
-          psql "$CONN" -At -c "
-            SELECT string_agg(version, ' ' ORDER BY version)
-            FROM supabase_migrations.schema_migrations;"
-
       # Both preflights are read-only, so a dry run is the right place
       # for them: they report the live state without changing it, and
       # the push plan below is only interpretable beside them.
+      #
+      # SKIPPED RATHER THAN FAILED when SUPABASE_DB_HOST is unset. These
+      # need a connection string, which the CLI steps above do not — and
+      # an empty host produces `postgresql://postgres.***@:5432/...`,
+      # which psql reads as a local socket and reports as "is the server
+      # running locally?", a message that sends you looking in entirely
+      # the wrong place. The step below says what is actually missing.
       - name: Preflight — objects, and data against the new constraints
+        if: env.DB_HOST != ''
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          CONN: postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres
+          CONN: postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ env.DB_HOST }}:5432/postgres
         run: |
           psql "$CONN" -f scripts/fix/02-pharma-preflight.sql
           psql "$CONN" -f scripts/fix/03-constraint-preflight.sql
+
+      - name: Preflight skipped — SUPABASE_DB_HOST is not set
+        if: env.DB_HOST == ''
+        run: |
+          echo "::warning::SUPABASE_DB_HOST is not set, so the two preflights were skipped."
+          echo "Set it to the pooler host copied verbatim from the dashboard:"
+          echo "  Project -> Settings -> Database -> connection string"
+          echo "  e.g. aws-0-eu-west-1.pooler.supabase.com"
+          echo "The migration history above does not need it; the preflights do."
 
       # `continue-on-error` because a refusal here is INFORMATION, not a
       # fault. The CLI exits non-zero when it finds local files dated
