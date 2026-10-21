@@ -1,0 +1,119 @@
+name: Database migrate
+
+# MANUAL ONLY, AND DELIBERATELY NOT ON PUSH.
+#
+# Connecting this repository to the live Supabase project is the right
+# destination. Pushing migrations to it automatically on merge is not,
+# and will not be until the project's migration history has been
+# reconciled with what the database actually contains.
+#
+# The reason is specific rather than cautious. `supabase db push` works
+# out what to apply by comparing the files in supabase/migrations
+# against supabase_migrations.schema_migrations in the target project.
+# That table exists in the live project. The live schema, measured by
+# scripts/fix/02-pharma-preflight.sql on 2026-10-21, is roughly the
+# June schema plus hand-patches from scripts/fix/ — it is missing the
+# lifecycle engine (20260905000000), electronic signatures
+# (20260917000000), and everything built on them. So the table and the
+# schema disagree, and until we know HOW they disagree, a push either
+# applies nothing (hiding the gap permanently) or aborts partway
+# through fifty migrations (leaving the database half-migrated).
+#
+# scripts/ci/expected-migration-failures.txt pins fourteen migrations
+# that do not apply to a from-scratch Postgres at all, several because
+# four files carry no timestamp and sort after every dated one. Those
+# are a problem for any replay, in any order, by any tool.
+#
+# WHEN THE RECONCILIATION IS DONE, the change needed here is to add a
+# `push:` trigger. Leave the dry run as the default input either way.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run lists what WOULD be applied; apply actually applies it'
+        required: true
+        default: dry-run
+        type: choice
+        options: [dry-run, apply]
+      confirm:
+        description: 'For apply only: type the project ref to confirm. Ignored on a dry run.'
+        required: false
+        type: string
+
+concurrency:
+  # Two pushes to one database at once is how a migration history gets
+  # corrupted. One at a time, and never cancel one in flight.
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    # A GitHub environment can carry a required reviewer, which is the
+    # approval gate for an apply. Configure that in repository settings;
+    # this job names it so the gate has somewhere to attach.
+    environment: production-database
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install the Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      - name: Refuse an apply that was not confirmed
+        if: inputs.mode == 'apply'
+        env:
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ "${{ inputs.confirm }}" != "$REF" ]; then
+            echo "::error::The confirm input must be the project ref. Nothing was applied."
+            exit 1
+          fi
+
+      - name: Link the project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+
+      # What the database believes it has. Read this before anything
+      # else: it is the table that decides what a push will attempt, and
+      # the dry run below is only meaningful beside it.
+      - name: Migration history, as the database records it
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase migration list --linked
+
+      - name: Dry run — what a push WOULD apply
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --linked --dry-run
+
+      - name: Apply
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --linked
+
+      # Proves the apply took, rather than trusting that it did. A
+      # migration that reported success and left an object uncreated is
+      # exactly the failure this repository has already been bitten by:
+      # 20260921000000_licence_lifecycle was absent for weeks and
+      # surfaced as "starter licences cannot be saved".
+      - name: Verify — re-run the preflight against the project
+        if: inputs.mode == 'apply'
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          psql "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@aws-0-${{ secrets.SUPABASE_REGION }}.pooler.supabase.com:5432/postgres" \
+            -f scripts/fix/02-pharma-preflight.sql
