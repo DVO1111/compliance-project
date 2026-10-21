@@ -34,12 +34,18 @@ import {
   registerRows, closureReadiness, impactConsequences, raiseDeviation,
   rootCauseCategories, rootCauseFor, startRootCause, defaultFramework,
   linkedRecords,
+  answerWhy, addWhy, answerW5h1, setDeterminedRootCause, setRootCauseCategory,
+  completeRootCause, raiseCapaFromDeviation, ownerName, deviationDetail,
+  closeDeviation, closureSignatureFor,
 } from '../../lib/deviations/deviationService';
 import { emptyDraft, type DeviationDraft, type ImpactOption } from '../../lib/deviations/raise';
 import type {
   RegisterRow, ReadinessCondition, RootCauseAnalysis, Investigation, Framework,
 } from '../../lib/deviations/investigation';
-import type { LinkedRecord } from './InvestigationPanel';
+import { assessReadiness } from '../../lib/deviations/investigation';
+import type { LinkedRecord, ClosureSignature } from './InvestigationPanel';
+import ClosureSignatureDialog from './ClosureSignatureDialog';
+import { orphanSignatureNotice, type ClosureForm } from '../../lib/deviations/closure';
 import { useFloorLayout } from '../../lib/inprocess/floorLayout';
 import { logger } from '../../lib/logger';
 
@@ -50,6 +56,19 @@ export interface DeviationsPageProps {
    *  button is rendered at all — not whether it is enabled. */
   isQa?: boolean;
 }
+
+/** The fields that belong to one deviation rather than to the register:
+ *  who owns the investigation, and what was done immediately. */
+interface DeviationDetail {
+  ownerId: string | null;
+  ownerName: string | null;
+  immediateAction: string | null;
+  containment: string | null;
+}
+
+const EMPTY_DETAIL: DeviationDetail = {
+  ownerId: null, ownerName: null, immediateAction: null, containment: null,
+};
 
 export default function DeviationsPage({ companyId, isQa = false }: DeviationsPageProps) {
   const layout = useFloorLayout();
@@ -88,19 +107,51 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
     })();
   }, [companyId]);
 
+  const [detail, setDetail] = useState<DeviationDetail>(EMPTY_DETAIL);
+  const [signature, setSignature] = useState<ClosureSignature | undefined>(undefined);
+  const [closing, setClosing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+
   //  Everything the investigation view needs, fetched together when a
   //  row is opened. Separately would show the panel with an empty
   //  checklist for a moment, which reads as "nothing outstanding".
+  //
+  //  The detail read is here rather than in the register: the owner's
+  //  name, the immediate action and the containment are one deviation's
+  //  fields, and fetching them for every row of a register nobody has
+  //  opened would be a query per row.
   useEffect(() => {
-    if (!open) { setConditions([]); setLinked([]); setRca(null); return; }
+    if (!open) {
+      setConditions([]); setLinked([]); setRca(null); setDetail(EMPTY_DETAIL);
+      setSignature(undefined); setClosing(false); setCloseError(null);
+      return;
+    }
     void (async () => {
-      const [c, l, r] = await Promise.all([
+      const [c, l, r, d, sig] = await Promise.all([
         closureReadiness(open.id),
         linkedRecords(open.id),
         rootCauseFor(open.id),
+        deviationDetail(open.id),
+        //  Read back rather than reconstructed: a deviation closed last
+        //  week by somebody else must show THEIR name.
+        closureSignatureFor(open.id),
       ]);
-      setConditions(c); setLinked(l); setRca(r);
+      setConditions(c); setLinked(l); setRca(r); setSignature(sig);
+      setDetail({ ...d, ownerName: await ownerName(d.ownerId) });
     })();
+  }, [open]);
+
+  //  Re-reads the analysis after a write instead of patching local
+  //  state. Every one of these writes can be refused by a trigger — a
+  //  category off the company's list, a change to a completed analysis
+  //  — so the panel should show what the database now holds, not what
+  //  was typed at it.
+  const afterWrite = useCallback(async (
+    result: { ok: true } | { ok: false; message: string },
+  ) => {
+    if (!result.ok) { setNotice(result.message); return; }
+    if (open) setRca(await rootCauseFor(open.id));
   }, [open]);
 
   const investigation: Investigation | null = useMemo(() => {
@@ -113,17 +164,60 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
       impact: open.impact,
       stateKey: open.stateKey,
       stateLabel: open.stateLabel,
-      //  The register does not carry the owner's NAME, only the id, and
-      //  inventing one would be worse than saying it is unassigned.
-      //  Resolving it is a profiles lookup this page does not make yet.
-      ownerName: null,
+      //  Resolved from investigation_owner through profiles. Null means
+      //  genuinely unassigned OR a failed lookup, and the panel draws
+      //  both as "Not assigned" — a name invented to fill the gap would
+      //  be a false statement about accountability.
+      ownerName: detail.ownerName,
       dueDate: open.dueDate,
       daysOverdue: open.daysOverdue,
       isOverdue: open.isOverdue,
-      immediateAction: null,
-      containment: null,
+      immediateAction: detail.immediateAction,
+      containment: detail.containment,
     };
-  }, [open]);
+  }, [open, detail]);
+
+  //  The dialog does not decide whether closure is allowed — the
+  //  database refuses it. This only names what is outstanding, so the
+  //  person is told before typing a password rather than after.
+  const blockedBy = useMemo(() => {
+    const r = assessReadiness(conditions);
+    if (r.canSign) return null;
+    const first = r.outstanding[0];
+    return r.outstanding.length === 1
+      ? `Still outstanding: ${first.title}`
+      : `${r.outstanding.length} conditions are still outstanding, starting with: ${first.title}`;
+  }, [conditions]);
+
+  const submitClosure = useCallback((form: ClosureForm) => {
+    if (!companyId || !open) return;
+    void (async () => {
+      setSaving(true);
+      setCloseError(null);
+      const result = await closeDeviation(companyId, open.id, form);
+      setSaving(false);
+
+      if (!result.ok) {
+        //  A signature that succeeded while the transition failed is
+        //  not the same as nothing having happened, and must not be
+        //  reported as "closure failed".
+        setCloseError(result.signedButNotClosed
+          ? orphanSignatureNotice(result.message)
+          : result.message);
+        return;
+      }
+
+      setClosing(false);
+      setNotice(`${open.deviationNumber} closed.`);
+      //  Everything the closure changed: the lock banner, the
+      //  checklist, and the register's state column.
+      const [sig, c] = await Promise.all([
+        closureSignatureFor(open.id), closureReadiness(open.id),
+      ]);
+      setSignature(sig); setConditions(c);
+      await loadRegister();
+    })();
+  }, [companyId, open, loadRegister]);
 
   const beginRaise = useCallback(async () => {
     if (!companyId) return;
@@ -189,29 +283,61 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
               conditions={conditions}
               linked={linked}
               isQa={isQa}
-              onSign={() => setNotice(
-                'Closing a deviation needs the electronic signature dialog, which is not '
-                + 'connected to this page yet. Nothing has been signed.',
-              )}
-              onRaiseCapa={() => setNotice(
-                'Raising a CAPA from a deviation (DV-06) is not built yet.',
-              )}
+              signature={signature}
+              onSign={() => { setCloseError(null); setClosing(true); }}
+              onRaiseCapa={() => void (async () => {
+                const r = await raiseCapaFromDeviation(open.id);
+                if (!r.ok) { setNotice(r.message); return; }
+                setNotice('CAPA raised and linked to this deviation.');
+                //  The readiness checklist counts linked CAPAs, and the
+                //  linked list shows them, so both are stale now.
+                const [c, l] = await Promise.all([
+                  closureReadiness(open.id), linkedRecords(open.id),
+                ]);
+                setConditions(c); setLinked(l);
+                await loadRegister();
+              })()}
             />
           )}
+
+          <ClosureSignatureDialog
+            open={closing}
+            deviationNumber={open.deviationNumber}
+            blockedBy={blockedBy}
+            saving={saving}
+            error={closeError}
+            onClose={() => { setClosing(false); setCloseError(null); }}
+            onSubmit={submitClosure}
+          />
 
           {rca ? (
             <RootCausePanel
               analysis={rca}
               categories={categories}
-              //  Each of these needs its own write, and the writes are
-              //  the next job. Saying so beats a field that accepts a
-              //  keystroke and loses it.
-              onAnswerWhy={() => setNotice('Saving an answer is not connected yet.')}
-              onAddWhy={() => setNotice('Adding a step is not connected yet.')}
-              onAnswer={() => setNotice('Saving an answer is not connected yet.')}
-              onChangeRootCause={() => setNotice('Saving is not connected yet.')}
-              onChangeCategory={() => setNotice('Saving is not connected yet.')}
-              onComplete={() => setNotice('Recording the root cause is not connected yet.')}
+              onAnswerWhy={(seq, answer) => void (async () => {
+                await afterWrite(await answerWhy(rca.id, seq, answer));
+              })()}
+              onAddWhy={() => void (async () => {
+                await afterWrite(await addWhy(rca.id, rca.whys));
+              })()}
+              onAnswer={(key, answer) => void (async () => {
+                await afterWrite(await answerW5h1(rca.id, key, answer));
+              })()}
+              onChangeRootCause={(value) => void (async () => {
+                await afterWrite(await setDeterminedRootCause(rca.id, value));
+              })()}
+              onChangeCategory={(key) => void (async () => {
+                await afterWrite(await setRootCauseCategory(rca.id, key));
+              })()}
+              onComplete={() => void (async () => {
+                const r = await completeRootCause(rca.id);
+                await afterWrite(r);
+                if (!r.ok) return;
+                setNotice('Root cause recorded.');
+                //  Completing one is a closure condition, so the
+                //  checklist above changes with it.
+                setConditions(await closureReadiness(open.id));
+              })()}
             />
           ) : (
             <section style={startCard}>
