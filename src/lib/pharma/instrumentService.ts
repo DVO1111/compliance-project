@@ -14,6 +14,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { toFloorConditions, type FloorCondition } from '../floor/floorConditions';
 import {
   checkInstrumentUsable,
   type InstrumentGateClient,
@@ -281,4 +282,26 @@ export async function runCalibrationSweep(
   }
   const r = data as any;
   return { ok: true, approaching: r.approaching ?? 0, overdue: r.overdue ?? 0 };
+}
+
+// ── W4·18 · what the floor is told ───────────────────────────────────
+//
+//  Same shape and the same discipline as the clearance conditions: a
+//  report derived from instrument_block_reason, failing open, with
+//  instrument_assert_usable() still the thing that decides.
+//
+//  An expired calibration comes back BLOCKED; one due within thirty
+//  days comes back FLAGGED, because readings taken before the date are
+//  valid and a screen that stopped work on them would teach people to
+//  book calibration late rather than early.
+
+export async function instrumentConditions(instrumentId: string): Promise<FloorCondition[]> {
+  const { data, error } = await supabase.rpc('instrument_conditions', {
+    p_instrument_id: instrumentId,
+  });
+  if (error) {
+    logger.error('[instruments] conditions failed', { instrumentId, error });
+    return [];
+  }
+  return toFloorConditions(data);
 }

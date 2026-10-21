@@ -116,6 +116,8 @@ import { isQaAuthority } from './lib/pharma/qaAuthority';
 
 const ProductsPage              = lazyPage(() => import('./components/Products/ProductsPage'));
 const DeviationsPage            = lazyPage(() => import('./components/Deviations/DeviationsPage'));
+const BatchExecutionPage        = lazyPage(() => import('./components/Batch/BatchExecutionPage'));
+const MasterFormulaPage         = lazyPage(() => import('./components/Formula/MasterFormulaPage'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
 const ArchivePage               = lazyPage(() => import('./components/Archive/ArchivePage'));
 const RegulationsPage           = lazyPage(() => import('./components/Regulations/RegulationsPage'));
@@ -1093,6 +1095,24 @@ function AppContent() {
 
       case 'vendor-scorecard':
         return perms.canViewVendorScorecard ? <VendorScorecardPage /> : <AccessDenied />;
+
+      //  W4·17 and W4·18 share a screen because they are one
+      //  question on the floor: which stage am I on, and may I start
+      //  it. The clearance conditions sit above the strip for the
+      //  same reason.
+      //  The same gate Batch Release uses: these are manufacturing
+      //  screens, and a logistics workspace has no batches to run.
+      case 'batch-execution':
+        return !isLogisticsProfile
+          ? <BatchExecutionPage companyId={profile?.company_id} userId={user?.id} />
+          : <AccessDenied />;
+
+      //  W4·16. Comparing two versions is the question somebody
+      //  actually arrives with, so it is the page.
+      case 'master-formulas':
+        return !isLogisticsProfile
+          ? <MasterFormulaPage companyId={profile?.company_id} />
+          : <AccessDenied />;
 
       //  W5·11. The register, the raise sheet and the investigation
       //  view. `isQa` governs whether the closure sign button is

@@ -159,3 +159,30 @@ export function emptyPickerMessage(materialName: string): string {
     + 'Lots that are quarantined, rejected, past retest or used up are not listed here — '
     + 'check the material lots register to see where this material stands.';
 }
+
+/**
+ * A condition row as the database reports it.
+ *
+ * All five of the `*_conditions` functions — clearance, dispensing,
+ * instruments, and in-process readings — return exactly these columns.
+ * That is the point of the shape: one mapper, so a column renamed in
+ * one domain breaks the build rather than quietly producing a notice
+ * with no title in that domain only.
+ */
+export function toFloorConditions(rows: unknown): FloorCondition[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      key: String(row.condition_key),
+      severity: row.severity === 'blocked' ? 'blocked' : 'flagged',
+      title: String(row.title),
+      detail: String(row.detail),
+      //  Null rather than '' when absent: isWellFormed distinguishes
+      //  the two, and a blocked condition carrying an empty string
+      //  instead of null would be malformed by its own rule.
+      continueWith: (row.continue_with as string | null) ?? null,
+      sortOrder: Number(row.sort_order ?? 0),
+    } satisfies FloorCondition;
+  });
+}
