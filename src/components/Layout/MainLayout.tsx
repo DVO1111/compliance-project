@@ -115,6 +115,8 @@ export type PageId =
   | 'deviations'
   | 'access-control'
   | 'materials'
+  | 'in-process'
+  | 'instruments'
   | 'batch-execution'
   | 'master-formulas'
   | 'training-simulation'
@@ -359,6 +361,8 @@ export default function MainLayout({
       //  which is QA deciding on a finished batch — this is the stages
       //  being run.
       { id: 'materials', label: 'Materials', icon: PackageCheck, category: 'Quality Operations', hidden: !usesManufacturingQuality },
+      { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: !usesManufacturingQuality },
+      { id: 'in-process', label: 'In-Process Checks', icon: Gauge, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'batch-execution', label: 'Batch Execution', icon: FlaskConical, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'master-formulas', label: 'Master Formulas', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
 

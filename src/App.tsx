@@ -118,6 +118,8 @@ const ProductsPage              = lazyPage(() => import('./components/Products/P
 const DeviationsPage            = lazyPage(() => import('./components/Deviations/DeviationsPage'));
 const AccessPage                = lazyPage(() => import('./components/Access/AccessPage'));
 const MaterialsPage             = lazyPage(() => import('./components/Materials/MaterialsPage'));
+const InstrumentsPage           = lazyPage(() => import('./components/Floor/InstrumentsPage'));
+const InprocessPage             = lazyPage(() => import('./components/Inprocess/InprocessPage'));
 const BatchExecutionPage        = lazyPage(() => import('./components/Batch/BatchExecutionPage'));
 const MasterFormulaPage         = lazyPage(() => import('./components/Formula/MasterFormulaPage'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
@@ -1110,6 +1112,26 @@ function AppContent() {
           companyId={profile?.company_id}
           canDecide={perms.canManageRoles || isQaAuthority((profile as any)?.company_role)}
         />;
+
+      //  W4·18. Calibration is the half of the floor gates that is a
+      //  list of its own — clearance lives on the batch, and dispensing
+      //  is a step inside running one.
+      case 'instruments':
+        return !isLogisticsProfile
+          ? <InstrumentsPage companyId={profile?.company_id} />
+          : <AccessDenied />;
+
+      //  W4·19. The supervisor half: readings an operator escalated,
+      //  waiting for a decision. Recording a reading is a floor action
+      //  and belongs on the batch, not behind a dropdown here.
+      case 'in-process':
+        return !isLogisticsProfile
+          ? <InprocessPage
+              companyId={profile?.company_id}
+              userId={user?.id}
+              canDecide={isQaAuthority((profile as any)?.company_role)}
+            />
+          : <AccessDenied />;
 
       //  W4·15. Lots, and why a lot may or may not be released.
       case 'materials':

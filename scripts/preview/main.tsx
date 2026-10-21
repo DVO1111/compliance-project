@@ -12,6 +12,8 @@ import AccessRequestsInbox from '../../src/components/Access/AccessRequestsInbox
 import ReviewRequestDrawer from '../../src/components/Access/ReviewRequestDrawer';
 import RolesMatrix from '../../src/components/Access/RolesMatrix';
 import AccessPage from '../../src/components/Access/AccessPage';
+import MaterialsPage from '../../src/components/Materials/MaterialsPage';
+import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import PersonAccessPanel from '../../src/components/Access/PersonAccessPanel';
 import ReleaseReadinessCard from '../../src/components/Materials/ReleaseReadinessCard';
 import QuarantineBanner from '../../src/components/Materials/QuarantineBanner';
@@ -1362,8 +1364,12 @@ const deviationsPhone = (
 //  MainLayout wrapper: the harness supplies the chrome itself, and
 //  wrapping again renders two sidebars.
 const accessPage = <AccessPage companyId="c1" canDecide />;
+const materialsPage = <MaterialsPage companyId="c1" />;
+const inprocessPage = <InprocessPage companyId="c1" userId="u1" canDecide />;
 
 const page = screen === 'access-page' ? accessPage
+  : screen === 'materials-page' ? materialsPage
+  : screen === 'inprocess-page' ? inprocessPage
   : screen === 'deviations' ? deviations
   : screen === 'deviations-phone' ? deviationsPhone
   : screen === 'inprocess-phone' ? inprocessPhone
