@@ -13,6 +13,12 @@ const STUBS: [RegExp, string][] = [
 
 export default defineConfig({
   root: __dirname,
+  //  Relative, so the built harness works wherever it is served from:
+  //  file://, http-server on :8099, or a /preview/ subdirectory of the
+  //  deployed site. An absolute base would make the asset URLs depend
+  //  on the host, which is how a preview that works locally 404s once
+  //  it is published.
+  base: './',
   build: { outDir: path.resolve(__dirname, 'out'), emptyOutDir: true },
   plugins: [
     {

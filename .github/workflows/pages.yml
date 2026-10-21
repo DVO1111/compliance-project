@@ -90,6 +90,67 @@ jobs:
           VITE_BASE_PATH: ${{ vars.PAGES_CUSTOM_DOMAIN != '' && '/' || format('/{0}/', github.event.repository.name) }}
         run: npm run build
 
+      #  THE DESIGN SCREENS, WHERE SOMEBODY CAN ACTUALLY LOOK AT THEM.
+      #
+      #  scripts/preview/ renders each screen from the Figma file with
+      #  canned rows in place of Supabase, so it needs no sign-in, no
+      #  workspace and no migrations. It has existed for weeks and was
+      #  only ever run on a laptop, which meant the screens were built,
+      #  reviewable in principle, and visible to nobody.
+      #
+      #  That gap is the whole reason this step exists. Three of the six
+      #  sections built from the design file have no page in the app
+      #  yet, and the rest need tables the live database does not have —
+      #  so the harness is currently the ONLY way to see them. It is not
+      #  a substitute for the real pages; it is how the work is
+      #  inspected while those are built.
+      #
+      #  Published under /preview/, with a relative base so the assets
+      #  resolve from that subdirectory rather than from the site root.
+      - name: Build the design-screen preview
+        run: |
+          npx vite build --config scripts/preview/vite.config.ts
+          mkdir -p dist/preview
+          cp -r scripts/preview/out/. dist/preview/
+
+          #  The index is DERIVED FROM THE SOURCE, not written by hand,
+          #  so it cannot list a screen the harness does not serve or
+          #  miss one it does.
+          keys=$(grep -oE "screen === '[a-z0-9-]+'" scripts/preview/main.tsx \
+                 | sed "s/screen === //" | tr -d "'" | sort -u)
+          echo "screens: $(echo $keys | tr '\n' ' ')"
+          {
+            echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            echo '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            echo '<title>Criateur design screens</title>'
+            echo '<style>'
+            echo ':root{color-scheme:light dark}'
+            echo 'body{margin:0;padding:32px 20px;font:16px/1.5 system-ui,sans-serif;'
+            echo 'max-width:720px;margin-inline:auto;background:#fbfbfc;color:#1f2430}'
+            echo '@media(prefers-color-scheme:dark){body{background:#15171c;color:#e8eaee}}'
+            echo 'h1{font-size:22px;margin:0 0 6px}p{color:#6b7380;margin:0 0 22px}'
+            echo 'ul{list-style:none;padding:0;display:grid;gap:8px}'
+            echo 'a{display:block;padding:12px 14px;border:1px solid #d9dde4;border-radius:10px;'
+            echo 'text-decoration:none;color:inherit;font-weight:600}'
+            echo 'a:hover{border-color:#1f2430}small{font-weight:400;color:#6b7380}'
+            echo '</style></head><body>'
+            echo '<h1>Design screens</h1>'
+            echo '<p>Rendered from the Figma file with canned data. No sign-in,'
+            echo 'no workspace, no database.</p><ul>'
+            for k in $keys; do
+              echo "<li><a href=\"./index.html?screen=$k\">$k</a></li>"
+            done
+            echo '</ul></body></html>'
+          } > dist/preview/screens.html
+
+          #  A preview that silently published nothing would be worse
+          #  than no preview, so the output is checked rather than
+          #  assumed.
+          test -f dist/preview/index.html || { echo '::error::preview index missing'; exit 1; }
+          n=$(ls dist/preview/assets/*.js 2>/dev/null | wc -l)
+          [ "$n" -ge 1 ] || { echo '::error::preview built no javascript'; exit 1; }
+          echo "preview published: $(du -sh dist/preview | cut -f1), $n js bundles"
+
       - name: Custom domain
         #  Pages stores the domain in its own settings, but a deploy that
         #  carries no CNAME has been known to clear it. Writing the file
