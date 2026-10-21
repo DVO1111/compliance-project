@@ -365,9 +365,35 @@ jobs:
               exit 1
             fi
           done
-          if ! grep -qE 'PostgreSQL database dump complete|^-- Dumped from' \
-               "backup/schema-$stamp.sql"; then
-            echo '::error::The schema dump has no completion marker. Nothing was applied.'
+          #  CHECKED BY CONTENT, NOT BY A MARKER STRING. The first
+          #  version grepped for pg_dump's "PostgreSQL database dump
+          #  complete" footer, and `supabase db dump` does not write it —
+          #  so a complete 538K schema dump and a complete 1.2M data
+          #  dump were both rejected as unfinished. A check that fails
+          #  on good output is worse than no check, because it stops the
+          #  thing it was meant to protect.
+          #
+          #  So: does the schema file actually define this schema, and
+          #  does the data file actually carry rows? Both are true of a
+          #  finished dump and false of a truncated or empty one,
+          #  whichever tool produced it.
+          tables=$(grep -c '^CREATE TABLE' "backup/schema-$stamp.sql" || true)
+          echo "  schema dump defines $tables tables"
+          if [ "$tables" -lt 50 ]; then
+            echo "::error::Only $tables CREATE TABLE statements — this database has"
+            echo "::error::far more than that, so the schema dump is incomplete."
+            echo '::error::Nothing was applied.'
+            exit 1
+          fi
+          if ! grep -q 'public.companies' "backup/schema-$stamp.sql"; then
+            echo '::error::The schema dump does not mention public.companies.'
+            echo '::error::Nothing was applied.'
+            exit 1
+          fi
+          rows=$(grep -cE '^COPY |^INSERT INTO ' "backup/data-$stamp.sql" || true)
+          echo "  data dump carries $rows COPY/INSERT blocks"
+          if [ "$rows" -lt 1 ]; then
+            echo '::error::The data dump carries no rows at all. Nothing was applied.'
             exit 1
           fi
           echo "backup taken: $stamp"
