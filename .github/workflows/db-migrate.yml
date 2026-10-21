@@ -291,6 +291,11 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          #  PGPASSWORD AS WELL, and they are not interchangeable:
+          #  SUPABASE_DB_PASSWORD is what the CLI reads, PGPASSWORD is
+          #  what libpq reads. The first run of this step carried only
+          #  the former and psql stopped with "no password supplied".
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -u
           if [ -z "${CONN:-}" ]; then
@@ -298,7 +303,13 @@ jobs:
             echo "::error::Nothing was repaired."
             exit 1
           fi
-          psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt
+          #  Checked explicitly rather than left to `bash -e`, which
+          #  kills the step on psql's own error and reports psql's
+          #  message instead of what it meant for the repair.
+          if ! psql "$CONN" -At -F'|' -f scripts/fix/04-migration-evidence.sql > /tmp/ev.txt; then
+            echo "::error::The evidence probe could not run, so nothing was repaired."
+            exit 1
+          fi
           awk -F'|' 'NF>=5 && $4=="applied" {print $1}' /tmp/ev.txt | sort -u > /tmp/apply.txt
           count=$(wc -l < /tmp/apply.txt)
           if [ "$count" -eq 0 ]; then
