@@ -119,10 +119,18 @@ in a `.env` file, or in any frontend code.
 
 | Secret | What it is |
 | --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | A personal access token from the Supabase dashboard. Used by the CLI to link. |
-| `SUPABASE_PROJECT_REF` | The project ref. Also doubles as the confirmation string for an apply. |
-| `SUPABASE_DB_PASSWORD` | The database password. |
-| `SUPABASE_REGION` | The pooler region, for the verification step. |
+| `SUPABASE_ACCESS_TOKEN` | A personal access token: dashboard → account menu → Access Tokens → Generate new. Not an account password. |
+| `SUPABASE_PROJECT_REF` | The project ref, the subdomain in the project URL. Also doubles as the confirmation string for an apply. |
+| `SUPABASE_DB_PASSWORD` | The **database** password, not the Supabase account login. These are different credentials: the account password signs a person into the dashboard, while this one authenticates the `postgres` role on the database itself. It is displayed once when the project is created and cannot be retrieved afterwards — Project → Settings → Database → Reset database password generates a new one. |
+| `SUPABASE_DB_HOST` | The pooler host, copied verbatim from Project → Settings → Database → connection string, e.g. `aws-0-eu-west-1.pooler.supabase.com`. Taken as a whole rather than assembled from a region, because the prefix is not always `aws-0`. |
+
+Resetting the database password breaks anything that connects to the
+database directly with the old one. Nothing in this repository does:
+the application authenticates with `VITE_SUPABASE_ANON_KEY` through the
+API, and the only consumer of `SUPABASE_DB_PASSWORD` is
+`.github/workflows/db-migrate.yml`. Anything outside the repository —
+a BI tool, a scheduled job, somebody's local `psql` — is not visible
+from here and should be checked before resetting.
 
 The workflow also names a GitHub environment, `production-database`. Add
 a required reviewer to it in repository settings and an apply then waits

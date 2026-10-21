@@ -108,6 +108,13 @@ jobs:
       # exactly the failure this repository has already been bitten by:
       # 20260921000000_licence_lifecycle was absent for weeks and
       # surfaced as "starter licences cannot be saved".
+      # SUPABASE_DB_HOST is the pooler host copied verbatim from the
+      # dashboard's connection string, e.g.
+      # aws-0-eu-west-1.pooler.supabase.com. It is a secret rather than
+      # assembled from a region because the host prefix is not always
+      # "aws-0" — it varies by when and where the project was created,
+      # and guessing it produces a confusing DNS failure at the end of
+      # an otherwise successful apply.
       - name: Verify — re-run the preflight against the project
         if: inputs.mode == 'apply'
         env:
@@ -115,5 +122,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
-          psql "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@aws-0-${{ secrets.SUPABASE_REGION }}.pooler.supabase.com:5432/postgres" \
+          psql "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres" \
             -f scripts/fix/02-pharma-preflight.sql
+          psql "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres" \
+            -f scripts/fix/03-constraint-preflight.sql
