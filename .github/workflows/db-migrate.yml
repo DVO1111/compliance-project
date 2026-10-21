@@ -90,7 +90,48 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase migration list --linked
 
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      # `supabase migration list` prints one row per local file, which is
+      # ~190 lines and buries the answer. This prints only what the
+      # database itself records, which is the fact that decides what a
+      # push will attempt.
+      - name: Migration history, compactly
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          CONN: postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres
+        run: |
+          psql "$CONN" -At -c "
+            SELECT 'recorded=' || count(*)
+                 || '  earliest=' || coalesce(min(version),'none')
+                 || '  latest='   || coalesce(max(version),'none')
+            FROM supabase_migrations.schema_migrations;"
+          echo '--- every recorded version, oldest first:'
+          psql "$CONN" -At -c "
+            SELECT string_agg(version, ' ' ORDER BY version)
+            FROM supabase_migrations.schema_migrations;"
+
+      # Both preflights are read-only, so a dry run is the right place
+      # for them: they report the live state without changing it, and
+      # the push plan below is only interpretable beside them.
+      - name: Preflight — objects, and data against the new constraints
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          CONN: postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres
+        run: |
+          psql "$CONN" -f scripts/fix/02-pharma-preflight.sql
+          psql "$CONN" -f scripts/fix/03-constraint-preflight.sql
+
+      # `continue-on-error` because a refusal here is INFORMATION, not a
+      # fault. The CLI exits non-zero when it finds local files dated
+      # before the remote high-water mark — which is precisely the
+      # condition this project is in, and precisely what the run is for.
+      # Failing the job on it would hide the steps above.
       - name: Dry run — what a push WOULD apply
+        continue-on-error: true
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
