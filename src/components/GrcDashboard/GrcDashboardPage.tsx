@@ -341,7 +341,7 @@ export default function GrcDashboardPage() {
                             <div key={act.id} className="relative pl-4 border-l-2 border-behance-blue/20 py-1">
                                 <div className="flex items-start justify-between">
                                     <div className="min-w-0">
-                                        <p className="text-xs font-bold dash-text truncate">{act.submission_title}</p>
+                                        <p className="text-xs font-bold dash-text truncate">{act.entity_label}</p>
                                         <p className="text-[10px] dash-text-secondary mt-0.5 flex items-center gap-1">
                                             <Link2 className="w-3 h-3" /> linked to <span className="font-medium">{act.control_ref || act.control_title}</span>
                                         </p>

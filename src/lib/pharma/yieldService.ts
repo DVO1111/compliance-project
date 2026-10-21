@@ -45,6 +45,10 @@ import {
 import type {
   YieldConfig, YieldReconciliation, YieldStatusRow, TheoreticalBasis,
 } from './yieldModel';
+//  W4·19. The account's shape and its formatting live in
+//  lib/yield/yieldAccount.ts, which imports no client — the same split
+//  as yieldModel.
+import type { AccountLine } from '../yield/yieldAccount';
 
 export type {
   YieldConfig, YieldReconciliation, YieldStatusRow, TheoreticalBasis,
@@ -362,4 +366,83 @@ export async function listOutstanding(companyId: string): Promise<YieldReconcili
     return [];
   }
   return (data as YieldReconciliation[]) ?? [];
+}
+
+// ── W4·19 · the account at Packing ───────────────────────────────────
+//
+//  "Theoretical, packed, samples, rejects, unaccounted, yield and
+//   variance against the threshold" (YR-01).
+//
+//  THE PACKED FIGURE IS THE ACTUAL YIELD. YR-01's own numbers settle
+//  it: 289,440 packed out of 300,000 theoretical is the 96.5 % the
+//  screen calls the actual yield and the 98 % threshold blocks on,
+//  while the accounted total (292,800) is 97.6 % and measures
+//  something else — whether all the material can be located.
+//
+//  So `reconcileStageAccounted` passes packed straight through to
+//  item 12's own RPC as `p_actual_quantity`, and samples and rejects
+//  are stored beside it. There is no second yield arithmetic anywhere,
+//  and no packed column: a deploy assertion fails if one appears.
+
+/**
+ * Records a stage reconciliation together with its samples and
+ * rejects lines.
+ *
+ * Both lines are required. A half-written account looks like a
+ * breakdown and the remainder it implies is wrong by exactly the line
+ * nobody entered — so a stage with nothing sampled passes zero rather
+ * than leaving it out.
+ */
+export async function reconcileStageAccounted(
+  batchStageId: string,
+  packedQuantity: number,
+  samplesQuantity: number,
+  rejectsQuantity: number,
+  opts: { unit?: string; notes?: string } = {},
+): Promise<YieldResult<{ yield: RecordedYield }>> {
+  const { data, error } = await (supabase as any)
+    .rpc('yield_reconcile_stage_accounted', {
+      p_batch_stage_id: batchStageId,
+      p_packed_quantity: packedQuantity,
+      p_samples_quantity: samplesQuantity,
+      p_rejects_quantity: rejectsQuantity,
+      p_unit: opts.unit ?? null,
+      p_notes: opts.notes ?? null,
+    });
+  if (error) {
+    logger.error('[yield] reconcileStageAccounted failed', { batchStageId, error });
+    return toFailure(error, 'The yield could not be reconciled.');
+  }
+  return {
+    ok: true,
+    yield: toRecorded((data ?? {}) as Record<string, unknown>, 'blocks_completion'),
+  };
+}
+
+/**
+ * The reconciliation as the six lines YR-01 shows.
+ *
+ * FAILS TO AN EMPTY ACCOUNT, not to zeroes. A card with six lines of
+ * "0 tablets" would claim a batch produced nothing; an empty list
+ * lets the card say it could not read the account. Nothing blocks on
+ * this either way — the block comes from `within_threshold` on the
+ * record, which item 12 derived.
+ */
+export async function accountLines(reconciliationId: string): Promise<AccountLine[]> {
+  const { data, error } = await (supabase as any)
+    .rpc('yield_account_lines', { p_reconciliation_id: reconciliationId });
+  if (error) {
+    logger.error('[yield] accountLines failed', { reconciliationId, error });
+    return [];
+  }
+  return ((data as any[]) ?? []).map((r) => ({
+    key: r.line_key,
+    label: r.label,
+    quantity: r.quantity === null ? null : Number(r.quantity),
+    unit: r.unit,
+    pctOfTheoretical: r.pct_of_theoretical === null ? null : Number(r.pct_of_theoretical),
+    kind: r.kind,
+    mustExplain: r.must_explain === true,
+    sortOrder: Number(r.sort_order),
+  }));
 }

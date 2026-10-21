@@ -158,7 +158,13 @@ BEGIN
     --  No sampling interval: never prompts. It still carries limits because
     --  item 07 refuses a product attribute with neither a minimum nor a
     --  maximum — an attribute nobody can judge is not a specification.
-    (st,'Friability','product_attribute','%',0.5,NULL,1.0,false,40,NULL,false);
+    (st,'Friability','product_attribute','%',0.5,NULL,1.0,false,40,NULL,false),
+    --  A CRITICAL machine setting, which is the only kind of parameter
+    --  that may be critical (MF-04). Section L needs one: it is the
+    --  branch IP-05 proposes turning into a hard stop, and the point of
+    --  section L is that it is still only a flag. No sampling interval,
+    --  so section A's count of timed tests is unchanged.
+    (st,'Compression force','machine_setting','kN',12,10,14,true,50,NULL,false);
 
   PERFORM set_config('i11.f', f::text, false);
   PERFORM set_config('i11.st_def', st::text, false);
@@ -294,6 +300,9 @@ BEGIN
   PERFORM set_config('i11.p_friab',
     (SELECT id::text FROM public.master_formula_stage_parameters
       WHERE stage_id=current_setting('i11.st_def')::uuid AND parameter='Friability'), false);
+  PERFORM set_config('i11.p_force',
+    (SELECT id::text FROM public.master_formula_stage_parameters
+      WHERE stage_id=current_setting('i11.st_def')::uuid AND parameter='Compression force'), false);
   PERFORM set_config('i11.p_mass_b',
     (SELECT fp.id::text FROM public.master_formula_stage_parameters fp
        JOIN public.master_formula_stages fs ON fs.id=fp.stage_id
@@ -629,13 +638,26 @@ BEGIN
   PERFORM _i11k('C','C6 every one of them landed',
     n_after = n_before + 3, format('%s then %s', n_before, n_after));
 
-  --  AND NO DEVIATION WAS CREATED. There is no deviations table at all
-  --  yet, which is the strongest form this assertion can take today:
-  --  nothing could have been written because there is nowhere to write.
-  PERFORM _i11k('C','C7 no deviation was created, there being no such table yet',
-    to_regclass('public.deviations') IS NULL
-    AND to_regclass('public.deviation_records') IS NULL,
-    coalesce(to_regclass('public.deviations')::text,'no deviations table'));
+  --  AND NO DEVIATION WAS CREATED.
+  --
+  --  This assertion was written as "there is no deviations table at
+  --  all yet" — the strongest form available when item 11 was built,
+  --  and one deliberately destined to expire. Week 5 item 02 built the
+  --  table, so the proxy went from strongest to simply false, and the
+  --  suite had been failing on it unnoticed because dblink could not
+  --  reach the server on this machine.
+  --
+  --  Rewritten to the thing it always meant: recording an
+  --  out-of-specification reading must not raise a deviation by
+  --  itself. Somebody decides that; the system does not decide it for
+  --  them.
+  PERFORM _i11k('C','C7 no deviation was raised by recording the readings',
+    NOT EXISTS (SELECT 1 FROM public.deviations
+                 WHERE company_id = current_setting('i11.c_a')::uuid)
+    AND NOT EXISTS (SELECT 1 FROM public.deviation_links
+                     WHERE company_id = current_setting('i11.c_a')::uuid),
+    (SELECT coalesce(string_agg(deviation_number, ', '), 'none')
+       FROM public.deviations WHERE company_id = current_setting('i11.c_a')::uuid));
 
   PERFORM _i11k('C','C8 nor any escalation raised by the system itself',
     NOT EXISTS (SELECT 1 FROM public.inprocess_oos_escalations
@@ -1226,6 +1248,387 @@ BEGIN
     n = 2, n||' row(s)');
 END
 $j2$;
+
+-- ═════════════════════════════════════════════════════════════════════
+--  W4·19 — WHAT THE SCREENS ARE TOLD
+--
+--  Sections K, L and M cover the three in-process reports added in
+--  20261031000000_inprocess_zone_entry_and_yield_accounting.sql. They
+--  live in THIS suite rather than a new one on purpose: the zone key
+--  and the live verdict both have to agree with weight_variation_zone(),
+--  whose boundary convention section D asserts at every edge, and two
+--  files is how those drift apart.
+-- ═════════════════════════════════════════════════════════════════════
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('i11.u_op'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $k$
+DECLARE
+  p_a uuid := current_setting('i11.p_a')::uuid;
+  p_bare uuid;
+  n integer; row_k record; z record; ok boolean; msg text;
+BEGIN
+  SELECT count(*) INTO n FROM public.inprocess_zone_key(p_a);
+  PERFORM _i11k('K','K1 the zone key has one band per zone', n = 5, n||' band(s)');
+
+  --  LOW TO HIGH, not the order the brief names the zones in. The key
+  --  draws a gauge, and a gauge in the order "1, 2U, 2L, 3U, 3L" puts
+  --  target in the middle of nothing.
+  PERFORM _i11k('K','K2 and runs low to high, so it can be drawn as a scale',
+    (SELECT array_agg(zone ORDER BY sort_order) FROM public.inprocess_zone_key(p_a))
+      = ARRAY['3L','2L','1','2U','3U'],
+    (SELECT array_agg(zone ORDER BY sort_order)::text FROM public.inprocess_zone_key(p_a)));
+
+  PERFORM _i11k('K','K3 the bounds are the product''s own four limits',
+    (SELECT lower_bound IS NULL AND upper_bound = 520
+       FROM public.inprocess_zone_key(p_a) WHERE zone='3L')
+    AND (SELECT lower_bound = 520 AND upper_bound = 540
+       FROM public.inprocess_zone_key(p_a) WHERE zone='2L')
+    AND (SELECT lower_bound = 540 AND upper_bound = 560
+       FROM public.inprocess_zone_key(p_a) WHERE zone='1')
+    AND (SELECT lower_bound = 560 AND upper_bound = 580
+       FROM public.inprocess_zone_key(p_a) WHERE zone='2U')
+    AND (SELECT lower_bound = 580 AND upper_bound IS NULL
+       FROM public.inprocess_zone_key(p_a) WHERE zone='3U'));
+
+  --  An unbounded end is NULL, not a large number. A gauge that drew a
+  --  ceiling on zone 3U would be inventing a limit nobody configured.
+  PERFORM _i11k('K','K4 an unbounded end is reported as absent, not as a big number',
+    (SELECT count(*) = 2 FROM public.inprocess_zone_key(p_a)
+      WHERE lower_bound IS NULL OR upper_bound IS NULL));
+
+  --  ═══ THE ONE THAT MATTERS ═══
+  --  The key and the classifier must agree at every edge. The key says
+  --  which end of each band includes its own bound; section D says what
+  --  the classifier does with a value sitting exactly there. If these
+  --  two ever disagree, a gauge paints a reading in a band the database
+  --  filed it outside of — and that is the single case nobody checks,
+  --  because both answers look right on their own.
+  ok := true; msg := '';
+  FOR row_k IN SELECT * FROM public.inprocess_zone_key(p_a) ORDER BY sort_order LOOP
+    IF row_k.lower_bound IS NOT NULL THEN
+      SELECT * INTO z FROM public.weight_variation_zone(p_a, row_k.lower_bound);
+      IF row_k.lower_inclusive AND z.zone <> row_k.zone THEN
+        ok := false;
+        msg := msg || format('%s claims %s inclusive but the classifier says %s; ',
+                             row_k.zone, row_k.lower_bound, z.zone);
+      ELSIF NOT row_k.lower_inclusive AND z.zone = row_k.zone THEN
+        ok := false;
+        msg := msg || format('%s claims %s exclusive but the classifier puts it there; ',
+                             row_k.zone, row_k.lower_bound);
+      END IF;
+    END IF;
+    IF row_k.upper_bound IS NOT NULL THEN
+      SELECT * INTO z FROM public.weight_variation_zone(p_a, row_k.upper_bound);
+      IF row_k.upper_inclusive AND z.zone <> row_k.zone THEN
+        ok := false;
+        msg := msg || format('%s claims %s inclusive but the classifier says %s; ',
+                             row_k.zone, row_k.upper_bound, z.zone);
+      ELSIF NOT row_k.upper_inclusive AND z.zone = row_k.zone THEN
+        ok := false;
+        msg := msg || format('%s claims %s exclusive but the classifier puts it there; ',
+                             row_k.zone, row_k.upper_bound);
+      END IF;
+    END IF;
+  END LOOP;
+  PERFORM _i11k('K','K5 every bound the key declares agrees with the classifier',
+    ok, left(msg,400));
+
+  --  The actions are configuration, the same as D14 proves for the
+  --  classifier. The key must not hardcode its own copy.
+  UPDATE public.product_weight_limits SET zone_2u_action = 'resample' WHERE product_id = p_a;
+  PERFORM _i11k('K','K6 the action on a band is configuration, not a constant',
+    (SELECT action = 'resample' FROM public.inprocess_zone_key(p_a) WHERE zone='2U'));
+  UPDATE public.product_weight_limits SET zone_2u_action = 'adjust' WHERE product_id = p_a;
+
+  --  NO ROWS for an unconfigured product, rather than five empty bands.
+  --  Five bands with null bounds would draw a gauge that looks set up;
+  --  nothing lets the screen say so. Same refusal to default as D.
+  --
+  --  A PRODUCT OF ITS OWN, because i11.p_nolimits stops living up to
+  --  its name in section E — E5/E6 give it limits of its own to prove
+  --  the limits are per product. A test that reused it here would pass
+  --  only as long as it ran before E.
+  INSERT INTO public.products(company_id,product_code,trade_name,category,created_by)
+  VALUES (current_setting('i11.c_a')::uuid, 'ITEM11K-'||substr(md5(random()::text),1,8),
+          'Tablet K (never zoned)','drug_pharmaceutical',
+          current_setting('i11.u_op')::uuid)
+  RETURNING id INTO p_bare;
+
+  SELECT count(*) INTO n FROM public.inprocess_zone_key(p_bare);
+  PERFORM _i11k('K','K7 a product with no limits gets no bands, not five empty ones',
+    n = 0, n||' band(s)');
+
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.inprocess_zone_key('00000000-0000-4000-1111-0000000f0f0f'::uuid);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'IP_NO_PRODUCT%'; msg := SQLERRM; END;
+  PERFORM _i11k('K','K8 and a product that does not exist is named as such',
+    ok, left(coalesce(msg,'no error raised'),180));
+END
+$k$;
+
+
+DO $l$
+DECLARE
+  stage uuid := current_setting('i11.stage_a')::uuid;
+  stage_b uuid := current_setting('i11.stage_b')::uuid;
+  p_mass uuid := current_setting('i11.p_mass')::uuid;
+  p_hard uuid := current_setting('i11.p_hard')::uuid;
+  p_turret uuid := current_setting('i11.p_turret')::uuid;
+  p_force uuid := current_setting('i11.p_force')::uuid;
+  p_mass_b uuid := current_setting('i11.p_mass_b')::uuid;
+  n integer; n_readings integer; ok boolean; msg text; v numeric;
+  v_lal numeric; v_lwl numeric; v_uwl numeric; v_ual numeric; v_target numeric;
+BEGIN
+  --  An empty field is the normal state of a form, not a condition.
+  SELECT count(*) INTO n FROM public.inprocess_reading_conditions(stage, p_mass, NULL);
+  PERFORM _i11k('L','L1 nothing typed yet is not a condition', n = 0, n||' row(s)');
+
+  --  550 mg is on target: in specification and in zone 1. A calm
+  --  screen says nothing, which is what makes a flag mean something.
+  SELECT count(*) INTO n FROM public.inprocess_reading_conditions(stage, p_mass, 550);
+  PERFORM _i11k('L','L2 a value on target raises nothing', n = 0, n||' row(s)');
+
+  --  ═══ THE ONE THAT MATTERS ═══
+  --  EVERY ROW IS FLAGGED, at every value, on every parameter. Item
+  --  11's first NOT DONE IF is "an OOS reading blocks entry" and the
+  --  machine-setting interlock is a proposal Damilola and Aderoh have
+  --  not decided on. A single blocked row here would put a red "can't"
+  --  on a tablet on the strength of an undecided control.
+  ok := true; msg := '';
+  FOREACH v IN ARRAY ARRAY[400,519,520,529,530,539,540,550,560,561,570,571,580,581,700] LOOP
+    IF EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_mass, v)
+                WHERE severity <> 'flagged') THEN
+      ok := false; msg := msg || v || ' ';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_force, v)
+                WHERE severity <> 'flagged') THEN
+      ok := false; msg := msg || 'force@' || v || ' ';
+    END IF;
+  END LOOP;
+  PERFORM _i11k('L','L3 no value on any parameter produces a blocked row',
+    ok, left(msg,300));
+
+  --  W4·18's shape rule: a flagged condition names what lets the work
+  --  continue. "You can continue with:" followed by nothing is worse
+  --  than no distinction at all, because it looks right.
+  ok := true; msg := '';
+  FOREACH v IN ARRAY ARRAY[400,520,529,540,561,571,581,700] LOOP
+    IF EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_mass, v)
+                WHERE coalesce(btrim(continue_with),'') = '') THEN
+      ok := false; msg := msg || v || ' ';
+    END IF;
+  END LOOP;
+  PERFORM _i11k('L','L4 and every flagged row says what lets the work continue',
+    ok, left(msg,300));
+
+  --  529 mg is below the 530 specification minimum AND in zone 2L —
+  --  two independent judgements, reported as two rows. Section D keeps
+  --  the limits deliberately offset from the specification so a test
+  --  cannot pass by conflating them, and the same offset matters here:
+  --  a screen showing one row would hide half of what is wrong.
+  PERFORM _i11k('L','L5 a value both out of specification and out of zone raises both',
+    (SELECT count(*) = 2 FROM public.inprocess_reading_conditions(stage, p_mass, 529))
+    AND EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_mass, 529)
+                 WHERE condition_key = 'reading_out_of_specification')
+    AND EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_mass, 529)
+                 WHERE condition_key = 'weight_zone_2l'),
+    (SELECT string_agg(condition_key,', ' ORDER BY sort_order)
+       FROM public.inprocess_reading_conditions(stage, p_mass, 529)));
+
+  --  565 mg is INSIDE the 530-570 specification and in zone 2U. The
+  --  zone is the point of the zones: a reading can be perfectly in
+  --  specification and still say the machine is drifting.
+  PERFORM _i11k('L','L6 a value in specification can still be out of zone',
+    (SELECT count(*) = 1 FROM public.inprocess_reading_conditions(stage, p_mass, 565))
+    AND EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_mass, 565)
+                 WHERE condition_key = 'weight_zone_2u'),
+    (SELECT string_agg(condition_key,', ' ORDER BY sort_order)
+       FROM public.inprocess_reading_conditions(stage, p_mass, 565)));
+
+  --  A zone 3 row sorts above a zone 2 row, so the gravest thing on a
+  --  screen is the thing at the top of it.
+  PERFORM _i11k('L','L7 the specification row sorts above the zone row',
+    (SELECT min(sort_order) FROM public.inprocess_reading_conditions(stage, p_mass, 600)
+      WHERE condition_key='reading_out_of_specification')
+    < (SELECT min(sort_order) FROM public.inprocess_reading_conditions(stage, p_mass, 600)
+        WHERE condition_key LIKE 'weight_zone%'));
+
+  --  Hardness is a product attribute that is NOT the weight test, so it
+  --  never gets a zone row however far out it is.
+  PERFORM _i11k('L','L8 a non-weight test never gets a zone row',
+    NOT EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_hard, 10)
+                 WHERE condition_key LIKE 'weight_zone%'
+                    OR condition_key = 'no_weight_limits'),
+    (SELECT string_agg(condition_key,', ') FROM
+       public.inprocess_reading_conditions(stage, p_hard, 10)));
+
+  --  An unconfigured product's weight test is told so, rather than
+  --  being told zone 1 — a green light nobody set.
+  --
+  --  Product B's limits are lifted for the length of this assertion and
+  --  put back, because section E gave it limits of its own to prove the
+  --  limits are per product, and section G's readings were judged
+  --  against them.
+  SELECT lal, lwl, uwl, ual, target_value INTO v_lal, v_lwl, v_uwl, v_ual, v_target
+    FROM public.product_weight_limits WHERE product_id = current_setting('i11.p_nolimits')::uuid;
+  DELETE FROM public.product_weight_limits
+   WHERE product_id = current_setting('i11.p_nolimits')::uuid;
+
+  PERFORM _i11k('L','L9 an unconfigured product is told so, not given a zone',
+    EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage_b, p_mass_b, 550)
+             WHERE condition_key = 'no_weight_limits' AND severity = 'flagged'
+               AND coalesce(btrim(continue_with),'') <> '')
+    AND NOT EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage_b, p_mass_b, 550)
+                     WHERE condition_key LIKE 'weight_zone%'),
+    (SELECT string_agg(condition_key,', ')
+       FROM public.inprocess_reading_conditions(stage_b, p_mass_b, 550)));
+
+  INSERT INTO public.product_weight_limits
+    (company_id,product_id,target_value,lal,lwl,uwl,ual,unit,created_by)
+  VALUES (current_setting('i11.c_a')::uuid, current_setting('i11.p_nolimits')::uuid,
+          v_target, v_lal, v_lwl, v_uwl, v_ual, 'mg', current_setting('i11.u_op')::uuid);
+
+  --  IP-05. A CRITICAL machine setting out of specification gets its own
+  --  row, and that row is flagged. This is the proposal the design shows
+  --  in red; the backend will not say red until somebody decides it.
+  PERFORM _i11k('L','L10 a critical machine setting out of specification is flagged, not stopped',
+    EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_force, 20)
+             WHERE condition_key = 'critical_machine_setting' AND severity = 'flagged'
+               AND coalesce(btrim(continue_with),'') <> ''));
+
+  --  Turret speed is a machine setting that is NOT critical, so the
+  --  critical row does not fire for it. Without this, the row would be
+  --  "any machine setting", and the proposal in IP-05 is narrower.
+  PERFORM _i11k('L','L11 and a non-critical machine setting does not raise that row',
+    NOT EXISTS (SELECT 1 FROM public.inprocess_reading_conditions(stage, p_turret, 99)
+                 WHERE condition_key = 'critical_machine_setting'));
+
+  --  The report is STABLE and asking it about a value commits nothing.
+  --  A screen updates this on every keystroke; a report that wrote a
+  --  row would fill the record with numbers nobody meant to record.
+  SELECT count(*) INTO n_readings FROM public.batch_stage_parameter_readings
+   WHERE batch_stage_id = stage;
+  PERFORM public.inprocess_reading_conditions(stage, p_mass, 601);
+  PERFORM public.inprocess_reading_conditions(stage, p_mass, 602);
+  SELECT count(*) INTO n FROM public.batch_stage_parameter_readings
+   WHERE batch_stage_id = stage;
+  PERFORM _i11k('L','L12 asking about a value records nothing',
+    n = n_readings, n_readings||' before, '||n||' after');
+
+  --  A parameter that is not a test on this stage is named as such,
+  --  rather than silently returning no conditions — which a screen
+  --  would render as "nothing wrong".
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.inprocess_reading_conditions(stage, p_mass_b, 550);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BSPR_NO_PARAMETER%'; msg := SQLERRM; END;
+  PERFORM _i11k('L','L13 a parameter from another stage is refused, not reported as clean',
+    ok, left(coalesce(msg,'no error raised'),180));
+END
+$l$;
+
+
+DO $m$
+DECLARE
+  stage uuid; p_mass uuid := current_setting('i11.p_mass')::uuid;
+  r jsonb; n integer; t timestamptz; ok boolean; msg text;
+BEGIN
+  --  Its own stage, so the history under test is exactly the readings
+  --  this section took. Earlier sections record on stage_a and a
+  --  history assertion that counted those would break whenever one of
+  --  them gained a reading.
+  stage := _i11_batch(current_setting('i11.p_a')::uuid, 'I11-0019');
+
+  PERFORM public.batch_stage_record_reading(stage, p_mass, 550);
+  PERFORM public.batch_stage_record_reading(stage, p_mass, 565);
+  r := public.batch_stage_record_reading(stage, p_mass, 585, NULL, true);
+
+  SELECT count(*) INTO n FROM public.inprocess_shift_history(stage, p_mass);
+  PERFORM _i11k('M','M1 the history has a chip per reading', n = 3, n||' chip(s)');
+
+  PERFORM _i11k('M','M2 in the order they were taken, with the zone each fell in',
+    (SELECT array_agg(zone ORDER BY sequence_no) FROM public.inprocess_shift_history(stage, p_mass))
+      = ARRAY['1','2U','3U'],
+    (SELECT array_agg(zone ORDER BY sequence_no)::text
+       FROM public.inprocess_shift_history(stage, p_mass)));
+
+  --  ═══ THE ONE THAT MATTERS ═══
+  --  The zone is read from the column the reading snapshotted, NOT
+  --  recomputed. A product's limits can be revised, and a history that
+  --  re-zoned old readings against today's limits would quietly rewrite
+  --  what the shift saw — the shift would be told it had been working
+  --  inside the warning limits all along.
+  UPDATE public.product_weight_limits
+     SET lwl = 500, uwl = 600, lal = 480, ual = 620 WHERE product_id = current_setting('i11.p_a')::uuid;
+  PERFORM _i11k('M','M3 revising the limits does not re-zone what the shift already saw',
+    (SELECT array_agg(zone ORDER BY sequence_no) FROM public.inprocess_shift_history(stage, p_mass))
+      = ARRAY['1','2U','3U'],
+    (SELECT array_agg(zone ORDER BY sequence_no)::text
+       FROM public.inprocess_shift_history(stage, p_mass)));
+  UPDATE public.product_weight_limits
+     SET lal = 520, lwl = 540, uwl = 560, ual = 580 WHERE product_id = current_setting('i11.p_a')::uuid;
+
+  --  Escalated but undecided is a different chip from decided. A
+  --  supervisor having been asked and a supervisor having answered are
+  --  not the same state, and an operator waiting on one needs to know
+  --  which.
+  PERFORM public.inprocess_escalate_reading((r->>'reading_id')::uuid, 'Third sample high');
+  PERFORM _i11k('M','M4 an escalated reading shows as escalated and undecided',
+    (SELECT escalated AND decision IS NULL FROM public.inprocess_shift_history(stage, p_mass)
+      WHERE reading_id = (r->>'reading_id')::uuid));
+
+  PERFORM _i11k('M','M5 and an un-escalated one shows as neither',
+    (SELECT count(*) = 2 FROM public.inprocess_shift_history(stage, p_mass)
+      WHERE NOT escalated AND decision IS NULL));
+
+  --  The window is a parameter, because this schema does not know what
+  --  a shift is. A clock-derived default would be a guess with an
+  --  operator's name on it.
+  t := now() + interval '1 minute';
+  SELECT count(*) INTO n FROM public.inprocess_shift_history(stage, p_mass, t);
+  PERFORM _i11k('M','M6 a window after the readings is empty', n = 0, n||' chip(s)');
+
+  SELECT count(*) INTO n
+    FROM public.inprocess_shift_history(stage, p_mass, now() - interval '1 day');
+  PERFORM _i11k('M','M7 and a window before them holds them all', n = 3, n||' chip(s)');
+
+  PERFORM set_config('i11.stage_hist', stage::text, false);
+END
+$m$;
+RESET ROLE; RESET request.jwt.claims;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('i11.u_b'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $m2$
+DECLARE ok boolean; msg text;
+BEGIN
+  --  All three reports are SECURITY DEFINER, so section J proving the
+  --  tables are closed proves nothing about them.
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.inprocess_zone_key(current_setting('i11.p_a')::uuid);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'IP_FORBIDDEN%'; msg := SQLERRM; END;
+  PERFORM _i11k('M','M8 a foreign company cannot read the zone key',
+    ok, left(coalesce(msg,'no error raised'),180));
+
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.inprocess_reading_conditions(
+          current_setting('i11.stage_a')::uuid, current_setting('i11.p_mass')::uuid, 600);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BSPR_FORBIDDEN%'; msg := SQLERRM; END;
+  PERFORM _i11k('M','M9 nor ask what a value would be flagged as',
+    ok, left(coalesce(msg,'no error raised'),180));
+
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.inprocess_shift_history(
+          current_setting('i11.stage_hist')::uuid, current_setting('i11.p_mass')::uuid);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BSPR_FORBIDDEN%'; msg := SQLERRM; END;
+  PERFORM _i11k('M','M10 nor read the shift history',
+    ok, left(coalesce(msg,'no error raised'),180));
+END
+$m2$;
+RESET ROLE; RESET request.jwt.claims;
 
 DROP FUNCTION IF EXISTS _i11_batch(uuid,text);
 

@@ -24,10 +24,40 @@ export interface ControlPosture {
   last_snapshot_date: string | null;
 }
 
+/**
+ * What a row of recent evidence activity is called.
+ *
+ * Evidence used to be a content submission and the query joined its
+ * title. Since the decoupling it can be any of five kinds of record,
+ * and there is no single table to join — so the row names the KIND and
+ * the short id rather than fetching five different titles for a panel
+ * that shows ten rows. Evidence with nothing linked says so, which is
+ * the state the database itself marks as missing.
+ */
+function evidenceLabel(entityType: string | null, entityId: string | null): string {
+  if (!entityId) return 'Nothing linked';
+  const kind = ENTITY_LABEL[entityType ?? ''] ?? 'Record';
+  return `${kind} ${entityId.slice(0, 8)}`;
+}
+
+const ENTITY_LABEL: Record<string, string> = {
+  content_submission: 'Submission',
+  batch_record: 'Batch record',
+  capa_record: 'CAPA',
+  sop_document: 'SOP',
+  change_control: 'Change control',
+};
+
 export interface RecentEvidenceActivity {
   id: string;
-  submission_id: string | null;
-  submission_title: string | null;
+  //  Evidence stopped belonging to a content submission in
+  //  20260603010000_decouple_grc_evidence.sql: submission_id was
+  //  dropped for a generic entity_type + entity_id, so a control can
+  //  cite a batch record, a CAPA or an SOP as readily as a submission.
+  //  These two carry that, and `entity_label` is what the row shows.
+  entity_type: string | null;
+  entity_id: string | null;
+  entity_label: string;
   control_ref: string | null;
   control_title: string | null;
   linked_by: string | null;
@@ -67,7 +97,7 @@ export async function getFrameworkPosture(
     // 3. Evidence links
     supabase
       .from('grc_control_evidence')
-      .select('id, control_id, submission_id, status, valid_until')
+      .select('id, control_id, entity_id, status, valid_until')
       .eq('company_id', companyId),
 
     // 4. Profiles for names
@@ -82,10 +112,10 @@ export async function getFrameworkPosture(
         id,
         created_at,
         status,
-        submission_id,
+        entity_type,
+        entity_id,
         control_id,
         linked_by,
-        content_submissions (title),
         grc_controls (reference_code, title)
       `)
       .eq('company_id', companyId)
@@ -118,7 +148,13 @@ export async function getFrameworkPosture(
     if (!evidenceMap[e.control_id]) evidenceMap[e.control_id] = { valid: 0, expired: 0, missing: 0 };
     
     const isExpired = e.status === 'expired' || (e.valid_until && new Date(e.valid_until) < now);
-    const isMissing = !e.submission_id || e.status === 'missing';
+    //  The same test the database's own trigger makes
+    //  (fn_grc_evidence_missing): evidence with nothing linked to it is
+    //  missing. This read `!e.submission_id` until the column was
+    //  dropped, after which it was true for every row — so every piece
+    //  of evidence counted as missing and the valid and expired
+    //  branches below were unreachable.
+    const isMissing = !e.entity_id || e.status === 'missing';
 
     if (isMissing) evidenceMap[e.control_id].missing++;
     else if (isExpired) evidenceMap[e.control_id].expired++;
@@ -190,8 +226,9 @@ export async function getFrameworkPosture(
   // Recent Activity
   const recentActivity: RecentEvidenceActivity[] = (recentEvRes.data || []).map((e: any) => ({
     id: e.id,
-    submission_id: e.submission_id,
-    submission_title: e.content_submissions?.title || 'Unknown Submission',
+    entity_type: e.entity_type,
+    entity_id: e.entity_id,
+    entity_label: evidenceLabel(e.entity_type, e.entity_id),
     control_ref: e.grc_controls?.reference_code || null,
     control_title: e.grc_controls?.title || 'Unknown Control',
     linked_by: e.linked_by,

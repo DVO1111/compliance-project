@@ -25,6 +25,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { toFloorConditions, type FloorCondition } from '../floor/floorConditions';
 import type {
   ProductionLine, ChecklistTemplateItem, LineClearance, ClearanceCheck,
   ChangeoverVerification, ClearanceOverride, CheckResult, ChangeoverResult,
@@ -359,4 +360,28 @@ export async function restartClearance(
     return toFailure(error, 'Unable to restart the clearance.');
   }
   return { ok: true, toState: (data as any)?.to_state ?? 'in_progress' };
+}
+
+// ── W4·18 · what the floor is told ───────────────────────────────────
+//
+//  line_clearance_conditions() reports in the flagged/blocked shape
+//  the whole floor shares, derived from line_clearance_block_reason —
+//  the same sentence the gate itself produces. So a screen cannot show
+//  green on something line_clearance_verify() will refuse.
+//
+//  FAILS OPEN, and that is deliberate. This is a REPORT, not the gate.
+//  A failed read must not invent a block: it leaves the screen unable
+//  to say, which FloorNoticeList draws as nothing rather than as a
+//  clearance. The gate is still there and still refuses.
+
+/** The clearance conditions on a batch, blocked first. */
+export async function clearanceConditions(batchId: string): Promise<FloorCondition[]> {
+  const { data, error } = await supabase.rpc('line_clearance_conditions', {
+    p_batch_id: batchId,
+  });
+  if (error) {
+    logger.error('[lineClearance] conditions failed', { batchId, error });
+    return [];
+  }
+  return toFloorConditions(data);
 }

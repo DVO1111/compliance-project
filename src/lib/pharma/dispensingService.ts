@@ -18,6 +18,9 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import {
+  toFloorConditions, type FloorCondition, type DispensableLot,
+} from '../floor/floorConditions';
 import { checkDispensable, type DispenseGateClient, type DispenseCheck } from './dispensingModel';
 import type { DispensingRecord, GenealogyEdge, FormulaLine } from './dispensingModel';
 
@@ -230,4 +233,70 @@ export async function verifyDispensing(
     return toFailure(error, 'Unable to verify the dispensing.');
   }
   return { ok: true, verifiedBy: (data as any)?.verified_by };
+}
+
+// ── W4·18 · what the floor is told ───────────────────────────────────
+
+/**
+ * The conditions on dispensing this lot into this batch.
+ *
+ * Derived from dispensing_block_reason, so the notice and the gate
+ * agree. The out-of-tolerance case comes back FLAGGED with a sentence
+ * naming who can authorise it, which is the one condition on the floor
+ * that is neither a pass nor a refusal.
+ */
+export async function dispensingConditions(
+  batchId: string,
+  materialLotId: string,
+  quantity?: number,
+): Promise<FloorCondition[]> {
+  const { data, error } = await supabase.rpc('dispensing_conditions', {
+    p_batch_id: batchId,
+    p_material_lot_id: materialLotId,
+    p_quantity: quantity ?? undefined,
+  });
+  if (error) {
+    logger.error('[dispensing] conditions failed', { batchId, materialLotId, error });
+    return [];
+  }
+  return toFloorConditions(data);
+}
+
+/**
+ * The lots the picker may offer for a material.
+ *
+ * ASKS THE GATE PER LOT. "Unapproved lots selectable then refused: no.
+ * They are never listed" — so this returns what dispensing_block_reason
+ * admits, and `DispensableLot` has no `disabled` field for a screen to
+ * grey a row with.
+ *
+ * An empty list is a real answer, not a failure: it means no approved
+ * stock, and ApprovedLotPicker says which kinds of lot are absent and
+ * where to look. A failed read is also an empty list, which is the one
+ * place these two are indistinguishable — and the safe direction,
+ * since offering nothing never dispenses the wrong lot.
+ */
+export async function dispensableLots(
+  batchId: string,
+  materialId: string,
+): Promise<DispensableLot[]> {
+  const { data, error } = await supabase.rpc('dispensable_lots', {
+    p_batch_id: batchId,
+    p_material_id: materialId,
+  });
+  if (error) {
+    logger.error('[dispensing] dispensableLots failed', { batchId, materialId, error });
+    return [];
+  }
+  return ((data as unknown[]) ?? []).map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      lotId: String(row.lot_id),
+      lotNumber: String(row.lot_number),
+      quantityAvailable: Number(row.quantity_available ?? 0),
+      unitOfMeasure: String(row.unit_of_measure ?? ''),
+      retestDueDate: (row.retest_due_date as string | null) ?? null,
+      supplierExpiryDate: (row.supplier_expiry_date as string | null) ?? null,
+    };
+  });
 }

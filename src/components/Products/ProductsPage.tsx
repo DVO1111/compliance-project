@@ -32,15 +32,18 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   listProducts, createProduct,
-  PRODUCT_STATUS_LABELS, MANUFACTURING_TYPE_LABELS,
+  MANUFACTURING_TYPE_LABELS,
   CONTROLLED_SUBSTANCE_SCHEDULES, requiresControlledSubstancePrompt,
-  isReleaseEligible, eligibilityReason,
+  isReleaseEligible,
   type Product, type ManufacturingType,
 } from '../../lib/productService';
+import { describeStage, permitFor, permitBadge } from '../../lib/products/stagePermits';
+import StateBadge from '../Common/StateBadge';
+import StagePermitsStrip from './StagePermitsStrip';
 import type { ProductCategory } from '../../lib/regulatoryAffairsService';
 import { logger } from '../../lib/logger';
-import { STATUS_ICONS, iconProps } from '../../lib/design/icons';
-import { CircleDashed, AlertTriangle } from 'lucide-react';
+import { iconProps } from '../../lib/design/icons';
+import { AlertTriangle } from 'lucide-react';
 import {
   lightPage, lightCard, lightNextCard, lightPageTitle, lightCardTitle,
   lightBody, lightMeta, lightPrimaryButton, lightLinkButton,
@@ -355,6 +358,10 @@ export default function ProductsPage({
         </section>
       )}
 
+      {/*  The legend, under the table as PR-01 places it. It reads the
+          same sentences the rows do, so the two cannot disagree.  */}
+      {list.length > 0 && <StagePermitsStrip />}
+
       {loading && (
         <section style={lightCard}>
           <p style={lightMeta}>Reading the registry…</p>
@@ -371,12 +378,18 @@ export default function ProductsPage({
 function ProductRow({ product, onOpenRegistrations }: {
   product: Product; onOpenRegistrations: () => void;
 }) {
-  const eligible = isReleaseEligible(product);
-  const reason = eligibilityReason(product);
-  const Tick = STATUS_ICONS.released.icon;
+  //  Two columns of truth, which W2·11 separates deliberately: the
+  //  LIFECYCLE STAGE the product is in, and WHAT IT PERMITS. They are
+  //  not the same question — a Marketed product with an expired licence
+  //  is at its furthest stage and allowed to do nothing.
+  const stage = describeStage(product.status);
+  const permit = permitFor(product.status, {
+    name: product.nafdac_number ? `NAFDAC ${product.nafdac_number}` : undefined,
+    expiryDate: product.registration_expiry_date,
+  });
 
   const spec = [product.dosage_form, product.strength, product.pack_size]
-    .filter(Boolean).join(' · ');
+    .filter(Boolean).join(' \u00b7 ');
 
   return (
     <div style={rowInner}>
@@ -387,7 +400,7 @@ function ProductRow({ product, onOpenRegistrations }: {
         </div>
         {(product.generic_name || spec) && (
           <p style={{ ...lightMeta, marginTop: 3 }}>
-            {[product.generic_name, spec].filter(Boolean).join(' — ')}
+            {[product.generic_name, spec].filter(Boolean).join(' \u2014 ')}
           </p>
         )}
 
@@ -398,14 +411,23 @@ function ProductRow({ product, onOpenRegistrations }: {
           {product.nafdac_number
             ? `NAFDAC ${product.nafdac_number}${
               product.registration_expiry_date
-                ? ` · expires ${product.registration_expiry_date}`
-                : ' · no expiry date recorded'}`
+                ? ` \u00b7 expires ${product.registration_expiry_date}`
+                : ' \u00b7 no expiry date recorded'}`
             : 'No registration number yet.'}
         </p>
 
-        {!eligible && reason && (
-          <p style={{ ...lightMeta, marginTop: 6, color: 'var(--nv-light-badge-waiting-text)' }}>
-            {reason}{' '}
+        {/*  "VERIFY: no action unavailable without an explanation."
+            `permit` carries its reason in the type, so this cannot
+            render a block without one.  */}
+        {permit.kind !== 'allowed' && (
+          <p style={{ ...lightMeta, marginTop: 6 }}>
+            <span style={{ color: permit.kind === 'blocked'
+              ? 'var(--nv-light-state-overdue-text)'
+              : 'var(--nv-light-badge-waiting-text)' }}>
+              {permit.reason}
+            </span>
+            {permit.nextStep && <> {permit.nextStep}</>}
+            {' '}
             <button type="button" style={{ ...lightLinkButton, fontSize: 13 }}
               onClick={onOpenRegistrations}>
               Record a registration
@@ -414,17 +436,10 @@ function ProductRow({ product, onOpenRegistrations }: {
         )}
       </div>
 
-      <span style={{
-        ...lightBadge,
-        ...(eligible
-          ? { background: 'var(--nv-light-badge-done-bg)', color: 'var(--nv-light-badge-done-text)' }
-          : { background: 'var(--nv-light-badge-todo-bg)', color: 'var(--nv-light-badge-todo-text)' }),
-      }}>
-        {eligible
-          ? <Tick {...iconProps('sm')} size={13} aria-hidden="true" />
-          : <CircleDashed {...iconProps('sm')} size={13} aria-hidden="true" />}
-        {PRODUCT_STATUS_LABELS[product.status]}
-      </span>
+      <div style={rowStates}>
+        <StateBadge state={stage.badge}>{stage.label}</StateBadge>
+        <StateBadge state={permitBadge(permit)}>{permit.summary}</StateBadge>
+      </div>
     </div>
   );
 }
@@ -481,6 +496,11 @@ const rowInner: CSSProperties = {
 const rowName: CSSProperties = {
   fontSize: 15, fontWeight: 600, lineHeight: '21px',
   color: 'var(--nv-light-text-primary)',
+};
+
+const rowStates: CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 6,
+  alignItems: 'flex-end', flexShrink: 0,
 };
 
 const rowCode: CSSProperties = {

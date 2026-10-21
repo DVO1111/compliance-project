@@ -46,6 +46,13 @@ import type {
   ProductWeightLimits, StageReading, OosEscalation,
   StageParameterSpec, WeightZone, ZoneAction, OosDecision,
 } from './inprocessModel';
+//  W4·19. The zone bands and the live verdict shape live outside this
+//  file: ZoneBand because the gauge and the chips are presentation and
+//  `lib/inprocess/zones.ts` is where that rule is kept, and
+//  FloorCondition because the live verdict comes back in W4·18's
+//  flagged/blocked shape so one component renders it.
+import type { ZoneBand } from '../inprocess/zones';
+import type { FloorCondition } from '../floor/floorConditions';
 
 export type {
   ProductWeightLimits, StageReading, OosEscalation, SamplingDue,
@@ -399,4 +406,129 @@ export async function listEscalations(
     return [];
   }
   return (data as OosEscalation[]) ?? [];
+}
+
+// ── W4·19 · what the workstation screens read ────────────────────────
+//
+//  Three reports added in
+//  20261031000000_inprocess_zone_entry_and_yield_accounting.sql. All
+//  three are STABLE and write nothing, which is why the live one can
+//  be called on every keystroke.
+//
+//  EACH FAILS OPEN, not closed. These are reports, not gates:
+//  inprocess_reading_conditions tells a screen what to SHOW, and
+//  batch_stage_record_reading decides what may be stored. A failed
+//  read must therefore not stop anybody recording a reading — item
+//  11's first NOT DONE IF — so an error yields an empty list and a log
+//  line. The same reasoning as fetchSamplingDue, and the opposite of
+//  the quarantine and clearance gates, which fail closed because they
+//  ARE the decision.
+
+/** The five zone bands for a product, low to high. Empty for a product
+ *  with no limits configured, which is a real answer and not a
+ *  failure — a screen says "not configured" rather than drawing a
+ *  gauge nobody set. */
+export async function zoneKey(productId: string): Promise<ZoneBand[]> {
+  const { data, error } = await (supabase as any)
+    .rpc('inprocess_zone_key', { p_product_id: productId });
+  if (error) {
+    logger.error('[inprocess] zoneKey failed', { productId, error });
+    return [];
+  }
+  return ((data as any[]) ?? []).map((r) => ({
+    zone: r.zone,
+    action: r.action,
+    lowerBound: r.lower_bound === null ? null : Number(r.lower_bound),
+    upperBound: r.upper_bound === null ? null : Number(r.upper_bound),
+    lowerInclusive: r.lower_inclusive === true,
+    upperInclusive: r.upper_inclusive === true,
+    boundText: r.bound_text,
+    sortOrder: Number(r.sort_order),
+  }));
+}
+
+export interface ShiftReading {
+  readingId: string;
+  sequenceNo: number;
+  readingValue: number | null;
+  unit: string | null;
+  zone: WeightZone | null;
+  zoneAction: ZoneAction | null;
+  inSpecification: boolean | null;
+  recordedAt: string;
+  escalated: boolean;
+  /** null while an escalation is open, so a chip can distinguish "a
+   *  supervisor was asked" from "a supervisor answered". */
+  decision: OosDecision | null;
+}
+
+/** The readings taken for one test on one stage, in sequence, with the
+ *  zone AS FILED. Not reclassified: a product's limits can be revised
+ *  and a re-zoned history would rewrite what the shift saw. */
+export async function shiftHistory(
+  batchStageId: string,
+  formulaParameterId: string,
+  since?: string,
+): Promise<ShiftReading[]> {
+  const { data, error } = await (supabase as any).rpc('inprocess_shift_history', {
+    p_batch_stage_id: batchStageId,
+    p_formula_parameter_id: formulaParameterId,
+    p_since: since ?? null,
+  });
+  if (error) {
+    logger.error('[inprocess] shiftHistory failed', { batchStageId, error });
+    return [];
+  }
+  return ((data as any[]) ?? []).map((r) => ({
+    readingId: r.reading_id,
+    sequenceNo: Number(r.sequence_no),
+    readingValue: r.reading_value === null ? null : Number(r.reading_value),
+    unit: r.unit ?? null,
+    zone: r.zone ?? null,
+    zoneAction: r.zone_action ?? null,
+    inSpecification: r.in_specification ?? null,
+    recordedAt: r.recorded_at,
+    escalated: r.escalated === true,
+    decision: r.decision ?? null,
+  }));
+}
+
+/**
+ * What a screen should show about a value as it is being typed.
+ *
+ * EVERY ROW COMES BACK FLAGGED. The database has no branch that
+ * produces a blocked one, and a deploy assertion fails if one appears:
+ * an out-of-specification reading must not block entry, and the
+ * machine-setting interlock is a proposal nobody has decided on.
+ *
+ * Callable on every keystroke — the function is STABLE and records
+ * nothing. A null value returns no conditions, because an empty field
+ * is the normal state of a form.
+ */
+export async function readingConditions(
+  batchStageId: string,
+  formulaParameterId: string,
+  value: number | null,
+): Promise<FloorCondition[]> {
+  if (value === null || !Number.isFinite(value)) return [];
+  const { data, error } = await (supabase as any).rpc('inprocess_reading_conditions', {
+    p_batch_stage_id: batchStageId,
+    p_formula_parameter_id: formulaParameterId,
+    p_value: value,
+  });
+  if (error) {
+    //  Empty, not a notice invented here. A screen that manufactured a
+    //  flag from a failed read would teach an operator that the amber
+    //  panel means the network is slow.
+    logger.error('[inprocess] readingConditions failed', { batchStageId, value, error });
+    return [];
+  }
+  return ((data as any[]) ?? []).map((r) => ({
+    key: r.condition_key,
+    severity: r.severity,
+    title: r.title,
+    detail: r.detail,
+    continueWith: r.continue_with ?? null,
+    sortOrder: Number(r.sort_order),
+  }));
 }

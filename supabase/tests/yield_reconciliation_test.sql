@@ -1978,6 +1978,235 @@ BEGIN
 END
 $j2$;
 
+-- ═════════════════════════════════════════════════════════════════════
+--  SECTION N — W4·19'S YIELD ACCOUNT
+--
+--  "Theoretical, packed, samples, rejects, unaccounted, yield and
+--   variance against the threshold" (YR-01).
+--
+--  YR-01's figures settle what "actual yield" means, and section N is
+--  written to keep it settled:
+--
+--      theoretical 300,000 · packed 289,440 · samples 1,260 ·
+--      rejects 2,100 · unaccounted 7,200 (2.4%) ·
+--      actual yield 96.5% · variance −3.5%
+--
+--  96.5% is packed over theoretical, NOT the accounted total over
+--  theoretical (which is 97.6%). So actual_quantity IS the packed
+--  figure, there is no second packed column, and the two percentages
+--  on the screen are different numbers on purpose: one is the yield
+--  the threshold blocks on, the other is the material nobody can find.
+--
+--  N2 and N4 are the pair that holds it. N2 keeps the verdict on
+--  packed alone; N4 keeps unaccounted counting samples and rejects as
+--  found. Collapse either and the screen shows a number the gate did
+--  not use.
+-- ═════════════════════════════════════════════════════════════════════
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('i12.u_op'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $n$
+DECLARE
+  s_acct uuid; s_over uuid; r jsonb; v_rec uuid; v_over uuid;
+  n integer; ok boolean; msg text; rec record;
+BEGIN
+  s_acct := _i12_batch(current_setting('i12.p_a')::uuid, 'I12-ACCT-N1');
+  s_over := _i12_batch(current_setting('i12.p_a')::uuid, 'I12-ACCT-N2');
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('i12.u_op'), 'role','authenticated')::text, false);
+
+  --  50 kg theoretical. 49 kg packed, with 0.5 kg sampled and 0.4 kg
+  --  rejected on top. The packed figure is section B's edge case: 98%,
+  --  -2%, exactly on the 2% threshold and therefore within it.
+  r := public.yield_reconcile_stage_accounted(s_acct, 49.0, 0.5, 0.4);
+  v_rec := (r->>'reconciliation_id')::uuid;
+
+  PERFORM _i12k('N','N1 the packed figure is the actual yield',
+    (r->>'actual_quantity')::numeric = 49.0, coalesce(r->>'actual_quantity','NULL'));
+
+  --  ═══ THE FIRST OF THE PAIR ═══
+  --  The verdict is on PACKED ALONE, and it is item 12's, unchanged.
+  --  Summing the account into the actual yield would read 49.9 kg here
+  --  — 99.8%, a -0.2% variance — and a stage that packed 2% short
+  --  would pass because somebody sampled it.
+  PERFORM _i12k('N','N2 and the verdict is on packed alone, derived by item 12',
+    (r->>'yield_pct')::numeric = 98.0 AND (r->>'variance_pct')::numeric = -2.0
+    AND (r->>'within_threshold')::boolean,
+    format('%s%% / %s / within %s', r->>'yield_pct', r->>'variance_pct',
+           r->>'within_threshold'));
+
+  --  And packed is not stored twice. A packed_quantity column would be
+  --  a second home for actual_quantity; the migration asserts it never
+  --  appears, and so does this.
+  PERFORM _i12k('N','N2b packed is not held in a column of its own',
+    NOT EXISTS (SELECT 1 FROM pg_attribute
+                 WHERE attrelid = 'public.batch_yield_reconciliations'::regclass
+                   AND attname = 'packed_quantity' AND NOT attisdropped));
+
+  PERFORM _i12k('N','N3 one reconciliation, not two',
+    (SELECT count(*) = 1 FROM public.batch_yield_reconciliations
+      WHERE batch_stage_id = s_acct));
+
+  --  ═══ THE SECOND OF THE PAIR ═══
+  --  Samples and rejects are ACCOUNTED FOR, so the unaccounted line is
+  --  theoretical minus all three — 50 − 49.9 = 0.1 kg, not the 1 kg
+  --  the variance alone suggests. An account that treated them as lost
+  --  would report 1 kg missing at Packing and send somebody looking
+  --  for material that is sitting in the QC lab.
+  SELECT quantity, pct_of_theoretical INTO rec
+    FROM public.yield_account_lines(v_rec) WHERE line_key = 'unaccounted';
+  PERFORM _i12k('N','N4 unaccounted counts samples and rejects as found',
+    rec.quantity = 0.1,
+    format('%s kg / %s%%', rec.quantity, rec.pct_of_theoretical));
+
+  --  ...and it is therefore NOT the variance. The two numbers sit on
+  --  the same screen and mean different things: 2% short on yield,
+  --  0.2% of the batch unlocated. Collapsing them would lose one.
+  PERFORM _i12k('N','N4b and is a different figure from the variance, deliberately',
+    rec.pct_of_theoretical
+      <> -(SELECT variance_pct FROM public.batch_yield_reconciliations WHERE id = v_rec)
+    AND rec.pct_of_theoretical = 0.2,
+    format('unaccounted %s%% against variance %s%%', rec.pct_of_theoretical,
+           (SELECT variance_pct FROM public.batch_yield_reconciliations WHERE id = v_rec)));
+
+  --  The six lines YR-01 shows, in the order it shows them.
+  PERFORM _i12k('N','N5 the account has the six lines, in the design''s order',
+    (SELECT array_agg(line_key ORDER BY sort_order) FROM public.yield_account_lines(v_rec))
+      = ARRAY['theoretical','packed','samples','rejects','accounted','unaccounted'],
+    (SELECT array_agg(line_key ORDER BY sort_order)::text
+       FROM public.yield_account_lines(v_rec)));
+
+  PERFORM _i12k('N','N6 the lines are what was counted',
+    (SELECT quantity = 49.0 FROM public.yield_account_lines(v_rec) WHERE line_key='packed')
+    AND (SELECT quantity = 0.5 FROM public.yield_account_lines(v_rec) WHERE line_key='samples')
+    AND (SELECT quantity = 0.4 FROM public.yield_account_lines(v_rec) WHERE line_key='rejects')
+    AND (SELECT quantity = 49.9 FROM public.yield_account_lines(v_rec) WHERE line_key='accounted'));
+
+  --  The packed line reads actual_quantity and its share is yield_pct,
+  --  rather than a second division of the same two numbers. Four
+  --  decimal places apart is still two answers.
+  PERFORM _i12k('N','N7 the packed line reads the yield item 12 derived',
+    (SELECT pct_of_theoretical FROM public.yield_account_lines(v_rec) WHERE line_key='packed')
+    = (SELECT yield_pct FROM public.batch_yield_reconciliations WHERE id = v_rec));
+
+  --  Decision 4 for the lead is still open, so nothing demands an
+  --  explanation yet. Asserted rather than left implicit: the day
+  --  somebody answers yes, this assertion is where the answer lands.
+  PERFORM _i12k('N','N8 no line demands an explanation yet (decision 4 open)',
+    NOT EXISTS (SELECT 1 FROM public.yield_account_lines(v_rec) WHERE must_explain));
+
+  --  AN OVERAGE MAKES UNACCOUNTED NEGATIVE. 51.5 kg packed out of 50
+  --  is +3%, and with the account on top there is 2.4 kg more material
+  --  than theory allows for. An absolute value would report it as
+  --  "2.4 kg unaccounted", which reads like a loss — a different
+  --  problem with a different cause.
+  r := public.yield_reconcile_stage_accounted(s_over, 51.5, 0.5, 0.4);
+  v_over := (r->>'reconciliation_id')::uuid;
+  PERFORM _i12k('N','N9 an overage leaves unaccounted negative, not absolute',
+    (SELECT quantity = -2.4 FROM public.yield_account_lines(v_over)
+      WHERE line_key='unaccounted'),
+    (SELECT quantity::text FROM public.yield_account_lines(v_over) WHERE line_key='unaccounted'));
+
+  --  A reconciliation recorded WITHOUT a breakdown still has an
+  --  account: its packed line and its yield are intact, and the lines
+  --  nobody counted are absent. The breakdown explains a figure; it is
+  --  not a precondition for having one, and every reconciliation
+  --  recorded before this migration has none.
+  PERFORM _i12k('N','N10 a reconciliation with no breakdown still has an account',
+    (SELECT count(*) = 6 FROM public.yield_account_lines(current_setting('i12.r_edge')::uuid))
+    AND (SELECT quantity = 49.0 FROM public.yield_account_lines(
+           current_setting('i12.r_edge')::uuid) WHERE line_key='packed')
+    AND (SELECT quantity IS NULL FROM public.yield_account_lines(
+           current_setting('i12.r_edge')::uuid) WHERE line_key='samples'));
+
+  --  And "accounted for" is ABSENT rather than equal to packed. Equal
+  --  to packed would be a claim that nothing was sampled or rejected,
+  --  which is not what a missing breakdown means.
+  PERFORM _i12k('N','N10b with the derived lines absent, not assumed to be zero',
+    (SELECT quantity IS NULL FROM public.yield_account_lines(
+       current_setting('i12.r_edge')::uuid) WHERE line_key='accounted')
+    AND (SELECT quantity IS NULL FROM public.yield_account_lines(
+       current_setting('i12.r_edge')::uuid) WHERE line_key='unaccounted'));
+
+  --  A HALF-WRITTEN ACCOUNT IS REFUSED. It looks like a breakdown and
+  --  the remainder it implies is wrong by exactly the line nobody
+  --  entered, which is worse than no breakdown at all.
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.yield_reconcile_stage_accounted(
+          _i12_batch(current_setting('i12.p_a')::uuid, 'I12-ACCT-N3'), 46.0, NULL, 1.5);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'YIELD_ACCOUNT_INCOMPLETE%'; msg := SQLERRM; END;
+  PERFORM _i12k('N','N11 a half-written account is refused by name', ok,
+    left(coalesce(msg,'it was accepted'),200));
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('i12.u_op'), 'role','authenticated')::text, false);
+
+  --  WRITE-ONCE. A breakdown that can be revised after a supervisor
+  --  authorised the variance is not a record of what was counted.
+  ok := false; msg := NULL;
+  BEGIN
+    UPDATE public.batch_yield_reconciliations SET samples_quantity = 9.0 WHERE id = v_rec;
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'YIELD_ACCOUNT_FROZEN%'; msg := SQLERRM; END;
+  PERFORM _i12k('N','N12 and the lines cannot be revised afterwards', ok,
+    left(coalesce(msg,'the samples figure was changed'),200));
+
+  --  ...and a half-written account cannot be written around the RPC
+  --  either, so the constraint holds for any writer and not only for
+  --  the one path that happens to check.
+  ok := false; msg := NULL;
+  BEGIN
+    UPDATE public.batch_yield_reconciliations SET samples_quantity = 1.0
+     WHERE id = current_setting('i12.r_good')::uuid;
+  EXCEPTION WHEN others THEN ok := true; msg := SQLERRM; END;
+  PERFORM _i12k('N','N13 nor can one line be set on its own', ok,
+    left(coalesce(msg,'a lone samples figure was stored'),200));
+
+  --  A negative line is not a measurement.
+  ok := false; msg := NULL;
+  BEGIN
+    UPDATE public.batch_yield_reconciliations
+       SET samples_quantity = -1.0, rejects_quantity = 0
+     WHERE id = current_setting('i12.r_good')::uuid;
+  EXCEPTION WHEN others THEN ok := true; msg := SQLERRM; END;
+  PERFORM _i12k('N','N14 and a negative line is refused', ok,
+    left(coalesce(msg,'a negative samples figure was stored'),200));
+
+  --  A variance beyond threshold still blocks, with or without an
+  --  account. The breakdown explains the block; it does not soften it.
+  PERFORM _i12k('N','N15 an accounted variance beyond threshold still blocks',
+    (SELECT yield_block_reason(s_over) IS NOT NULL),
+    coalesce((SELECT yield_block_reason(s_over)), 'nothing blocked'));
+
+  PERFORM set_config('i12.r_acct', v_rec::text, false);
+  PERFORM set_config('i12.s_acct', s_acct::text, false);
+END
+$n$;
+RESET ROLE; RESET request.jwt.claims;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('i12.u_b'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $n2$
+DECLARE ok boolean; msg text;
+BEGIN
+  --  Both new functions are SECURITY DEFINER, so section J proving the
+  --  tables are closed proves nothing about them.
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.yield_account_lines(current_setting('i12.r_acct')::uuid);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'YIELD_FORBIDDEN%'; msg := SQLERRM; END;
+  PERFORM _i12k('N','N16 a foreign company cannot read the account', ok,
+    left(coalesce(msg,'they read it'),180));
+
+  ok := false; msg := NULL;
+  BEGIN PERFORM public.yield_reconcile_stage_accounted(
+          current_setting('i12.s_acct')::uuid, 1.0, 1.0, 1.0);
+  EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BATCH_FORBIDDEN%'; msg := SQLERRM; END;
+  PERFORM _i12k('N','N17 nor record one', ok, left(coalesce(msg,'they recorded one'),180));
+END
+$n2$;
+RESET ROLE; RESET request.jwt.claims;
+
 DROP FUNCTION IF EXISTS _i12_batch(uuid,text,boolean);
 
 \echo ''

@@ -29,6 +29,10 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+//  The row shape is the pure module's own StripStage, not a copy:
+//  stageStrip.ts does the judging and a second declaration here
+//  would be a second place for the column names to drift.
+import type { StripStage, CompletionBlocker } from '../batch/stageStrip';
 import type { BatchStage, BatchStageReading, BatchStageCorrection } from './batchExecutionModel';
 
 //  Re-exported so a caller needs one import, not two. The shapes and the
@@ -338,4 +342,109 @@ export async function closeBatchExecution(
   }).catch(e => logger.error('Audit failed for batch_record_close:', e));
 
   return { ok: true, toState: (data as any)?.to_state ?? 'qc_pending' };
+}
+
+// ── W4·17 · the stage strip and the two-step sign-off ────────────────
+
+/**
+ * Every stage of a batch, with what each one is waiting for.
+ *
+ * `waitingFor` is a SENTENCE from the database, not a status this file
+ * composes: the design requires every locked stage to say what it
+ * waits for, and a screen that wrote its own reason would eventually
+ * say something the lifecycle disagrees with. `waitingReason` in
+ * stageStrip.ts returns null rather than inventing a placeholder when
+ * one is missing.
+ */
+export async function stageStrip(batchId: string): Promise<StripStage[]> {
+  const { data, error } = await supabase.rpc('batch_stage_strip', { p_batch_id: batchId });
+  if (error) {
+    logger.error('[batch] stageStrip failed', { batchId, error });
+    return [];
+  }
+  return ((data as unknown[]) ?? []).map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      stageId: String(row.stage_id),
+      sequenceNo: Number(row.sequence_no),
+      name: String(row.name),
+      status: String(row.status),
+      state: row.state as StripStage['state'],
+      waitingFor: (row.waiting_for as string | null) ?? null,
+      requiresVerifier: row.requires_verifier === true,
+      operatorId: (row.operator_id as string | null) ?? null,
+      verifierId: (row.verifier_id as string | null) ?? null,
+      signedByOperator: row.signed_by_operator === true,
+      signedByVerifier: row.signed_by_verifier === true,
+      readingsTotal: Number(row.readings_total ?? 0),
+      readingsRecorded: Number(row.readings_recorded ?? 0),
+      readingsOutOfSpec: Number(row.readings_out_of_spec ?? 0),
+    };
+  });
+}
+
+/** What stops a stage being completed, from the same source the gate
+ *  reads. Missing readings are derived from the FORMULA, not from
+ *  empty reading rows — rows appear when a value is recorded, so a
+ *  stage with nothing recorded would otherwise report no blockers. */
+export async function stageCompletionBlockers(
+  stageId: string,
+): Promise<CompletionBlocker[]> {
+  const { data, error } = await supabase.rpc('batch_stage_completion_blockers', {
+    p_stage_id: stageId,
+  });
+  if (error) {
+    logger.error('[batch] completionBlockers failed', { stageId, error });
+    return [];
+  }
+  return ((data as unknown[]) ?? []).map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      key: String(row.blocker_key),
+      title: String(row.title),
+      detail: String(row.detail),
+      sortOrder: Number(row.sort_order ?? 0),
+    };
+  });
+}
+
+/**
+ * The operator's half of a dual sign-off.
+ *
+ * TWO CALLS, NOT ONE, and that is the whole of W4·17. Before the
+ * `awaiting_verification` state existed, verifying meant both people
+ * at one tablet with the second typing their password into a form the
+ * first had opened. The operator signs here and walks away; the
+ * verifier signs later, from their own session, as themselves.
+ */
+export async function signStageAsOperator(
+  stageId: string, signatureId: string,
+): Promise<ExecutionResult<{ toState: string }>> {
+  const { data, error } = await supabase.rpc('batch_stage_sign_operator', {
+    p_stage_id: stageId,
+    p_signature_id: signatureId,
+  });
+  if (error) {
+    logger.error('[batch] signStageAsOperator failed', { stageId, error });
+    return toFailure(error, 'The stage could not be signed.');
+  }
+  const row = (data ?? {}) as Record<string, unknown>;
+  return { ok: true, toState: String(row.to_state ?? 'awaiting_verification') };
+}
+
+/** The verifier's half. The database refuses a verifier who is the
+ *  operator, so the two signatures are always two people. */
+export async function verifyStage(
+  stageId: string, signatureId: string,
+): Promise<ExecutionResult<{ toState: string }>> {
+  const { data, error } = await supabase.rpc('batch_stage_verify', {
+    p_stage_id: stageId,
+    p_signature_id: signatureId,
+  });
+  if (error) {
+    logger.error('[batch] verifyStage failed', { stageId, error });
+    return toFailure(error, 'The stage could not be verified.');
+  }
+  const row = (data ?? {}) as Record<string, unknown>;
+  return { ok: true, toState: String(row.to_state ?? 'complete') };
 }

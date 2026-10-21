@@ -319,18 +319,80 @@
      mid-green button needs white type to clear 4.5:1, so
      --nv-light-action-text is white and must stay white. */
   --nv-light-ground:         #f7f4ee;
-  --nv-light-surface:        #ffffff;
-  --nv-light-surface-sunken: #f1ede4;
-  --nv-light-border:         #e4dfd3;
-  --nv-light-border-strong:  #cfc8b8;
 
-  --nv-light-text-primary:   #101931;
-  --nv-light-text-secondary: #4d5569;
-  --nv-light-text-tertiary:  #7b8397;
+  /*  BOUND from `disabled/border` on the button component (node 17:206),
+      which is also the neutral border every card, dialog and divider in
+      the W2-0 frames draws. Mine was #e4dfd3 — a warmer near miss, from
+      the same eyeballing pass as the four below. */
+  --nv-light-border:         #e6e3dc;  /* border/default */
 
-  --nv-light-action-bg:      #71a66a;
-  --nv-light-action-hover:   #5f9158;
-  --nv-light-action-text:    #ffffff;
+  /*  Bound from state/step (node 47:385), which draws its connector
+      lines in border/strong and its collapsed-later pill on
+      surface/recessed. Mine were #cfc8b8 and #f1ede4 — warmer than the
+      system's, because I sampled them from a cream screenshot where
+      everything picks up the ground. */
+  --nv-light-border-strong:  #d4d4d5;  /* border/strong    */
+  --nv-light-surface-sunken: #f4f1eb;  /* surface/recessed */
+
+  /*  BOUND, like the state colours above. These four were mine, matched
+      by eye from a PDF, and all four were near misses: #ffffff for a
+      raised surface the system sets at #fdfcfa, #101931 for a primary
+      text colour it sets at #0d1933, #4d5569 against #4a4a51, #7b8397
+      against #6e6e73. Read from the record/banner component (node
+      38:441), where they appear as surface/raised and text/primary |
+      secondary | tertiary. */
+  --nv-light-surface:        #fdfcfa;  /* surface/raised */
+  --nv-light-text-primary:   #0d1933;  /* text/primary   */
+  --nv-light-text-secondary: #4a4a51;  /* text/secondary */
+  --nv-light-text-tertiary:  #6e6e73;  /* text/tertiary  */
+
+  /*  BOUND from the button component (node 17:206), which carries the
+      whole action palette as variables. The note above says the action
+      green is "the v2 system's #71a66a, unchanged" — that was wrong.
+      #71a66a is the navy theme's green; on cream the system uses a
+      darker #3e7a41, and its hover goes DOWN to #1e5620 rather than up.
+      The note's conclusion survives: the text stays white.
+
+      The other four families are here because a screen that needs a
+      secondary, a destructive or a disabled button should not have to
+      invent one — which is how #71a66a got in. */
+  --nv-light-action-bg:            #3e7a41;  /* action/primary/bg        */
+  --nv-light-action-hover:         #1e5620;  /* action/primary/bg-hover  */
+  --nv-light-action-active:        #17451a;  /* action/primary/bg-active */
+  --nv-light-action-text:          #ffffff;  /* action/primary/text      */
+
+  --nv-light-ink-bg:               #0d1933;  /* action/ink/*    */
+  --nv-light-ink-hover:            #1c2a4d;
+  --nv-light-ink-text:             #ffffff;
+
+  --nv-light-outline-bg:           #fdfcfa;  /* action/outline/* */
+  --nv-light-outline-border:       #d4d4d5;
+  --nv-light-outline-border-hover: #a9a9ae;
+  --nv-light-outline-text:         #0d1933;
+
+  --nv-light-danger-bg:            #c62f1e;  /* action/danger/* */
+  --nv-light-danger-hover:         #a3261a;
+  --nv-light-danger-text:          #ffffff;
+  --nv-light-danger-soft-bg:       #f3d7d2;  /* action/danger-soft/* */
+  --nv-light-danger-soft-text:     #a3261a;
+
+  --nv-light-disabled-bg:          #efece6;  /* disabled/* */
+  --nv-light-disabled-text:        #a9a9ae;
+  --nv-light-disabled-border:      #e6e3dc;
+
+  /*  One focus ring for every variant, stated in the button's own
+      description: "2 px CR Blue Light (#183470) outside stroke, same on
+      every variant". Not a per-component choice. */
+  --nv-light-focus-ring:           #183470;  /* focus/ring */
+
+  --nv-light-surface-hover:        #f4f1eb;  /* surface/hover   */
+  --nv-light-surface-pressed:      #ede9e1;  /* surface/pressed */
+
+  /*  The selected-option treatment: a green stroke (action/primary/bg)
+      over a very pale green fill. Drawn as literals in the W2-0 request
+      dialog and review drawer rather than as a variable, so this one is
+      read from the frames and not bound. */
+  --nv-light-select-fill:          #f5faf5;
 
   /*  The "next step" treatment, carried over from ONB-00's current-step
       card and ONB-07's first-action card: a green stroke over an 8%
@@ -339,18 +401,101 @@
   --nv-light-next-fill:      rgba(113, 166, 106, 0.08);
   --nv-light-next-border:    #71a66a;
 
-  /*  Badge pairs for "Finish setting up". Each is a fill and a text
-      colour that clears 4.5:1 on it, and each state also carries a
-      distinct WORD — Waiting, To do, Optional, Done — so the colour is
-      never the only signal. */
-  --nv-light-badge-waiting-bg:   #fdf0dc;
-  --nv-light-badge-waiting-text: #8a5209;
-  --nv-light-badge-todo-bg:      #e7eaf2;
-  --nv-light-badge-todo-text:    #39415a;
-  --nv-light-badge-optional-bg:  #f1ede4;
-  --nv-light-badge-optional-text:#6b6559;
-  --nv-light-badge-done-bg:      #e3f0de;
-  --nv-light-badge-done-text:    #2f5a29;
+  /*  Badge pairs for "Finish setting up", and for any state badge on a
+      light surface. Each state also carries a distinct WORD — Waiting,
+      To do, Optional, Done — so the colour is never the only signal.
+
+      THESE ARE BOUND VALUES, read from the design system file's "State
+      colour mapping" frame (node 16:32 in Criateur Compliance · Product
+      Design) rather than sampled from a screenshot. The first version of
+      this block was eight hexes I approximated by eye from a PDF, and
+      every one of them was close to but not the design's: #e3f0de for a
+      green the system sets at #e6f3ea, #2f5a29 for a text colour it sets
+      at #117a47. Close is how a palette drifts — nobody notices one
+      wrong green, and a year later nothing matches anything.
+
+      Three of the four map onto a state the system defines. Waiting is
+      `pending`, To do is `draft`, Done is `compliant`. The borders are
+      the system's too; ONB-08's badges do not draw one, but a badge
+      elsewhere will.  */
+  --nv-light-badge-waiting-bg:     #fcf0e5;  /* state/pending */
+  --nv-light-badge-waiting-text:   #a35a20;
+  --nv-light-badge-waiting-border: #f6b886;
+
+  --nv-light-badge-todo-bg:        #efeeec;  /* state/draft */
+  --nv-light-badge-todo-text:      #6a6a6f;
+  --nv-light-badge-todo-border:    #a7a7a9;
+
+  --nv-light-badge-done-bg:        #e6f3ea;  /* state/compliant */
+  --nv-light-badge-done-text:      #117a47;
+  --nv-light-badge-done-border:    #7cc9a2;
+  /*  The solid fill, for a marker rather than a tint — the completed
+      node on the lifecycle track is this colour with a white glyph. */
+  --nv-light-state-compliant-icon: #117a47;
+
+  /*  OPTIONAL IS NOT A STATE THE DESIGN SYSTEM DEFINES, and it is not
+      one of the six — compliant, pending, overdue, rejected, hold,
+      draft. "Optional" is the absence of a requirement rather than a
+      position in a workflow, so there is nothing to bind it to and
+      these two are deliberately ours. Kept quieter than `draft` so a
+      row nobody has to act on does not read like one that is waiting.  */
+  --nv-light-badge-optional-bg:    #f4f2ee;
+  --nv-light-badge-optional-text:  #86827a;
+
+  /*  The other three states the system defines, for the quality screens
+      that need them — a quarantined lot, an overdue investigation, a
+      rejected batch. Bound from the same frame. */
+  --nv-light-state-overdue-bg:     #f3d7d2;
+  --nv-light-state-overdue-text:   #b42c1d;
+  --nv-light-state-overdue-border: #c62f1e;
+  --nv-light-state-rejected-bg:    #c62f1e;
+  --nv-light-state-rejected-text:  #ffffff;
+  /*  W4·15 · quarantine. Bound from badge/state State=quarantine
+      (node 119:1503) and the quarantine banner (124:770). It is the
+      ONE state drawn as a solid fill rather than a tint, because it is
+      the one state that stops work rather than delaying it — see
+      StateBadge for the greyscale reasoning. The banner's inner tile
+      and its body text are the two lighter navies beside it. */
+  --nv-light-state-quarantine-bg:    #183470;
+  --nv-light-state-quarantine-text:  #ffffff;
+  --nv-light-state-quarantine-tile:  #2a4a8c;
+  --nv-light-state-quarantine-body:  #d5dbea;
+  --nv-light-state-quarantine-meta:  #aeb9d3;
+
+  --nv-light-state-hold-bg:        #e6e8ec;
+  --nv-light-state-hold-text:      #183470;
+  --nv-light-state-hold-border:    #7f8eae;
+
+  /*  W4·19 · the weight zones. Three pairs, not five: 2U and 2L share
+      a treatment and so do 3U and 3L, because the direction is carried
+      by the arrows and not by the colour — "zones distinguishable in
+      greyscale: 1 = light circle; 2U/2L = outlined square with one
+      arrow up/down; 3U/3L = dark solid square with two arrows. Colour
+      is secondary."
+
+      Zone 1 and zone 2 reuse the done and waiting badge families, as
+      the design file does. ZONE 3 IS ITS OWN VALUE: #7a1a10, which is
+      NOT --nv-light-state-rejected-bg (#c62f1e). That looks like a
+      drift to fix and is not. A zone 3 chip is 28 px tall with white
+      12 px type and two arrows inside it; at that size the brighter
+      red loses the arrows, and the arrows are what makes the chip
+      legible in greyscale. Literal in the design file too (the chips
+      bind no variable), so it is bound once here rather than inlined
+      at each of the four places a chip is drawn. */
+  --nv-light-zone-1-bg:      #e6f3ea;
+  --nv-light-zone-1-border:  #117a47;
+  --nv-light-zone-1-text:    #117a47;
+  --nv-light-zone-2-bg:      #fcf0e5;
+  --nv-light-zone-2-border:  #a35a20;
+  --nv-light-zone-2-text:    #a35a20;
+  --nv-light-zone-3-bg:      #7a1a10;
+  --nv-light-zone-3-border:  #7a1a10;
+  --nv-light-zone-3-text:    #ffffff;
+  /*  A zone the product has no limits for. Not a sixth zone: the
+      absence of one, and drawn as such rather than as a quiet zone 1. */
+  --nv-light-zone-none-bg:     #f4f1eb;
+  --nv-light-zone-none-border: #d4d4d5;
+  --nv-light-zone-none-text:   #6e6e73;
 
   /* ── Navy: type, per the design and the mobile adaptation rules ──
       title    Bricolage 32/38 desktop, 24/30 mobile

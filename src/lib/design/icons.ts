@@ -275,10 +275,25 @@ export const STATUS_ICONS = {
   overdue:     { icon: ShieldAlert,  colour: '#C62F1E', token: 'status/danger'  },
   /** Failed · rejected */
   rejected:    { icon: Ban,          colour: '#C62F1E', token: 'status/danger'  },
-  /** Quarantined · on hold — an OCTAGON, which is the whole point of the
-   *  section: it must not be another coloured circle, and it must not
-   *  reuse the reject glyph either. */
+  /** On hold — an OCTAGON, which is the whole point of the section: it
+   *  must not be another coloured circle, and it must not reuse the
+   *  reject glyph either. */
   on_hold:     { icon: AlertOctagon, colour: '#183470', token: 'status/info'    },
+  /**
+   * Quarantined — W4·15 added this as a STATE OF ITS OWN, and the
+   * design's NOT DONE IF says why: "Quarantine looks like On hold: no.
+   * Quarantine is solid navy with a lock; On hold is the light hold
+   * tint with a pause icon. Distinct in greyscale too."
+   *
+   * Before this, "Quarantined" was drawn with on_hold — a light navy
+   * tint shared with every other paused thing. A quarantined lot is
+   * not paused; it is barred from dispensing and production from every
+   * screen and integration, and the badge has to look like the one
+   * state on the board that stops work rather than delays it. Solid
+   * fill and a LOCK, not an octagon: the lock is the glyph the locked
+   * record and the locked section already use for "you cannot".
+   */
+  quarantine:  { icon: Lock,         colour: '#183470', token: 'status/info'    },
   /** Draft · not started */
   draft:       { icon: MoreHorizontal, colour: '#6E6E73', token: 'status/neutral' },
   /** Information · guidance */

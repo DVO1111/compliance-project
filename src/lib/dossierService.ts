@@ -13,6 +13,19 @@ type Profile = Database['public']['Tables']['profiles']['Row'];
 
 /* ─── helpers ──────────────────────────────────────────────────── */
 
+/**
+ * How many entries a jsonb column holds.
+ *
+ * These three columns are `jsonb`, so the value can be an array, an
+ * object, a number or null — the code read `.length` off whatever came
+ * back, which is `undefined` for everything but an array and printed
+ * "0 issue(s)" for an object. The stale types hid it by typing the
+ * column as `any`.
+ */
+function jsonCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
 function esc(text: string | null | undefined): string {
     const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
     return String(text ?? '').replace(/[&<>"']/g, (m) => map[m]);
@@ -280,15 +293,15 @@ function buildDossierHTML(args: {
       </div>
       <div class="cert-item">
         <span class="cert-label">Issues Found</span>
-        <span class="cert-value">${report.issues?.length ?? 0} issue(s)</span>
+        <span class="cert-value">${jsonCount(report.issues)} issue(s)</span>
       </div>
       <div class="cert-item">
         <span class="cert-label">Flagged Phrases</span>
-        <span class="cert-value">${report.flagged_phrases?.length ?? 0} phrase(s)</span>
+        <span class="cert-value">${jsonCount(report.flagged_phrases)} phrase(s)</span>
       </div>
       <div class="cert-item">
         <span class="cert-label">Violated Regulations</span>
-        <span class="cert-value">${report.violated_regulations?.length ?? 0} regulation(s)</span>
+        <span class="cert-value">${jsonCount(report.violated_regulations)} regulation(s)</span>
       </div>
       <div class="cert-item">
         <span class="cert-label">Content Status</span>

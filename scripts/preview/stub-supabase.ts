@@ -2,7 +2,7 @@
 //  be rendered and photographed without a database. Every query resolves
 //  to canned rows for one workspace.
 const COUNTS: Record<string, number> = {
-  'products': 0,
+  'products': 4,
   'batch_records': 0,
   'capa_records': 0,
   'raw_material_receipts': 0,
@@ -16,7 +16,29 @@ function builder(table: string): any {
   const rows = table === 'companies' ? { name: 'Ibadan Pharmaceuticals Ltd.' }
     : table === 'profiles' ? { full_name: 'Ada Okafor', onboarding_completed: true }
     : null;
-  const list = table === 'sites' ? [{ id: 's1', name: 'Ibadan plant' }]
+  const list = table === 'products' ? [
+      { id: 'p1', company_id: 'c1', product_code: 'AMOX-500-CAP', trade_name: 'Amoxil 500 mg Capsules',
+        generic_name: 'Amoxicillin', category: 'drug_pharmaceutical', status: 'active',
+        manufacturing_type: 'in_house', dosage_form: 'Capsule', strength: '500 mg', pack_size: '10 x 10 blister',
+        nafdac_number: 'A4-0100', registration_expiry_date: '2026-09-30', is_controlled_substance: false,
+        metadata: {}, created_at: '', updated_at: '' },
+      { id: 'p2', company_id: 'c1', product_code: 'PARA-500-TAB', trade_name: 'Paracetamol 500 mg Tablets',
+        generic_name: 'Paracetamol', category: 'drug_pharmaceutical', status: 'registered',
+        manufacturing_type: 'in_house', dosage_form: 'Tablet', strength: '500 mg', pack_size: '10 x 10 blister',
+        nafdac_number: 'A4-0211', registration_expiry_date: '2027-06-30', is_controlled_substance: false,
+        metadata: {}, created_at: '', updated_at: '' },
+      { id: 'p3', company_id: 'c1', product_code: 'VITC-1000', trade_name: 'Vitamin C 1000 mg',
+        generic_name: 'Ascorbic acid', category: 'herbal_nutraceutical', status: 'submitted',
+        manufacturing_type: 'in_house', dosage_form: 'Tablet', strength: '1000 mg', pack_size: '30s',
+        nafdac_number: null, registration_expiry_date: null, is_controlled_substance: false,
+        metadata: {}, created_at: '', updated_at: '' },
+      { id: 'p4', company_id: 'c1', product_code: 'CTM-4', trade_name: 'Chlorpheniramine 4 mg',
+        generic_name: 'Chlorpheniramine', category: 'drug_pharmaceutical', status: 'suspended',
+        manufacturing_type: 'contract_manufactured', dosage_form: 'Tablet', strength: '4 mg', pack_size: '100s',
+        nafdac_number: 'A4-0455', registration_expiry_date: '2028-01-31', is_controlled_substance: false,
+        metadata: {}, created_at: '', updated_at: '' },
+    ]
+    : table === 'sites' ? [{ id: 's1', name: 'Ibadan plant' }]
     : table === 'company_invites'
       ? [{ email: 'tunde@ibadanpharma.test' },
          { email: 'ngozi.eze@ibadanpharma.test' },
