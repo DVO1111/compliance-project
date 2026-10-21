@@ -36,12 +36,16 @@ import {
   linkedRecords,
   answerWhy, addWhy, answerW5h1, setDeterminedRootCause, setRootCauseCategory,
   completeRootCause, raiseCapaFromDeviation, ownerName, deviationDetail,
+  closeDeviation, closureSignatureFor,
 } from '../../lib/deviations/deviationService';
 import { emptyDraft, type DeviationDraft, type ImpactOption } from '../../lib/deviations/raise';
 import type {
   RegisterRow, ReadinessCondition, RootCauseAnalysis, Investigation, Framework,
 } from '../../lib/deviations/investigation';
-import type { LinkedRecord } from './InvestigationPanel';
+import { assessReadiness } from '../../lib/deviations/investigation';
+import type { LinkedRecord, ClosureSignature } from './InvestigationPanel';
+import ClosureSignatureDialog from './ClosureSignatureDialog';
+import { orphanSignatureNotice, type ClosureForm } from '../../lib/deviations/closure';
 import { useFloorLayout } from '../../lib/inprocess/floorLayout';
 import { logger } from '../../lib/logger';
 
@@ -104,6 +108,10 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
   }, [companyId]);
 
   const [detail, setDetail] = useState<DeviationDetail>(EMPTY_DETAIL);
+  const [signature, setSignature] = useState<ClosureSignature | undefined>(undefined);
+  const [closing, setClosing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   //  Everything the investigation view needs, fetched together when a
   //  row is opened. Separately would show the panel with an empty
@@ -116,16 +124,20 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
   useEffect(() => {
     if (!open) {
       setConditions([]); setLinked([]); setRca(null); setDetail(EMPTY_DETAIL);
+      setSignature(undefined); setClosing(false); setCloseError(null);
       return;
     }
     void (async () => {
-      const [c, l, r, d] = await Promise.all([
+      const [c, l, r, d, sig] = await Promise.all([
         closureReadiness(open.id),
         linkedRecords(open.id),
         rootCauseFor(open.id),
         deviationDetail(open.id),
+        //  Read back rather than reconstructed: a deviation closed last
+        //  week by somebody else must show THEIR name.
+        closureSignatureFor(open.id),
       ]);
-      setConditions(c); setLinked(l); setRca(r);
+      setConditions(c); setLinked(l); setRca(r); setSignature(sig);
       setDetail({ ...d, ownerName: await ownerName(d.ownerId) });
     })();
   }, [open]);
@@ -164,6 +176,48 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
       containment: detail.containment,
     };
   }, [open, detail]);
+
+  //  The dialog does not decide whether closure is allowed — the
+  //  database refuses it. This only names what is outstanding, so the
+  //  person is told before typing a password rather than after.
+  const blockedBy = useMemo(() => {
+    const r = assessReadiness(conditions);
+    if (r.canSign) return null;
+    const first = r.outstanding[0];
+    return r.outstanding.length === 1
+      ? `Still outstanding: ${first.title}`
+      : `${r.outstanding.length} conditions are still outstanding, starting with: ${first.title}`;
+  }, [conditions]);
+
+  const submitClosure = useCallback((form: ClosureForm) => {
+    if (!companyId || !open) return;
+    void (async () => {
+      setSaving(true);
+      setCloseError(null);
+      const result = await closeDeviation(companyId, open.id, form);
+      setSaving(false);
+
+      if (!result.ok) {
+        //  A signature that succeeded while the transition failed is
+        //  not the same as nothing having happened, and must not be
+        //  reported as "closure failed".
+        setCloseError(result.signedButNotClosed
+          ? orphanSignatureNotice(result.message)
+          : result.message);
+        return;
+      }
+
+      setClosing(false);
+      setNotice(`${open.deviationNumber} closed.`);
+      //  Everything the closure changed: the lock banner, the
+      //  checklist, and the register's state column.
+      const [sig, c] = await Promise.all([
+        closureSignatureFor(open.id), closureReadiness(open.id),
+      ]);
+      setSignature(sig); setConditions(c);
+      await loadRegister();
+    })();
+  }, [companyId, open, loadRegister]);
 
   const beginRaise = useCallback(async () => {
     if (!companyId) return;
@@ -229,10 +283,8 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
               conditions={conditions}
               linked={linked}
               isQa={isQa}
-              onSign={() => setNotice(
-                'Closing a deviation needs the electronic signature dialog, which is not '
-                + 'connected to this page yet. Nothing has been signed.',
-              )}
+              signature={signature}
+              onSign={() => { setCloseError(null); setClosing(true); }}
               onRaiseCapa={() => void (async () => {
                 const r = await raiseCapaFromDeviation(open.id);
                 if (!r.ok) { setNotice(r.message); return; }
@@ -247,6 +299,16 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
               })()}
             />
           )}
+
+          <ClosureSignatureDialog
+            open={closing}
+            deviationNumber={open.deviationNumber}
+            blockedBy={blockedBy}
+            saving={saving}
+            error={closeError}
+            onClose={() => { setClosing(false); setCloseError(null); }}
+            onSubmit={submitClosure}
+          />
 
           {rca ? (
             <RootCausePanel

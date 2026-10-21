@@ -37,6 +37,8 @@ import type {
 //  A value import, not a type: addWhy stores the question the screen
 //  shows, from the same function, so the two cannot drift.
 import { nextWhyQuestion } from './investigation';
+import { CLOSURE_ACTION } from './closure';
+import type { ClosureForm } from './closure';
 import type { LinkedRecord, ClosureSignature } from
   '../../components/Deviations/InvestigationPanel';
 import type { RecordDeviation } from '../../components/Deviations/DeviationOnRecord';
@@ -656,5 +658,102 @@ export async function deviationDetail(
     ownerId: (row.investigation_owner as string | null) ?? null,
     immediateAction: (row.immediate_action as string | null) ?? null,
     containment: (row.containment as string | null) ?? null,
+  };
+}
+
+/* ===================================================================
+ *  W5·11 / DV-08 — CLOSING
+ * =================================================================== */
+
+/**
+ * Signs and closes a deviation.
+ *
+ * Delegates to lifecycleService.signAndTransition rather than calling
+ * sign_electronic_record and lifecycle_transition in sequence here.
+ * That function already gets the hard part right: a refused signature
+ * is reported as a signature problem and not as a lifecycle one — the
+ * usual cause is a mistyped password, and "the transition was
+ * rejected" sends somebody to look at the workflow instead of at the
+ * field they are typing in.
+ *
+ * `signedButNotClosed` is the state worth naming. Signing and
+ * transitioning are two statements and the second can be refused, after
+ * which the signature exists and is unspent. Reporting that as a plain
+ * failure would leave somebody believing they had not signed.
+ */
+export async function closeDeviation(
+  companyId: string,
+  deviationId: string,
+  form: ClosureForm,
+): Promise<DeviationResult<{ signatureId: string }> & { signedButNotClosed?: boolean }> {
+  const { signAndTransition } = await import('../lifecycleService');
+
+  const result = await signAndTransition({
+    entityType: 'deviation',
+    entityId: deviationId,
+    actionKey: CLOSURE_ACTION,
+    companyId,
+    meaning: form.meaning,
+    password: form.password,
+    comment: form.comment,
+  });
+
+  if (!result.ok) {
+    logger.error('[deviations] closeDeviation refused', {
+      deviationId, code: result.code,
+    });
+    return {
+      ok: false,
+      code: result.code,
+      message: result.message,
+      //  signAndTransition reports a signature failure with the
+      //  signature's own code, and a transition failure with the
+      //  lifecycle's. A SIGNATURE_ prefix means nothing was signed; a
+      //  lifecycle code after a successful signature means it was.
+      signedButNotClosed: !String(result.code).startsWith('SIGNATURE_')
+        && !String(result.code).startsWith('INVALID_'),
+    };
+  }
+
+  return { ok: true, signatureId: result.data.signature_id };
+}
+
+/**
+ * The closure signature on a deviation, if it has one.
+ *
+ * Read back from electronic_signatures rather than reconstructed from
+ * whoever happens to be looking: a deviation closed last week by
+ * somebody else must show THEIR name, and a lock banner that credits
+ * the current viewer would be a false statement about who approved it.
+ */
+export async function closureSignatureFor(
+  deviationId: string,
+): Promise<ClosureSignature | undefined> {
+  const { data, error } = await supabase
+    .from('electronic_signatures')
+    .select('signer_name, signer_email, meaning, signed_at')
+    .eq('entity_type', 'deviation')
+    .eq('entity_id', deviationId)
+    .eq('action', CLOSURE_ACTION)
+    .order('signed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('[deviations] closureSignatureFor failed', { deviationId, error });
+    return undefined;
+  }
+  if (!data) return undefined;
+
+  const row = data as Record<string, unknown>;
+  const name = (row.signer_name as string | null)?.trim();
+  return {
+    signedByName: name && name.length > 0
+      ? name
+      : ((row.signer_email as string | null) ?? 'Unknown signer'),
+    signedAt: new Date(String(row.signed_at)).toLocaleString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }),
+    meaning: String(row.meaning),
   };
 }
