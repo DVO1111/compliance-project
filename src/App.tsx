@@ -116,6 +116,8 @@ import { isQaAuthority } from './lib/pharma/qaAuthority';
 
 const ProductsPage              = lazyPage(() => import('./components/Products/ProductsPage'));
 const DeviationsPage            = lazyPage(() => import('./components/Deviations/DeviationsPage'));
+const AccessPage                = lazyPage(() => import('./components/Access/AccessPage'));
+const MaterialsPage             = lazyPage(() => import('./components/Materials/MaterialsPage'));
 const BatchExecutionPage        = lazyPage(() => import('./components/Batch/BatchExecutionPage'));
 const MasterFormulaPage         = lazyPage(() => import('./components/Formula/MasterFormulaPage'));
 const UploadPage                = lazyPage(() => import('./components/Upload/UploadPage'));
@@ -1100,6 +1102,21 @@ function AppContent() {
       //  question on the floor: which stage am I on, and may I start
       //  it. The clearance conditions sit above the strip for the
       //  same reason.
+      //  W2·0. Roles and access are not a manufacturing screen — every
+      //  workspace has people and permissions — so this is NOT behind
+      //  the manufacturing gate the batch screens use.
+      case 'access-control':
+        return <AccessPage
+          companyId={profile?.company_id}
+          canDecide={perms.canManageRoles || isQaAuthority((profile as any)?.company_role)}
+        />;
+
+      //  W4·15. Lots, and why a lot may or may not be released.
+      case 'materials':
+        return !isLogisticsProfile
+          ? <MaterialsPage companyId={profile?.company_id} />
+          : <AccessDenied />;
+
       //  The same gate Batch Release uses: these are manufacturing
       //  screens, and a logistics workspace has no batches to run.
       case 'batch-execution':

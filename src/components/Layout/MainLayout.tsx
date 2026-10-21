@@ -113,6 +113,8 @@ export type PageId =
   | 'vendor-scorecard'
   | 'capa-management'
   | 'deviations'
+  | 'access-control'
+  | 'materials'
   | 'batch-execution'
   | 'master-formulas'
   | 'training-simulation'
@@ -356,6 +358,7 @@ export default function MainLayout({
       //  W4·18's clearance conditions. Distinct from Batch Release,
       //  which is QA deciding on a finished batch — this is the stages
       //  being run.
+      { id: 'materials', label: 'Materials', icon: PackageCheck, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'batch-execution', label: 'Batch Execution', icon: FlaskConical, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'master-formulas', label: 'Master Formulas', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
 
@@ -458,6 +461,12 @@ export default function MainLayout({
       { id: 'company-invites', label: 'Invites', icon: User, category: 'Administration', hidden: !perms.canInvite },
       { id: 'company-departments', label: 'Departments', icon: User, category: 'Administration', hidden: !perms.canInvite },
       { id: 'role-management', label: 'Role Management', icon: KeyRound, category: 'Administration', hidden: !perms.canManageRoles },
+      //  W2·0. Deliberately NOT hidden behind canManageRoles: the roles
+      //  matrix answers "who may do what, and what am I allowed to do",
+      //  which is a question everybody on a GMP system has. Only acting
+      //  on a request needs the permission, and the page gates that
+      //  itself rather than hiding the whole screen.
+      { id: 'access-control', label: 'Roles & Access', icon: ShieldCheck, category: 'Administration' },
       { id: 'org-management', label: 'Org Management', icon: Building2, category: 'Administration', hidden: !profile?.organization_id || !perms.canManageRoles },
       { id: 'identity-providers', label: 'Single Sign-On', icon: Fingerprint, category: 'Administration', hidden: !perms.canViewIdentity },
       { id: 'integrations', label: 'Integrations', icon: Plug, category: 'Administration', hidden: !perms.canViewIntegrations },

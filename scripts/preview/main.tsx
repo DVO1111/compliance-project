@@ -11,6 +11,7 @@ import RequestAccessDialog from '../../src/components/Access/RequestAccessDialog
 import AccessRequestsInbox from '../../src/components/Access/AccessRequestsInbox';
 import ReviewRequestDrawer from '../../src/components/Access/ReviewRequestDrawer';
 import RolesMatrix from '../../src/components/Access/RolesMatrix';
+import AccessPage from '../../src/components/Access/AccessPage';
 import PersonAccessPanel from '../../src/components/Access/PersonAccessPanel';
 import ReleaseReadinessCard from '../../src/components/Materials/ReleaseReadinessCard';
 import QuarantineBanner from '../../src/components/Materials/QuarantineBanner';
@@ -1356,7 +1357,14 @@ const deviationsPhone = (
   </div>
 );
 
-const page = screen === 'deviations' ? deviations
+//  The REAL page, not a composition of its parts — so the harness
+//  checks the thing that ships rather than a rehearsal of it. No
+//  MainLayout wrapper: the harness supplies the chrome itself, and
+//  wrapping again renders two sidebars.
+const accessPage = <AccessPage companyId="c1" canDecide />;
+
+const page = screen === 'access-page' ? accessPage
+  : screen === 'deviations' ? deviations
   : screen === 'deviations-phone' ? deviationsPhone
   : screen === 'inprocess-phone' ? inprocessPhone
   : screen === 'yield-phone' ? yieldPhone
