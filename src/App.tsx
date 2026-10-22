@@ -1258,7 +1258,11 @@ function AppContent() {
       //  screens, and a logistics workspace has no batches to run.
       case 'batch-execution':
         return !isLogisticsProfile
-          ? <BatchExecutionPage companyId={profile?.company_id} userId={user?.id} />
+          ? <BatchExecutionPage
+              companyId={profile?.company_id}
+              userId={user?.id}
+              role={resolveWorkRole(profile)}
+            />
           : <AccessDenied />;
 
       //  W4·16. Comparing two versions is the question somebody

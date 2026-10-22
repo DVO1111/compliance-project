@@ -27,6 +27,8 @@ const stage = (over: Partial<StripStage> & { sequenceNo: number }): StripStage =
   state: 'locked',
   waitingFor: 'Waiting for stage 1, Dispensing, which is pending.',
   requiresVerifier: false,
+  operatorId: null,
+  verifierId: null,
   signedByOperator: false,
   signedByVerifier: false,
   readingsTotal: 0, readingsRecorded: 0, readingsOutOfSpec: 0,
