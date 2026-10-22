@@ -332,3 +332,35 @@ anybody intends, since a rejection destroys product.
 
 *Decision needed:* whether rejecting a batch requires its own
 signature.
+
+---
+
+## 17. A trace stops at release and the schema cannot take it further
+
+Entry 11 recorded that traceability sees only what was dispensed. The
+other end is worse: **nothing links a released batch to where it went.**
+
+`shipments` carries a sender, a recipient, two countries, a weight and
+a declared value. It has no `batch_id`, and no other table connects a
+batch to a customer, an order or a consignment.
+
+So a recall can be scoped backwards — batch to lot to supplier, which
+`traceService` now walks in full — and cannot be scoped forwards past
+the loading bay. The screen says so rather than leaving the silence to
+be read as "it went nowhere".
+
+What the trace *can* now reach, which it could not before:
+
+| Direction | Reaches |
+|---|---|
+| back from a batch | its lots, their internal numbers, **the supplier and the supplier's own lot reference**, the quantity dispensed |
+| forward from a lot | the batches, **the product each makes**, each batch's state, the quantity |
+
+The supplier half was the gap that mattered: `material_lots.supplier_id`
+has always been populated and nothing read it, so a backward trace
+stopped at our own lot number — a shelf rather than somebody who can be
+telephoned.
+
+*Decision needed:* whether batch distribution is being recorded. Until
+it is, "which customers received this batch" has no answer in this
+system.

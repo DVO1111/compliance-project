@@ -30,7 +30,7 @@
 
 import { useCallback, useState } from 'react';
 import StateBadge from '../Common/StateBadge';
-import { batchesFromLot, lotsInBatch, type TraceLink } from '../../lib/materials/traceService';
+import { batchesFromLot, lotsInBatch, traceSummary, tracedQuantity, type TraceLink } from '../../lib/materials/traceService';
 import { listLots, type MaterialLotRow } from '../../lib/materials/materialLotService';
 import { useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -143,6 +143,49 @@ export default function TraceabilityPage({ companyId }: TraceabilityPageProps) {
         </p>
       )}
 
+      {links !== null && links.length > 0 && (() => {
+        const sum = traceSummary(links);
+        const qty = tracedQuantity(links);
+        return (
+          <section style={{ ...card, borderColor: sum.released.length > 0 ? '#c62f1e' : '#e3e6eb' }}>
+            {/*  THE URGENT PART FIRST. A released batch may have left
+                the site; everything else can be held where it stands,
+                and that is the difference between a recall and a stock
+                hold. A flat list of batch numbers does not make it. */}
+            <h3 style={{ margin: 0, fontSize: 16 }}>
+              {sum.released.length > 0
+                ? `${sum.released.length} released batch${sum.released.length === 1 ? '' : 'es'} — may have left the site`
+                : 'Nothing in this trace has been released'}
+            </h3>
+
+            {sum.released.length > 0 && (
+              <p style={{ ...noteStyle, color: '#b42c1d', fontWeight: 600 }}>
+                {sum.released.join(' · ')}
+              </p>
+            )}
+
+            {sum.held.length > 0 && (
+              <p style={noteStyle}>
+                Still inside the quality system: {sum.held.join(' · ')}
+              </p>
+            )}
+
+            <p style={noteStyle}>
+              {sum.batches} batch{sum.batches === 1 ? '' : 'es'} · {sum.lots} lot
+              {sum.lots === 1 ? '' : 's'}
+              {qty ? ` · ${qty.amount} ${qty.unit} dispensed` : ' · quantity not fully recorded'}
+            </p>
+
+            {/*  Upstream. A backward trace that stops at our own lot
+                number traces to a shelf, not to somebody who can be
+                telephoned. */}
+            {sum.suppliers.length > 0 && (
+              <p style={noteStyle}>Supplied by: {sum.suppliers.join(' · ')}</p>
+            )}
+          </section>
+        );
+      })()}
+
       {links !== null && (
         <section style={card}>
           <h3 style={{ margin: 0, fontSize: 16 }}>
@@ -165,9 +208,14 @@ export default function TraceabilityPage({ companyId }: TraceabilityPageProps) {
                   {direction === 'forward' ? (l.batchNumber ?? l.batchId) : (l.lotNumber ?? l.lotId)}
                 </span>
                 <span style={{ fontSize: 13, color: '#5b6472', flex: 1, minWidth: 0 }}>
+                  {l.quantity != null && l.unit ? `${l.quantity} ${l.unit} · ` : ''}
                   {l.dispensedAt
                     ? `dispensed ${new Date(l.dispensedAt).toLocaleDateString('en-GB')}`
                     : 'dispensing date not recorded'}
+                  {direction === 'forward' && l.productName ? ` · ${l.productName}` : ''}
+                  {direction === 'backward' && l.supplierName
+                    ? ` · ${l.supplierName}${l.supplierLotNumber ? ` (${l.supplierLotNumber})` : ''}`
+                    : ''}
                 </span>
                 {direction === 'forward' && l.batchStatus && (
                   <StateBadge state={l.batchStatus === 'released' ? 'released'
@@ -187,6 +235,17 @@ export default function TraceabilityPage({ companyId }: TraceabilityPageProps) {
         This traces through dispensing records only. Material consumed another way —
         reworked, sampled to destruction, or transferred between sites — leaves no
         dispensing record and will not appear here.
+      </p>
+
+      {/*  THE OTHER END OF THE TRACE, AND IT DOES NOT EXIST. Nothing
+          in this schema links a released batch to where it went: the
+          shipments table carries senders, recipients and countries and
+          has no batch at all. A trace can say a batch was released and
+          cannot say to whom. */}
+      <p style={noteStyle}>
+        It also stops at release. No record here links a released batch to a customer or a
+        consignment, so a trace can tell you a batch left the quality system and not where
+        it went.
       </p>
     </div>
   );
