@@ -549,3 +549,70 @@ the same place would be the worse of the two available mistakes.
 
 *Decision needed:* whether *Issue to production* is dispensing under
 another name, or a warehouse step before it.
+
+---
+
+## 23. The owner/admin sweep, and what it turned up
+
+Entry 19 asked whether other tables carried `certificate_of_analysis`'
+shape — a write policy admitting only `owner`/`admin`, which excludes
+every PM-03 work role and makes an excluded caller's `UPDATE` succeed
+having changed nothing. They did, identically:
+
+| Table | INSERT | UPDATE / DELETE |
+|---|---|---|
+| `batch_records` | any member | owner/admin |
+| `batch_qc_results` | any member | owner/admin |
+| `raw_material_receipts` | any member | owner/admin |
+| `batch_inprocess_qc` | any member | owner/admin |
+
+**`batch_records` was the sharp one.** `updateBatchStatus()` moves the
+state through `lifecycle_transition` — `SECURITY DEFINER`, so it
+bypasses row level security and succeeds — and then writes the side
+columns the screens read with a plain `UPDATE` from the browser:
+`released_at`, `released_by`, `release_notes`, `qc_started_at`,
+`hold_reason`. For anyone holding a work role that write matched zero
+rows. **The batch released and nothing recorded when, by whom, or on
+what notes.** The service even has a comment explaining that a failure
+there is logged rather than thrown — but it was not a failure, it was
+a successful statement that changed nothing.
+
+`20261112000000` widens those policies to admit the relevant cell
+beside the owner/admin clause.
+
+**`batch_inprocess_qc` is deliberately left alone.** In-process QC has
+its own authority model (`isQaAuthority`, not the grid) and no PM-03
+column, so widening it would mean choosing a cell for it — a decision,
+not a sweep. Section F of `write_path_audit_test.sql` asserts both the
+widened set and this omission, so neither reads as an oversight.
+
+*Decision needed:* which PM-03 column, if any, governs in-process QC.
+
+---
+
+## 24. A QC verdict was editable, and the release gate read it
+
+Found by the same sweep and worse than the policy question.
+
+`20261107000000` made a failed finished-product test block a release.
+That gate is only as good as the row it reads, and **nothing stopped a
+recorded `pass = false` being `UPDATE`d to true** — after which the
+batch releases and the failure has left no trace.
+
+The schema already had an answer for this shape of problem and used it
+for batch readings: there is no edit. A correction is a new row
+pointing at the one it replaces, both survive, and the log carries who,
+when, from what, to what and why. "A correction overwrites the original
+value" is one of item 07's NOT DONE IF clauses, and a QC verdict
+deserves at least what a mixing speed gets.
+
+So `batch_qc_results` gains `corrected_from_id` and
+`correction_reason`; `pass` and `result` are refused to `UPDATE` **in
+every context, service callers included**, because there is no
+legitimate caller for that edit; and the release gate counts only
+results nothing has superseded — otherwise the correction would be
+pointless and the original failure would block the batch forever.
+
+The screen shows superseded results, marked, rather than hiding them:
+a list of only the standing verdicts would hide the correction, which
+is the thing worth recording.

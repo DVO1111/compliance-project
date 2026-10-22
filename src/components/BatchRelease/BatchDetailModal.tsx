@@ -9,6 +9,7 @@ import {
   addInProcessQc,
   listQcResults,
   addQcResult,
+  standingResults,
   STATUS_LABELS,
   STATUS_COLORS,
 } from '../../lib/pharma/batchReleaseService';
@@ -20,6 +21,7 @@ import {
   exportCoaPdf,
 } from '../../lib/pharma/coaService';
 import { isQaAuthority } from '../../lib/pharma/qaAuthority';
+import { canAct, resolveWorkRole } from '../../lib/access/roleAccess';
 
 interface Props {
   batch: BatchRecord;
@@ -36,6 +38,11 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
   const { profile } = useAuth();
   const approverName = (profile?.full_name ?? profile?.email ?? 'QA') as string;
   const canApprove = isQaAuthority((profile as any)?.company_role);
+  //  PM-03's `QC testing` column, which is Act for the QC Analyst
+  //  alone. The database enforces the same cell on this table
+  //  (20261107000000), so the control is drawn to match the refusal
+  //  rather than instead of it.
+  const mayRecordQc = canAct(resolveWorkRole(profile), 'qc_testing');
   const [tab, setTab] = useState<'inprocess' | 'final' | 'coa'>('inprocess');
   const [inProcess, setInProcess] = useState<BatchInProcessQc[]>([]);
   const [finalQc, setFinalQc] = useState<BatchQcResult[]>([]);
@@ -46,6 +53,13 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
   const [error, setError] = useState<string | null>(null);
   const [ipForm, setIpForm] = useState(emptyInProcess);
   const [finForm, setFinForm] = useState(emptyFinal);
+  //  THE RESULT BEING CORRECTED, when this entry is a correction.
+  //  There is no edit: a finished QC verdict feeds the release gate,
+  //  and 20261112000000 refuses an edit to it. A correction is a new
+  //  result pointing at the old one; both stay, and the gate reads the
+  //  one that stands.
+  const [correcting, setCorrecting] = useState<BatchQcResult | null>(null);
+  const [correctionReason, setCorrectionReason] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -102,14 +116,21 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
     if (!finForm.test_name || !finForm.result) { setError('Test name and result are required.'); return; }
     setSaving(true); setError(null);
     try {
+      if (correcting && correctionReason.trim() === '') {
+        setError('A correction needs a reason. The database refuses one without.');
+        setSaving(false);
+        return;
+      }
       await addQcResult(batch.id, userId, {
         test_name: finForm.test_name,
         test_method: finForm.test_method || null,
         specification: finForm.specification || null,
         result: finForm.result,
         pass: finForm.pass,
-      });
+      }, correcting ? { correctedFromId: correcting.id, reason: correctionReason } : undefined);
       setFinForm(emptyFinal);
+      setCorrecting(null);
+      setCorrectionReason('');
       await load();
       onChanged?.();
     } catch (e: any) { setError(e.message || 'Failed to log QC result'); }
@@ -188,6 +209,23 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
           )}
           {tab === 'final' && (
             <form onSubmit={submitFinal} className="space-y-3">
+              {correcting && (
+                <div className="p-3 rounded-xl border border-[var(--color-warning-border,#e3b5ad)] bg-[var(--color-warning-soft,#fdf6f5)] text-sm dash-text space-y-2">
+                  <p>
+                    Correcting <strong>{correcting.test_name}</strong> — recorded{' '}
+                    {new Date(correcting.tested_at).toLocaleDateString()} as{' '}
+                    <strong>{correcting.result}</strong> ({correcting.pass ? 'pass' : 'fail'}).
+                    The original stays on the record; this result replaces it for the
+                    release decision.
+                  </p>
+                  <input className={inputCls} placeholder="Why it is being corrected *"
+                    value={correctionReason} onChange={e => setCorrectionReason(e.target.value)} />
+                  <button type="button" className="text-xs underline dash-text-secondary"
+                    onClick={() => { setCorrecting(null); setCorrectionReason(''); }}>
+                    Record a new result instead
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Test name (e.g. Assay) *" value={finForm.test_name} onChange={e => setFinForm(f => ({ ...f, test_name: e.target.value }))} />
                 <input className={inputCls} placeholder="Method (e.g. HPLC)" value={finForm.test_method} onChange={e => setFinForm(f => ({ ...f, test_method: e.target.value }))} />
@@ -292,9 +330,22 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
               {tab === 'inprocess' && inProcess.map(r => (
                 <QcRow key={r.id} pass={r.pass} title={`${r.stage_name} — ${r.parameter}`} spec={r.specification} result={r.result} at={r.tested_at} />
               ))}
-              {tab === 'final' && finalQc.map(r => (
-                <QcRow key={r.id} pass={r.pass} title={`${r.test_name}${r.test_method ? ` (${r.test_method})` : ''}`} spec={r.specification} result={r.result} at={r.tested_at} />
-              ))}
+              {/*  SUPERSEDED RESULTS ARE STILL SHOWN. A list of only the
+                  standing verdicts would hide the correction, which is
+                  the thing worth recording. They are marked instead,
+                  and only a standing result can be corrected. */}
+              {tab === 'final' && (() => {
+                const standing = new Set(standingResults(finalQc).map(x => x.id));
+                return finalQc.map(r => (
+                  <QcRow key={r.id} pass={r.pass}
+                    title={`${r.test_name}${r.test_method ? ` (${r.test_method})` : ''}`}
+                    spec={r.specification} result={r.result} at={r.tested_at}
+                    superseded={!standing.has(r.id)}
+                    onCorrect={standing.has(r.id) && mayRecordQc
+                      ? () => { setCorrecting(r); setTab('final'); }
+                      : undefined} />
+                ));
+              })()}
             </div>
           ))}
         </div>
@@ -303,14 +354,25 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
   );
 }
 
-function QcRow({ pass, title, spec, result, at }: { pass: boolean; title: string; spec: string | null; result: string; at: string }) {
+function QcRow({ pass, title, spec, result, at, superseded, onCorrect }: {
+  pass: boolean; title: string; spec: string | null; result: string; at: string;
+  superseded?: boolean; onCorrect?: () => void;
+}) {
   return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border dash-border bg-[var(--color-surface)]">
+    <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border dash-border bg-[var(--color-surface)]${superseded ? ' opacity-60' : ''}`}>
       <div className="min-w-0">
-        <p className="text-sm font-semibold dash-text truncate">{title}</p>
+        <p className="text-sm font-semibold dash-text truncate">
+          {title}
+          {superseded && <span className="ml-2 text-[10px] uppercase tracking-wider dash-text-tertiary">superseded</span>}
+        </p>
         <p className="text-xs dash-text-tertiary">
           {spec ? `Spec: ${spec} · ` : ''}Result: {result} · {new Date(at).toLocaleDateString()}
         </p>
+        {onCorrect && (
+          <button type="button" className="text-xs underline dash-text-secondary mt-1" onClick={onCorrect}>
+            Correct this result
+          </button>
+        )}
       </div>
       {pass ? (
         <span className="flex items-center gap-1 text-xs font-bold text-green-600"><CheckCircle2 size={14} /> Pass</span>
