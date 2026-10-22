@@ -21,6 +21,7 @@ import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
+import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
 import { resolveWorkRole } from '../../src/lib/access/roleAccess';
 import '../../src/index.css';
 
@@ -39,9 +40,11 @@ function DashboardFor({ profile }: { profile: any }) {
   if (role === 'storekeeper') {
     return <StorekeeperDashboard {...common} role={role} userId="u1" personName="Tunde Bello" />;
   }
+  if (role) {
+    return <DerivedRoleDashboard {...common} role={role} userId="u1" personName="A. Person" />;
+  }
   return <p style={{ fontSize: 15, color: '#5b6472' }}>
-    No dashboard is drawn in the design for this role, so the first-run
-    dashboard is shown in the application.
+    No work role resolves, so the first-run dashboard is shown in the application.
   </p>;
 }
 
