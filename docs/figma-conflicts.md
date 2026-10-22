@@ -222,3 +222,113 @@ used this lot" and "nothing we can see used this lot".
 *Decision needed:* whether other consumption paths must be traceable,
 which would need either a genealogy function or consumption records
 that do not exist yet.
+
+---
+
+## 12. Nothing says which finished-product tests a batch needs
+
+There is no finished-product specification anywhere in this schema.
+`material_specifications` covers incoming material; no table says which
+tests a *product* requires before its batch can be released, and PM-03
+has no screen for one.
+
+So a batch with no rows in `batch_qc_results` is ambiguous in the worst
+possible way: it is either a product that genuinely requires no
+finished testing, or a batch nobody tested.
+
+`20261107000000` **refuses both**, because only one of the two readings
+is survivable — releasing an untested batch is the failure a quality
+system exists to prevent, and holding a batch whose product needs no
+testing costs one row. The refusal says in words that the system cannot
+tell the two apart, so nobody reads it as a bug.
+
+*Decision needed:* whether finished-product specifications are being
+built. Until they are, every product needs at least one recorded
+result before any of its batches can be released.
+
+---
+
+## 13. QC completion and release authorisation are not the same thing
+
+Recorded here because it is the rule most likely to be "simplified"
+back out by someone reading the two screens side by side.
+
+PM-03 holds them in **different columns with different holders**:
+
+| | QC testing | Batch release |
+|---|---|---|
+| QC Analyst | **Act** | no access |
+| QA Officer | View | **Act** |
+| QA Manager | View | **Act** |
+
+and its step table narrows the release further still — "Release a
+batch — QA Manager — E-signature". Nobody holds Act on both columns.
+
+So completing QC **authorises nothing**. It removes an objection. The
+release is a separate decision by a separate person, and
+`20261107000000` additionally refuses a releaser who recorded the
+batch's own results.
+
+Note the section and the step disagree in scope: the QA Officer has Act
+on the batch-release *section* and is not a holder of the release
+*step*. The code follows the narrower rule and treats the section as
+covering everything else in that area — putting a batch on hold,
+reviewing it — while the release itself stays with the QA Manager.
+
+*Decision needed:* confirm that the QA Officer's Act on the section is
+meant to exclude the release itself.
+
+---
+
+## 14. The schema cannot record a test that is still running
+
+`batch_qc_results.pass` is `NOT NULL`. A result exists only once it has
+a verdict, so there is no way to record a finished-product test that is
+under way, inconclusive, or awaiting a repeat.
+
+`qc_in_progress` is therefore a batch state with **no test-level
+counterpart**: a batch that nobody has started testing and a batch
+mid-analysis look identical.
+
+A draft of `20261107000000` blocked release on `pass IS NULL`. That
+branch could never have fired — a guard installed, attached and
+silently dead, which is entry 10 happening again. It was removed, and
+the migration now *asserts* that `pass` is not nullable so the omission
+is re-examined if that ever changes.
+
+*Decision needed:* whether an in-progress or inconclusive result needs
+to be recordable.
+
+---
+
+## 15. Closing execution happens two ways and they disagree
+
+`batch_record_close()` stamps `batch_records.execution_closed_at` and
+moves the lifecycle state. A bare
+`lifecycle_transition(..., 'close_execution')` moves the state and
+leaves the column null.
+
+The column is what locks readings (`20261011000000`); the state is what
+the lifecycle gates read. A batch can sit in `qc_in_progress` with
+`execution_closed_at` still null, which is why the release gate checks
+the lifecycle path rather than the column — a column check there would
+refuse a batch that followed a route the engine itself permits.
+
+*Decision needed:* whether `close_execution` should stamp the column
+too, or whether the bare transition should be withdrawn.
+
+---
+
+## 16. Rejecting a batch has no row in PM-03
+
+PM-03's step table has "Release a batch — QA Manager — E-signature" and
+nothing about rejecting one. `fn_batch_release_role` already treats
+both states the same for the role question, but `20261107000000` set
+`requires_signature` on the **release** transition only.
+
+So releasing a batch takes a signature and rejecting one does not —
+which follows the design exactly and is almost certainly not what
+anybody intends, since a rejection destroys product.
+
+*Decision needed:* whether rejecting a batch requires its own
+signature.

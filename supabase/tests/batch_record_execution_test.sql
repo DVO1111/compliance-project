@@ -35,6 +35,42 @@
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;
 
+--  RELEASING A BATCH NOW NEEDS TWO THINGS IT DID NOT NEED BEFORE
+--  (20261107000000): PM-03's electronic signature, and a finished-
+--  product test result for the QC gate to read. Neither is what this
+--  suite is testing, so both are supplied here rather than at each
+--  call site — and supplied for real, through the same columns the
+--  product uses, so these assertions still exercise the gate they
+--  were written for instead of stopping at the one in front of it.
+--
+--  tested_by is left NULL deliberately: the release gate refuses a
+--  releaser who recorded the results themselves, and this helper is
+--  not here to walk into that.
+CREATE OR REPLACE FUNCTION _release_batch(p_batch uuid, p_company uuid, p_actor uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_sig uuid;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.batch_qc_results WHERE batch_id = p_batch) THEN
+    INSERT INTO public.batch_qc_results
+      (batch_id, test_name, test_method, specification, result, pass, tested_by)
+    VALUES (p_batch, 'Assay', 'HPLC', '98.0 - 102.0 %', '99.4 %', true, NULL);
+  END IF;
+
+  INSERT INTO public.electronic_signatures (
+    company_id, signer_id, signer_name, signer_email,
+    entity_type, entity_id, action, meaning, record_hash, signed_state
+  ) VALUES (
+    p_company, p_actor, 'Suite Fixture', 'fixture@test.invalid',
+    'batch_record', p_batch, 'release', 'released',
+    public.electronic_signature_record_hash('batch_record', p_batch, p_company),
+    'qc_in_progress'
+  ) RETURNING id INTO v_sig;
+
+  PERFORM public.lifecycle_transition('batch_record', p_batch, 'release',
+    p_company, p_actor, NULL, '{}'::jsonb, v_sig);
+END $$;
+
+
 CREATE TEMP TABLE _b7(section text, name text, ok boolean, detail text);
 GRANT ALL ON _b7 TO anon, authenticated, service_role;
 CREATE OR REPLACE FUNCTION _b7k(p_section text, p_name text, p_ok boolean, p_detail text DEFAULT NULL)
@@ -368,7 +404,7 @@ BEGIN
 
   ok := false; msg := NULL;
   BEGIN
-    PERFORM public.lifecycle_transition('batch_record', b, 'release', c_a, current_setting('b7.u_op')::uuid);
+    PERFORM _release_batch(b, c_a, current_setting('b7.u_op')::uuid);
   EXCEPTION WHEN others THEN ok := SQLERRM LIKE 'BATCH_PRODUCT_NOT_ELIGIBLE%'; msg := SQLERRM; END;
   PERFORM _b7k('A','A16 but it cannot be released, which is the control that matters',
     ok, left(coalesce(msg,''),140));
