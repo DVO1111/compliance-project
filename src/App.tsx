@@ -3,6 +3,7 @@ import { getPermissions } from './lib/permissions';
 import { appPath, appUrl, SIGN_IN_PATHS, WORKSPACE_PATH } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
+import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
@@ -1132,6 +1133,39 @@ function AppContent() {
               canDecide={isQaAuthority((profile as any)?.company_role)}
             />
           : <AccessDenied />;
+
+      //  DB-01 DRAWS THESE FIVE AND NOTHING ANSWERS TO THEM YET.
+      //  They are routes rather than dead rail labels, and each says
+      //  plainly that the screen is not built. The alternative — point
+      //  them at the nearest existing page — looks finished, which is
+      //  how a gap gets demonstrated, filed against, and discovered
+      //  only after somebody has built on it.
+      case 'my-tasks':
+        return <ScreenNotBuilt
+          name="My tasks" designRef="DB-01"
+          whatItWillDo={'Everything waiting on you — signatures, investigations, '
+            + 'calibrations due and lots to disposition — in one list, ordered by what '
+            + 'blocks other people first.'} />;
+      case 'goods-receipt':
+        return <ScreenNotBuilt
+          name="Goods receipt" designRef="DB-01"
+          whatItWillDo={'Booking a delivery in against its purchase order and supplier, '
+            + 'raising the lot and putting it straight into quarantine.'} />;
+      case 'qc-testing':
+        return <ScreenNotBuilt
+          name="QC testing" designRef="DB-01"
+          whatItWillDo={'The testing queue and results per lot and per batch, against the '
+            + 'specification each one was sampled under.'} />;
+      case 'qa-disposition':
+        return <ScreenNotBuilt
+          name="QA disposition" designRef="DB-01"
+          whatItWillDo={'The QA decision on a tested lot — release, reject or hold — with '
+            + 'the signature that makes it a record.'} />;
+      case 'traceability':
+        return <ScreenNotBuilt
+          name="Traceability" designRef="DB-01"
+          whatItWillDo={'Forward and backward genealogy: which batches a lot went into, '
+            + 'and every material that went into a batch.'} />;
 
       //  W4·15. Lots, and why a lot may or may not be released.
       case 'materials':
