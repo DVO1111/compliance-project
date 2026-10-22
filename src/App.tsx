@@ -6,6 +6,7 @@ import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
 import QaDispositionPage from './components/Materials/QaDispositionPage';
+import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -1212,11 +1213,14 @@ function AppContent() {
           whatItWillDo={'Everything waiting on you — signatures, investigations, '
             + 'calibrations due and lots to disposition — in one list, ordered by what '
             + 'blocks other people first.'} />;
+      //  Built. The upstream gate: a suspended or disqualified
+      //  supplier is refused by a BEFORE INSERT trigger, not by the
+      //  form, so the refusal holds for any caller.
       case 'goods-receipt':
-        return <ScreenNotBuilt
-          name="Goods receipt" designRef="DB-01"
-          whatItWillDo={'Booking a delivery in against its purchase order and supplier, '
-            + 'raising the lot and putting it straight into quarantine.'} />;
+        return <GoodsReceiptPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+        />;
       case 'qc-testing':
         return <ScreenNotBuilt
           name="QC testing" designRef="DB-01"
