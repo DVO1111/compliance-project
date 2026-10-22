@@ -49,7 +49,10 @@ export type AccessLevel = 'view' | 'act';
 export type WorkRole =
   | 'production_operator' | 'production_supervisor'
   | 'storekeeper' | 'qc_analyst' | 'qa_officer' | 'qa_manager'
-  | 'regulatory_affairs' | 'procurement' | 'compliance_admin' | 'other';
+  | 'regulatory_affairs' | 'procurement' | 'compliance_admin'
+  //  PM-03 tabulates Management as a view-everywhere oversight role. It
+  //  had no entry here, which is why it could not be assigned.
+  | 'management' | 'other';
 
 export interface AccessRequestInput {
   section: AccessSection;
@@ -271,6 +274,7 @@ export const ROLE_LABELS: Record<WorkRole, string> = {
   regulatory_affairs:    'Regulatory affairs',
   procurement:           'Procurement',
   compliance_admin:      'Compliance admin',
+  management:            'Management',
   other:                 'Other',
 };
 

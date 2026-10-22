@@ -4,6 +4,7 @@ import { appPath, appUrl, SIGN_IN_PATHS, WORKSPACE_PATH } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
+import { pageRefused } from './lib/access/roleAccess';
 import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
@@ -961,6 +962,25 @@ function AppContent() {
   );
 
   const renderPage = () => {
+    //  PM-03 ENFORCED ON THE ROUTE, NOT ONLY IN THE RAIL.
+    //
+    //  Hiding a sidebar item is a courtesy, not a control: the page id
+    //  is reachable by a saved link, a KPI tile, a notification or the
+    //  navigate-to event, and until now every one of those paths
+    //  rendered the page regardless of who was asking. A Storekeeper
+    //  could open QA disposition by any route except the one that was
+    //  hidden from them.
+    //
+    //  This refuses the page itself. It is still not the last line —
+    //  row-level security in the database is — but it closes the gap
+    //  between what the rail offers and what the application serves.
+    //
+    //  Only pages PM-03 governs are checked; canOpenPage returns true
+    //  for the rest, which keeps their existing gating in charge.
+    if (pageRefused(profile, currentPage)) {
+      return <AccessDenied />;
+    }
+
     switch (currentPage) {
       case 'dashboard':
         return dashboard();

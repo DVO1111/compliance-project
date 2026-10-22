@@ -12,6 +12,9 @@
 import { createRoot } from 'react-dom/client';
 import { StrictMode, useState } from 'react';
 import MainLayout from '../../src/components/Layout/MainLayout';
+import AccessDenied from '../../src/components/Common/AccessDenied';
+import { pageRefused } from '../../src/lib/access/roleAccess';
+import { useAuth } from '../../src/contexts/AuthContext';
 import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
 import InprocessPage from '../../src/components/Inprocess/InprocessPage';
@@ -29,9 +32,15 @@ function Harness() {
   const initial = new URLSearchParams(location.search).get('page') ?? 'materials';
   const [page, setPage] = useState<any>(initial);
   const render = PAGES[page as string];
+  //  THE SAME GUARD App.tsx USES, not a copy of it. Rendering the page
+  //  components directly was how this harness reported a Storekeeper
+  //  reaching QA disposition as a pass: it never ran the route check,
+  //  so it was testing itself rather than the application.
+  const { profile } = useAuth();
+  const refused = pageRefused(profile, String(page));
   return (
     <MainLayout currentPage={page} onNavigate={(p) => setPage(p)}>
-      {render ? render() : (
+      {refused ? <AccessDenied /> : render ? render() : (
         <p style={{ font: '15px/1.5 system-ui', color: '#5b6472' }}>
           No verification fixture wired for “{String(page)}”. The sidebar is the
           subject here: this pane only renders the four pages built from the

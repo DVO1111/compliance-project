@@ -1,27 +1,37 @@
 /**
- * A signed-in person whose workspace has NO industry set.
+ * A signed-in person whose role comes from the URL.
  *
- * industry_type is deliberately empty. categorize() maps that to
- * 'generic', which is the exact case that used to hide the entire
- * Quality Operations section — so this is the fixture that proves the
- * fix rather than one that sidesteps it. If the sidebar shows those
- * items here, it shows them for an account that never picked an
- * industry and for one that picked "Other".
+ * ?role=storekeeper renders the application as a Storekeeper,
+ * ?role=qa_manager as a QA Manager, and so on. That is the whole point:
+ * the defect being tested is that every role saw the same application,
+ * and the only way to see that for yourself is to render the real shell
+ * as each of them and compare.
+ *
+ * industry_type stays empty on purpose. 'generic' is the case that used
+ * to hide the entire Quality Operations section, so leaving it blank
+ * proves the rail is shaped by the ROLE and not by the industry gate
+ * quietly removing everything.
  *
  * Never built into the application or published.
  */
+const ROLE = new URLSearchParams(
+  typeof location === 'undefined' ? '' : location.search,
+).get('role') ?? 'qa_manager';
+
 export function useAuth() {
   return {
     signOut: () => {},
     profile: {
       id: 'u1',
       full_name: '',
-      role: 'admin',
-      company_role: 'admin',
+      //  company_role is the workspace job PM-03 is about; role is the
+      //  platform account type. Set both to the same thing so the
+      //  harness cannot accidentally pass through an admin fallback.
+      company_role: ROLE,
+      role: ROLE,
       job_title: '',
       company_id: 'c1',
       organization_id: null,
-      //  THE POINT OF THIS FIXTURE.
       industry_type: '',
       module_access: null,
       customPermissions: null,

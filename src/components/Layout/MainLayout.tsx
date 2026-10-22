@@ -1,5 +1,6 @@
 import { getPermissions } from '../../lib/permissions';
 import { getIndustryCategory } from '../../lib/regulatoryProfile';
+import { resolveWorkRole, canOpenPage, PAGE_SECTION } from '../../lib/access/roleAccess';
 import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
@@ -593,7 +594,49 @@ export default function MainLayout({
       : { ...item, category: item.category === 'Hidden' ? 'Hidden' : 'More', order: 99 };
   });
 
-  const visibleNavItems = regrouped.filter((item) => !item.hidden && item.category !== 'Hidden');
+  //  PM-03 APPLIED TO THE RAIL. Until now nothing in this file consulted
+  //  the role a person actually holds: canonicalRole() in permissions.ts
+  //  folds every job into six legacy buckets and knows none of the eight
+  //  roles the design tabulates, so a Storekeeper and a QA Manager saw
+  //  the same sidebar. This is where that stops.
+  //
+  //  Applied ONLY when a work role resolves. The design says what each
+  //  of its eight roles may open; it does not say what somebody with no
+  //  job assigned in this workspace sees, and withholding every
+  //  tabulated section from them on that silence would empty the rail
+  //  for every account created before company_role was being set. That
+  //  gap is recorded rather than decided here — see roleAccess.ts.
+  //  WHERE PM-03 GOVERNS A PAGE, PM-03 DECIDES — AND THE LEGACY MODEL
+  //  DOES NOT GET A SECOND VOTE.
+  //
+  //  This was not a theoretical conflict. Rendering the shell as each of
+  //  the eight roles showed Deviation / CAPA missing from ALL of them,
+  //  including QA Manager, who the design gives Act on it. The cause is
+  //  `!perms.canViewCapaManagement`: permissions.ts resolves a job title
+  //  through canonicalRole(), which knows none of PM-03's roles, so a
+  //  qa_manager falls through to the empty permission set and the item
+  //  is hidden by a model that has never heard of the role asking.
+  //
+  //  AND-ing the two models together can only ever subtract, so the
+  //  design could never grant anything the legacy model had not already
+  //  allowed. For a governed page the grid is therefore the sole
+  //  authority on ROLE.
+  //
+  //  The INDUSTRY gate is kept, because it answers a different question
+  //  — whether this workspace does manufacturing at all — and PM-03 says
+  //  nothing about it. A logistics or finance workspace still has no
+  //  batch to release, whoever is asking.
+  const workRole = resolveWorkRole(profile);
+  const industryAllowsQuality = usesManufacturingQuality && !isLogisticsProfile;
+  const visibleNavItems = regrouped.filter((item) => {
+    if (item.category === 'Hidden') return false;
+    if (workRole && PAGE_SECTION[item.id]) {
+      return industryAllowsQuality && canOpenPage(workRole, item.id);
+    }
+    if (item.hidden) return false;
+    if (workRole && !canOpenPage(workRole, item.id)) return false;
+    return true;
+  });
 
   //  "Head of Quality", from ONB-01. An underscored permission role is
   //  the fallback and is tidied on the way out, so `content_creator`
