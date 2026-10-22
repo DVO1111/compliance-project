@@ -326,6 +326,87 @@ BEGIN
 END $f2$;
 
 
+-- ── G. No guard can silently become ineffective ─────────────────────
+--
+--  SECTION F ASSERTS A HARDCODED LIST, WHICH IS ITSELF A THING THAT
+--  CAN DRIFT. A sixth guard added next year, naming a state that does
+--  not exist, passes F untouched — because F never heard of it.
+--
+--  This discovers the guards instead. Every trigger function on
+--  entity_current_state whose name ends in _role is read out of
+--  pg_get_functiondef, its entity_type and the state keys it compares
+--  against are extracted from its own source, and each pair is checked
+--  against lifecycle_definitions.
+--
+--  So the test needs no maintenance to cover a new guard, and a guard
+--  written against a misspelled or renamed state fails here the first
+--  time the suite runs. That is the regression this file exists for:
+--  fn_supplier_approve_role guarded 'approved' on a lifecycle whose
+--  states are pending/qualified/conditional/suspended/disqualified,
+--  and nothing noticed until somebody read the state list by hand.
+
+DO $g$
+DECLARE
+  r           record;
+  v_entity    text;
+  v_src       text;
+  v_line      text;
+  v_state     text;
+  v_found     int := 0;
+  v_checked   int := 0;
+  v_bad       text := '';
+BEGIN
+  FOR r IN
+    SELECT p.proname, pg_get_functiondef(p.oid) AS src
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_proc  p ON p.oid = t.tgfoid
+     WHERE c.relname = 'entity_current_state'
+       AND NOT t.tgisinternal
+       AND p.proname LIKE 'fn%%role'
+     GROUP BY p.proname, p.oid
+  LOOP
+    v_found := v_found + 1;
+    v_src := r.src;
+    v_entity := (regexp_match(v_src, 'NEW\.entity_type <> ''([a-z_]+)'''))[1];
+
+    IF v_entity IS NULL THEN
+      v_bad := v_bad || r.proname || ' (no entity_type test), ';
+      CONTINUE;
+    END IF;
+
+    --  Every line that compares v_to, in either spelling the guards
+    --  use: `v_to <> 'x'` and `v_to NOT IN ('a','b')`.
+    FOR v_line IN
+      SELECT m[1] FROM regexp_matches(v_src, '(v_to (?:NOT )?(?:IN \([^)]*\)|<> ''[a-z_]+''))', 'g') AS m
+    LOOP
+      FOR v_state IN
+        SELECT m2[1] FROM regexp_matches(v_line, '''([a-z_]+)''', 'g') AS m2
+      LOOP
+        v_checked := v_checked + 1;
+        IF NOT EXISTS (
+          SELECT 1 FROM public.lifecycle_definitions d
+            JOIN public.lifecycle_states s ON s.definition_id = d.id
+           WHERE d.entity_type = v_entity AND s.state_key = v_state
+        ) THEN
+          v_bad := v_bad || r.proname || ' guards ' || v_entity || '.' || v_state
+                        || ' which does not exist, ';
+        END IF;
+      END LOOP;
+    END LOOP;
+  END LOOP;
+
+  PERFORM wra_assert('G1','every role guard was discovered', v_found >= 5,
+    v_found::text || ' guard function(s)');
+  PERFORM wra_assert('G2','each guard names a state its lifecycle has',
+    v_bad = '', coalesce(nullif(v_bad,''), 'all ' || v_checked::text || ' states exist'));
+  --  A guard whose states could not be read is as bad as a wrong one:
+  --  it means this test is no longer looking at anything.
+  PERFORM wra_assert('G3','the guards’ states could actually be parsed',
+    v_checked >= v_found, v_checked::text || ' state(s) across ' || v_found::text || ' guard(s)');
+END $g$;
+
+
 -- ── Results ─────────────────────────────────────────────────────────
 SELECT id, name, verdict, detail FROM wra_results ORDER BY seq;
 
