@@ -7,6 +7,7 @@ import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
 import QaDispositionPage from './components/Materials/QaDispositionPage';
 import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
+import QcTestingPage from './components/Materials/QcTestingPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -1221,11 +1222,14 @@ function AppContent() {
           companyId={profile?.company_id}
           role={resolveWorkRole(profile)}
         />;
+      //  Built. The middle link: received -> tested -> dispositioned.
+      //  The pass/fail verdict belongs to material_test_record_result,
+      //  which compares against the specification; this page reads it.
       case 'qc-testing':
-        return <ScreenNotBuilt
-          name="QC testing" designRef="DB-01"
-          whatItWillDo={'The testing queue and results per lot and per batch, against the '
-            + 'specification each one was sampled under.'} />;
+        return <QcTestingPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+        />;
       //  Built. The gate that makes "a material does not become
       //  available because somebody changed a status" true: the
       //  conditions come from the same function the release gate

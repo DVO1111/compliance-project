@@ -427,3 +427,62 @@ export async function listSuppliers(companyId: string): Promise<
     return (data ?? []) as never;
   } catch { return []; }
 }
+
+/* ── QC testing ────────────────────────────────────────────────────── */
+
+export interface TestDefinitionRow {
+  id: string;
+  code: string | null;
+  name: string | null;
+  method: string | null;
+  is_required: boolean | null;
+}
+
+export interface TestResultRow {
+  id: string;
+  test_definition_id: string | null;
+  parameter: string | null;
+  specification_limit: string | null;
+  actual_value: number | null;
+  actual_text: string | null;
+  /** The database's verdict, not the analyst's. */
+  result: string | null;
+  analyst_name: string | null;
+  test_date: string | null;
+}
+
+/**
+ * The tests a lot has to satisfy.
+ *
+ * Read from the company's definitions rather than from whatever has
+ * already been recorded, so a test nobody has run yet is still listed
+ * as outstanding. A list built from results would show a lot with no
+ * tests done as having nothing to do.
+ */
+export async function listTestDefinitions(companyId: string): Promise<TestDefinitionRow[]> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('material_test_definitions')
+      .select('id, code, name, method, is_required')
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .order('sort_order');
+    if (error) { logger.error('materialLotService.listTestDefinitions', error); return []; }
+    return (data ?? []) as TestDefinitionRow[];
+  } catch { return []; }
+}
+
+/** What has actually been recorded against a lot. */
+export async function listTestResults(lotId: string): Promise<TestResultRow[]> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('material_test_results')
+      .select('id, test_definition_id, parameter, specification_limit, actual_value, actual_text, result, analyst_name, test_date')
+      .eq('material_lot_id', lotId)
+      .order('test_date', { ascending: false });
+    if (error) { logger.error('materialLotService.listTestResults', error); return []; }
+    return (data ?? []) as TestResultRow[];
+  } catch { return []; }
+}
