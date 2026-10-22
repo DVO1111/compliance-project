@@ -5,6 +5,7 @@ import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
+import QaDispositionPage from './components/Materials/QaDispositionPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -1221,11 +1222,16 @@ function AppContent() {
           name="QC testing" designRef="DB-01"
           whatItWillDo={'The testing queue and results per lot and per batch, against the '
             + 'specification each one was sampled under.'} />;
+      //  Built. The gate that makes "a material does not become
+      //  available because somebody changed a status" true: the
+      //  conditions come from the same function the release gate
+      //  calls, the decision is signed, and the role is enforced by a
+      //  trigger rather than by this route.
       case 'qa-disposition':
-        return <ScreenNotBuilt
-          name="QA disposition" designRef="DB-01"
-          whatItWillDo={'The QA decision on a tested lot — release, reject or hold — with '
-            + 'the signature that makes it a record.'} />;
+        return <QaDispositionPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+        />;
       case 'traceability':
         return <ScreenNotBuilt
           name="Traceability" designRef="DB-01"

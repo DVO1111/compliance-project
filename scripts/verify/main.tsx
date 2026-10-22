@@ -19,6 +19,7 @@ import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
 import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
+import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
@@ -30,6 +31,11 @@ const PAGES: Record<string, () => JSX.Element> = {
   'materials': () => <MaterialsPage companyId="c1" />,
   'in-process': () => <InprocessPage companyId="c1" userId="u1" canDecide />,
   'instruments': () => <InstrumentsPage companyId="c1" />,
+};
+
+/** Pages whose behaviour depends on the viewer's role. */
+const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
+  'qa-disposition': (role) => <QaDispositionPage companyId="c1" role={role} />,
 };
 
 /** The same role-to-dashboard choice App.tsx makes. */
@@ -62,6 +68,7 @@ function Harness() {
     <MainLayout currentPage={page} onNavigate={(p) => setPage(p)}>
       {refused ? <AccessDenied />
         : page === 'dashboard' ? <DashboardFor profile={profile} />
+        : ROLE_PAGES[String(page)] ? ROLE_PAGES[String(page)]!(resolveWorkRole(profile))
         : render ? render() : (
         <p style={{ font: '15px/1.5 system-ui', color: '#5b6472' }}>
           No verification fixture wired for “{String(page)}”. The sidebar is the
