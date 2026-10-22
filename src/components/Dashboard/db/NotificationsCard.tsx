@@ -47,7 +47,7 @@ export default function NotificationsCard(p: NotificationsCardProps) {
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <span style={{ fontSize: 13.5, fontWeight: 600, lineHeight: '19px' }}>{n.title}</span>
               <span style={{ fontSize: 12.5, color: '#5b6472', lineHeight: '18px' }}>{n.detail}</span>
-              <span style={{ fontSize: 11.5, color: '#8a919c', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+              <span style={{ fontSize: 11.5, color: '#8a919c', fontFamily: 'var(--nv-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' }}>
                 {n.when}
               </span>
             </span>

@@ -34,7 +34,12 @@ import NotificationsCard, { type NoticeRow } from './db/NotificationsCard';
 import ControlsInForce, { QA_MANAGER_CONTROLS } from './db/ControlsInForce';
 import SectionNotReady from '../Common/SectionNotReady';
 import { ROLE_LABELS, type WorkRole } from '../../lib/access/permissionRequests';
-import { qaManagerCounts, type QaManagerCounts } from '../../lib/dashboard/roleDashboardService';
+import {
+  qaManagerCounts, unreadAlerts, derivedTasks,
+  type QaManagerCounts, type Count, type DerivedTask,
+} from '../../lib/dashboard/roleDashboardService';
+import { canAct } from '../../lib/access/roleAccess';
+import type { PmSection } from '../../lib/access/roleAccess';
 import type { StageCount } from './db/materialBatchFlow';
 import { supabase } from '../../lib/supabase';
 import DashboardHeader from './db/DashboardHeader';
@@ -49,6 +54,8 @@ export interface QaManagerDashboardProps {
 
 export default function QaManagerDashboard(p: QaManagerDashboardProps) {
   const [c, setC] = useState<QaManagerCounts | null>(null);
+  const [alerts, setAlerts] = useState<Count>(null);
+  const [tasks, setTasks] = useState<DerivedTask[]>([]);
   const [ready, setReady] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -60,25 +67,35 @@ export default function QaManagerDashboard(p: QaManagerDashboardProps) {
     //  with no explanation. One probe turns that into a sentence.
     const { error } = await supabase.from('batch_records').select('id').limit(1);
     setReady(!error);
-    if (!error) setC(await qaManagerCounts(p.companyId));
+    if (!error) {
+      const [counts, a, t] = await Promise.all([
+        qaManagerCounts(p.companyId),
+        unreadAlerts(p.companyId),
+        derivedTasks(p.companyId, (sec) => canAct(p.role, sec as PmSection)),
+      ]);
+      setC(counts); setAlerts(a); setTasks(t);
+    }
     setLoading(false);
-  }, [p.companyId]);
+  }, [p.companyId, p.role]);
 
   useEffect(() => { void load(); }, [load]);
 
   const tiles: Tile[] = useMemo(() => [
-    //  MY TASKS has no query yet — there is no task table in this
-    //  schema, and the design's "24 · 5 due today" is illustrative. It
-    //  shows a dot rather than a fabricated number.
-    { label: 'MY TASKS',   value: null,            caption: 'no task register yet', icon: ListChecks, page: 'my-tasks' },
+    //  Derived from records awaiting this role, because no task table
+    //  exists. See derivedTasks(): a lot sitting in quarantine IS a
+    //  disposition task, which is what the design's own rows are.
+    { label: 'MY TASKS',   value: tasks.length,    caption: 'waiting on you',       icon: ListChecks, page: 'my-tasks' },
     { label: 'QUARANTINE', value: c?.quarantine ?? null, caption: 'material lots',  icon: PackageX,    page: 'materials' },
     { label: 'QC PENDING', value: c?.qcPending ?? null,  caption: 'tests',          icon: FlaskConical, page: 'qc-testing' },
     { label: 'QA REVIEW',  value: c?.qaReview ?? null,   caption: 'batches',        icon: ShieldCheck, page: 'qa-disposition' },
     { label: 'PRODUCTION', value: c?.production ?? null, caption: 'active batches', icon: Gauge,       page: 'batch-execution' },
     { label: 'DEVIATIONS', value: c?.deviations ?? null,
       caption: c?.capaOverdue ? `${c.capaOverdue} CAPA overdue` : 'open', icon: ClipboardList, page: 'deviations' },
-    { label: 'ALERTS',     value: null,            caption: 'no alert feed yet',    icon: Bell },
-  ], [c]);
+    //  Summed across the three registers that raise alerts. Null if
+    //  any of them cannot be read — a partial total is worse than
+    //  none, because somebody clears four of nine and stops.
+    { label: 'ALERTS',     value: alerts,          caption: 'unacknowledged',       icon: Bell },
+  ], [c, alerts, tasks]);
 
   const stageCounts: Record<string, StageCount> = useMemo(() => ({
     '01': { value: c?.procurement ?? null,  label: 'suppliers to qualify' },
@@ -91,10 +108,13 @@ export default function QaManagerDashboard(p: QaManagerDashboardProps) {
     '08': { value: c?.distribution ?? null, label: 'released, ready to ship' },
   }), [c]);
 
-  //  Empty until there is something to route. The design's five rows
-  //  are examples of what a task looks like, not rows to reproduce.
-  const tasks: TaskRow[] = [];
   const notices: NoticeRow[] = [];
+
+  //  The derived rows in the card's shape. No due date is invented:
+  //  nothing records one, so the column reads a dash.
+  const taskRows: TaskRow[] = tasks.map((t) => ({
+    id: t.id, title: t.title, detail: t.detail, state: t.state, due: t.due, page: t.page,
+  }));
 
   if (!p.companyId) {
     return <p style={{ fontSize: 15, color: '#5b6472' }}>
@@ -103,7 +123,17 @@ export default function QaManagerDashboard(p: QaManagerDashboardProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+    //  SORA, WHICH IS WHAT THE DESIGN SYSTEM SPECIFIES FOR THESE
+    //  SCREENS. The application shell sets --font-sans to Mulish, so
+    //  these components inherited Mulish and rendered in a face the
+    //  dashboard frames do not use. Bound to --nv-font-body rather
+    //  than naming Sora, so it follows the token if the system moves,
+    //  and scoped to this subtree rather than changed globally —
+    //  every other screen is already correct and is not in scope.
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0,
+      fontFamily: 'var(--nv-font-body, inherit)',
+    }}>
       <DashboardHeader
         personName={p.personName}
         roleLabel={ROLE_LABELS[p.role]}
@@ -131,9 +161,10 @@ export default function QaManagerDashboard(p: QaManagerDashboardProps) {
         <TaskListCard
           title="My tasks"
           subtitle={`Routed to ${ROLE_LABELS[p.role]} · oldest first`}
-          tasks={tasks}
+          tasks={taskRows}
           loading={loading}
-          emptyText={'Nothing is routed to you. Dispositions, releases and deviation reviews '
+          onOpen={(t) => t.page && p.onNavigate?.(t.page)}
+          emptyText={'Nothing is waiting on you. Dispositions, releases and deviation reviews '
             + 'appear here as they are raised.'}
         />
         <NotificationsCard

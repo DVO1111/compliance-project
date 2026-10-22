@@ -177,7 +177,7 @@ const stageButton: CSSProperties = { cursor: 'pointer', font: 'inherit' };
 const stageLocked: CSSProperties = { background: '#f7f8fa' };
 const stageNo: CSSProperties = {
   fontSize: 10.5, letterSpacing: '0.06em', fontWeight: 700, color: '#5b6472',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--nv-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
 };
 const stageCaption: CSSProperties = { fontSize: 12.5, color: '#5b6472', lineHeight: '17px' };
 const stageValue: CSSProperties = { fontSize: 26, fontWeight: 600, lineHeight: '30px' };

@@ -76,7 +76,7 @@ const head: CSSProperties = {
 };
 const label: CSSProperties = {
   fontSize: 10.5, letterSpacing: '0.07em', fontWeight: 700,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--nv-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 };
 const value: CSSProperties = { fontSize: 30, fontWeight: 600, lineHeight: '34px' };

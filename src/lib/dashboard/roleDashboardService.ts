@@ -151,3 +151,134 @@ export async function myPendingSections(userId: string): Promise<string[]> {
     return [];
   }
 }
+
+/* ── Alerts, which DO have tables ──────────────────────────────────── */
+
+/**
+ * Unacknowledged alerts across the three registers that raise them.
+ *
+ * DB-01 tiles this as "ALERTS · 18 · unread". There is no single alert
+ * feed in this schema, but there are three real registers —
+ * material_lot_alerts, instrument_calibration_alerts and
+ * licence_renewal_alerts — each with an acknowledged_at. The tile is
+ * their sum rather than a placeholder.
+ *
+ * A register that cannot be read contributes null, and null poisons
+ * the sum: a partial count presented as a total is worse than no
+ * count, because somebody clears 4 of 9 alerts and believes they are
+ * done.
+ */
+export async function unreadAlerts(companyId: string): Promise<Count> {
+  const parts = await Promise.all([
+    countOf('material_lot_alerts', (q) =>
+      q.eq('company_id', companyId).is('acknowledged_at', null)),
+    countOf('instrument_calibration_alerts', (q) =>
+      q.eq('company_id', companyId).is('acknowledged_at', null)),
+    countOf('licence_renewal_alerts', (q) =>
+      q.eq('company_id', companyId).is('acknowledged_at', null)),
+  ]);
+  if (parts.some((p) => p === null)) return null;
+  return parts.reduce((a: number, b) => a + (b ?? 0), 0);
+}
+
+/* ── Tasks, which do NOT ───────────────────────────────────────────── */
+
+/**
+ * What is waiting for this role, derived from the records themselves.
+ *
+ * THERE IS NO TASK TABLE. Nothing in this schema holds a work item
+ * assigned to a person — the only assigned_to column belongs to
+ * ai_incidents, which is a different product area. DB-01 and DB-02
+ * both draw a routed task list, so the choice was a permanent
+ * placeholder or a derivation.
+ *
+ * This derives it: a record sitting in a state that only this role can
+ * move IS a task for this role, and that is exactly what the design's
+ * examples are — "Material disposition · Sucrose lot ML-2610-031" is a
+ * lot awaiting disposition, not a row somebody created in a task
+ * table.
+ *
+ * WHAT THE DERIVATION CANNOT DO, and so does not pretend to: it has no
+ * due date, because nothing records one, and no ordering by urgency.
+ * The design shows "Today" and "Overdue 2 days" against its rows; this
+ * returns a dash rather than inventing an age. When a task register
+ * exists, this function is what it replaces.
+ *
+ * Filtered by what the role may ACT on, so a QC Analyst is not handed
+ * dispositions to look at and feel responsible for.
+ */
+export interface DerivedTask {
+  id: string;
+  title: string;
+  detail: string;
+  state: 'pending' | 'on_hold' | 'overdue' | 'released' | 'rejected';
+  due: string;
+  page: string;
+}
+
+export async function derivedTasks(
+  companyId: string,
+  canAct: (section: string) => boolean,
+): Promise<DerivedTask[]> {
+  const out: DerivedTask[] = [];
+
+  const pull = async (
+    table: string,
+    build: (q: CountQuery) => CountQuery,
+    toTask: (row: Record<string, unknown>) => DerivedTask,
+  ) => {
+    try {
+      const from = (supabase.from as unknown as (t: string) => {
+        select(cols: string): CountQuery;
+      })(table);
+      const res = await build(from.select('*') as unknown as CountQuery) as unknown as {
+        data?: Record<string, unknown>[] | null; error?: { message: string } | null;
+      };
+      if (res.error || !res.data) return;
+      for (const row of res.data.slice(0, 5)) out.push(toTask(row));
+    } catch (e) {
+      logger.debug?.('[dashboard] task source unavailable', { table, error: String(e) });
+    }
+  };
+
+  if (canAct('qa_disposition')) {
+    await pull('material_lots',
+      (q) => q.eq('company_id', companyId).eq('status', 'quarantine'),
+      (r) => ({
+        id: `lot-${String(r.id)}`,
+        title: `Material disposition · lot ${String(r.lot_number ?? '')}`.trim(),
+        detail: 'Waiting for a QA decision',
+        state: 'pending',
+        due: '—',
+        page: 'materials',
+      }));
+  }
+
+  if (canAct('batch_release')) {
+    await pull('batch_records',
+      (q) => q.eq('company_id', companyId).eq('status', 'pending_qa'),
+      (r) => ({
+        id: `batch-${String(r.id)}`,
+        title: `Batch release · ${String(r.batch_number ?? '')}`.trim(),
+        detail: 'Awaiting QA review',
+        state: 'pending',
+        due: '—',
+        page: 'batch-release',
+      }));
+  }
+
+  if (canAct('deviation_capa')) {
+    await pull('deviations',
+      (q) => q.eq('company_id', companyId).neq('status', 'closed'),
+      (r) => ({
+        id: `dev-${String(r.id)}`,
+        title: `Deviation · ${String(r.reference ?? r.title ?? '')}`.trim(),
+        detail: 'Open investigation',
+        state: 'on_hold',
+        due: '—',
+        page: 'deviations',
+      }));
+  }
+
+  return out;
+}

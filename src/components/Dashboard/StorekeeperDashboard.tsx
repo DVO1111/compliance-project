@@ -44,8 +44,10 @@ import {
 } from '../../lib/access/permissionRequests';
 import { raiseRequest } from '../../lib/access/accessRequestService';
 import {
-  storekeeperCounts, myPendingSections, type StorekeeperCounts,
+  storekeeperCounts, myPendingSections, derivedTasks,
+  type StorekeeperCounts, type DerivedTask,
 } from '../../lib/dashboard/roleDashboardService';
+import { canAct, type PmSection } from '../../lib/access/roleAccess';
 import type { StageCount } from './db/materialBatchFlow';
 import { supabase } from '../../lib/supabase';
 import { logger } from '../../lib/logger';
@@ -77,6 +79,7 @@ const LOCKED_FOR_STOREKEEPER: { section: AccessSection; why: string }[] = [
 
 export default function StorekeeperDashboard(p: StorekeeperDashboardProps) {
   const [c, setC] = useState<StorekeeperCounts | null>(null);
+  const [tasks, setTasks] = useState<DerivedTask[]>([]);
   const [pending, setPending] = useState<string[]>([]);
   const [ready, setReady] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,21 +92,27 @@ export default function StorekeeperDashboard(p: StorekeeperDashboardProps) {
     setLoading(true);
     const { error } = await supabase.from('material_lots').select('id').limit(1);
     setReady(!error);
-    if (!error) setC(await storekeeperCounts(p.companyId));
+    if (!error) {
+      const [counts, t] = await Promise.all([
+        storekeeperCounts(p.companyId),
+        derivedTasks(p.companyId, (sec) => canAct(p.role, sec as PmSection)),
+      ]);
+      setC(counts); setTasks(t);
+    }
     if (p.userId) setPending(await myPendingSections(p.userId));
     setLoading(false);
-  }, [p.companyId, p.userId]);
+  }, [p.companyId, p.userId, p.role]);
 
   useEffect(() => { void load(); }, [load]);
 
   const tiles: Tile[] = useMemo(() => [
-    { label: 'MY TASKS',        value: null,                   caption: 'no task register yet', icon: ListChecks, page: 'my-tasks' },
+    { label: 'MY TASKS',        value: tasks.length,           caption: 'waiting on you',      icon: ListChecks, page: 'my-tasks' },
     { label: 'QUARANTINE',      value: c?.quarantine ?? null,  caption: 'lots blocked from issue', icon: PackageX, page: 'materials' },
     { label: 'PUT-AWAY',        value: c?.putAway ?? null,     caption: 'QA approved, waiting',  icon: PackageCheck, page: 'materials' },
     { label: 'READY TO ISSUE',  value: c?.readyToIssue ?? null, caption: 'approved lots',        icon: Boxes,      page: 'materials' },
     { label: 'HELD / REJECTED', value: c?.heldRejected ?? null, caption: 'awaiting disposal',    icon: Ban,        page: 'materials' },
     { label: 'DISPATCH',        value: c?.dispatch ?? null,    caption: 'released batches',      icon: Truck },
-  ], [c]);
+  ], [c, tasks]);
 
   const stageCounts: Record<string, StageCount> = useMemo(() => ({
     '01': { value: null,                    label: 'POs expected this week' },
@@ -116,8 +125,10 @@ export default function StorekeeperDashboard(p: StorekeeperDashboardProps) {
     '08': { value: c?.dispatch ?? null,     label: 'ready to dispatch' },
   }), [c]);
 
-  const tasks: TaskRow[] = [];
   const notices: NoticeRow[] = [];
+  const taskRows: TaskRow[] = tasks.map((t) => ({
+    id: t.id, title: t.title, detail: t.detail, state: t.state, due: t.due, page: t.page,
+  }));
 
   const ask = useCallback(async (req: AccessRequestInput) => {
     if (!p.companyId) return;
@@ -158,7 +169,17 @@ export default function StorekeeperDashboard(p: StorekeeperDashboardProps) {
   }));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+    //  SORA, WHICH IS WHAT THE DESIGN SYSTEM SPECIFIES FOR THESE
+    //  SCREENS. The application shell sets --font-sans to Mulish, so
+    //  these components inherited Mulish and rendered in a face the
+    //  dashboard frames do not use. Bound to --nv-font-body rather
+    //  than naming Sora, so it follows the token if the system moves,
+    //  and scoped to this subtree rather than changed globally —
+    //  every other screen is already correct and is not in scope.
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0,
+      fontFamily: 'var(--nv-font-body, inherit)',
+    }}>
       <DashboardHeader
         personName={p.personName}
         roleLabel={ROLE_LABELS[p.role]}
@@ -190,9 +211,10 @@ export default function StorekeeperDashboard(p: StorekeeperDashboardProps) {
         <TaskListCard
           title="My tasks"
           subtitle={`Routed to ${ROLE_LABELS[p.role]} · oldest first`}
-          tasks={tasks}
+          tasks={taskRows}
           loading={loading}
-          emptyText={'Nothing is routed to you. Goods receipts, put-aways and issue requests '
+          onOpen={(t) => t.page && p.onNavigate?.(t.page)}
+          emptyText={'Nothing is waiting on you. Goods receipts, put-aways and issue requests '
             + 'appear here as they are raised.'}
         />
         <LockedSectionsCard

@@ -7,6 +7,7 @@ import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
+import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
 import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
@@ -975,6 +976,17 @@ function AppContent() {
     if (role === 'storekeeper') {
       return <StorekeeperDashboard {...common} role={role} userId={user?.id} />;
     }
+    //  The other six PM-03 roles have no frame in the file. They get a
+    //  dashboard derived from the permissions matrix rather than the
+    //  first-run screen, which is the "every role lands on the same
+    //  page" defect with an extra step. The derivation is stated on
+    //  the screen itself — see DerivedRoleDashboard.
+    if (role) {
+      return <DerivedRoleDashboard {...common} role={role} userId={user?.id} />;
+    }
+    //  No work role at all: onboarding, or an account created before
+    //  company_role was being set. The first-run dashboard is the
+    //  right screen for somebody who has not been given a job yet.
     return firstRunDashboard();
   };
 
