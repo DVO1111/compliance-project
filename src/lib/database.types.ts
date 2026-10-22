@@ -6527,6 +6527,14 @@ isOneToOne: false
 "backfill_product_registry":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
+"batch_release_block_reason":
+{ Args: { "p_batch_id": string }; Returns: string
+                           },
+"batch_release_conditions":
+{ Args: { "p_batch_id": string }; Returns: {
+              "condition_key": string,"continue_with": string,"detail": string,"severity": string,"sort_order": number,"title": string
+            }[]
+                           },
 "batch_record_assign_line":
 { Args: { "p_batch_id": string,"p_line_id": string }; Returns: Json
                            },

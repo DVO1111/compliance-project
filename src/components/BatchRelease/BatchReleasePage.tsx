@@ -5,6 +5,7 @@ import {
   listBatchRecords,
   updateBatchStatus,
   listRawMaterialReceipts,
+  batchReleaseConditions,
   BatchRecord,
   BatchStatus,
   RawMaterialReceipt,
@@ -13,6 +14,9 @@ import {
   STATUS_COLORS,
 } from '../../lib/pharma/batchReleaseService';
 import BatchReleaseModal from './BatchReleaseModal';
+import ElectronicSignatureModal from '../ElectronicSignatures/ElectronicSignatureModal';
+import { FloorNoticeList } from '../Floor/FloorNotice';
+import { assess, type FloorCondition } from '../../lib/floor/floorConditions';
 import BatchDetailModal from './BatchDetailModal';
 import RawMaterialModal from './RawMaterialModal';
 import { isQaAuthority } from '../../lib/pharma/qaAuthority';
@@ -50,12 +54,27 @@ export default function BatchReleasePage() {
   const [detailBatch, setDetailBatch] = useState<BatchRecord | null>(null);
   const [filterStatus, setFilterStatus] = useState<BatchStatus | 'all'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  //  Release objections per batch, read from the same function the gate
+  //  refuses on. Keyed by batch so a list can show them without a
+  //  request per row on every render.
+  const [conditions, setConditions] = useState<Record<string, FloorCondition[]>>({});
+  //  The release waiting for its electronic signature. PM-03 requires
+  //  one and, since 20261107000000, the lifecycle transition enforces
+  //  it — an unsigned release comes back LIFECYCLE_SIGNATURE_REQUIRED.
+  const [signing, setSigning] = useState<{ record: BatchRecord; notes: string } | null>(null);
 
   const load = async () => {
     setLoading(true);
     const data = await listBatchRecords(companyId, filterStatus === 'all' ? undefined : filterStatus);
     setRecords(data);
     setLoading(false);
+
+    //  Only for the batches a release decision is actually open on.
+    //  Asking for every row would be a request per archived batch to
+    //  answer a question nobody is holding.
+    const open = data.filter(r => r.status === 'qc_in_progress');
+    const answers = await Promise.all(open.map(r => batchReleaseConditions(r.id)));
+    setConditions(Object.fromEntries(open.map((r, i) => [r.id, answers[i]])));
   };
 
   const loadRawMaterials = async () => {
@@ -87,8 +106,13 @@ export default function BatchReleasePage() {
         if (!reason) { setActionLoading(null); return; }
         extra.comment = reason;
       }
+      //  RELEASE DOES NOT HAPPEN HERE. It needs a signature, which is
+      //  collected in a dialog rather than a prompt() — the password is
+      //  typed into it, and prompt() shows what is typed.
       if (newStatus === 'released') {
-        extra.releaseNotes = prompt('Release notes (optional):') ?? '';
+        setSigning({ record, notes: prompt('Release notes (optional):') ?? '' });
+        setActionLoading(null);
+        return;
       }
       await updateBatchStatus(record.id, companyId, userId, newStatus, extra);
       await load();
@@ -267,6 +291,18 @@ export default function BatchReleasePage() {
                     </div>
                   </div>
 
+                  {/*  WHY THIS BATCH CANNOT BE RELEASED, said before the
+                      button rather than after it. The rows come from
+                      batch_release_conditions, which reads the same facts
+                      the gate refuses on, so the notice and the refusal
+                      cannot drift apart. An empty list is not a promise:
+                      the transition is still what decides. */}
+                  {(conditions[record.id]?.length ?? 0) > 0 && (
+                    <div className="w-full">
+                      <FloorNoticeList conditions={assess(conditions[record.id]!).conditions} />
+                    </div>
+                  )}
+
                   {actions.length > 0 && !canQa && (
                     <span className="text-[11px] dash-text-tertiary italic self-center">QA/admin only</span>
                   )}
@@ -342,6 +378,46 @@ export default function BatchReleasePage() {
             ))}
           </div>
         )
+      )}
+
+      {/*  PM-03: "Release a batch — QA Manager — E-signature". The
+          signature is bound by the database to this signer, this record
+          and this action, and consumed by the transition, so it cannot
+          be reused or supplied for something else. */}
+      {signing && (
+        <ElectronicSignatureModal
+          open
+          companyId={companyId}
+          entityType="batch_record"
+          entityId={signing.record.id}
+          action="release"
+          defaultMeaning="released"
+          title={`Release batch ${signing.record.batch_number}`}
+          metadata={{ release_notes: signing.notes }}
+          onClose={() => setSigning(null)}
+          onSigned={(signatureId) => {
+            const target = signing;
+            setSigning(null);
+            if (!target) return;
+            setActionLoading(target.record.id);
+            void (async () => {
+              try {
+                await updateBatchStatus(target.record.id, companyId, userId, 'released', {
+                  releaseNotes: target.notes,
+                  signatureId,
+                });
+                await load();
+              } catch (e: unknown) {
+                //  Shown as the database wrote it. BATCH_RELEASE_BLOCKED
+                //  and BATCH_RELEASE_SELF_TESTED are sentences meant for
+                //  the person reading them.
+                alert(e instanceof Error ? e.message : 'The release was refused.');
+              } finally {
+                setActionLoading(null);
+              }
+            })();
+          }}
+        />
       )}
 
       {showModal && (

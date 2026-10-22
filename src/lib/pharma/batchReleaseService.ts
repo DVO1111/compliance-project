@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { toFloorConditions, type FloorCondition } from '../floor/floorConditions';
 import { assertBatchAllowed } from '../licenceService';
 import { transition as lifecycleTransition } from '../lifecycleService';
 import { BATCH_TRANSITIONS } from './batchTransitions';
@@ -153,7 +154,11 @@ export async function updateBatchStatus(
   companyId: string,
   userId: string,
   newStatus: BatchStatus,
-  extra?: { holdReason?: string; releaseNotes?: string; comment?: string }
+  //  signatureId: PM-03 requires an electronic signature to release a
+  //  batch, and since 20261107000000 the lifecycle transition enforces
+  //  it. Without one the engine returns LIFECYCLE_SIGNATURE_REQUIRED,
+  //  so a caller releasing a batch has to collect it first.
+  extra?: { holdReason?: string; releaseNotes?: string; comment?: string; signatureId?: string }
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -192,6 +197,7 @@ export async function updateBatchStatus(
     companyId,
     comment,
     metadata: { requested_status: newStatus },
+    signatureId: extra?.signatureId,
   });
 
   if (!result.ok) throw new Error(result.message);
@@ -413,3 +419,30 @@ export const STATUS_COLORS: Record<BatchStatus, string> = {
   rejected: 'text-red-600 bg-red-50 border-red-200',
   archived: 'text-gray-500 bg-gray-50 border-gray-200',
 };
+
+/**
+ * Why this batch may not be released — the same facts the gate refuses
+ * on, as rows a screen can draw.
+ *
+ * ONE SOURCE, TWO CALLERS. batch_release_conditions and
+ * batch_release_block_reason read the same query in the database, so
+ * the notice somebody reads on the screen and the refusal they would
+ * hit cannot drift apart. The same arrangement as
+ * material_lot_release_block_reason and dispensing_conditions.
+ *
+ * An empty list means nothing objects. A FAILED READ IS ALSO AN EMPTY
+ * LIST, which is the one place the two are indistinguishable — so the
+ * screen must not read "no conditions" as "safe to release" on its
+ * own. It does not: the button still calls the transition, and the
+ * database is what decides.
+ */
+export async function batchReleaseConditions(batchId: string): Promise<FloorCondition[]> {
+  const { data, error } = await supabase.rpc('batch_release_conditions', {
+    p_batch_id: batchId,
+  });
+  if (error) {
+    logger.error('[batchRelease] conditions failed', { batchId, error });
+    return [];
+  }
+  return toFloorConditions(data);
+}
