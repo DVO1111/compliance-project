@@ -24,12 +24,14 @@ import RolesMatrix from './RolesMatrix';
 import AccessRequestsInbox from './AccessRequestsInbox';
 import ReviewRequestDrawer from './ReviewRequestDrawer';
 import SectionNotReady from '../Common/SectionNotReady';
+import PeopleTab from './PeopleTab';
 import type { RoleRow, StepPermission } from './RolesMatrix';
 import type { WaitingRequest, DecidedRequest } from './AccessRequestsInbox';
 import {
-  SECTION_LABELS, ROLE_LABELS, forbiddenActSections,
+  SECTION_LABELS, ROLE_LABELS,
   type AccessSection, type WorkRole, type AccessLevel, type Decision,
 } from '../../lib/access/permissionRequests';
+import { sectionAccess, type PmSection } from '../../lib/access/roleAccess';
 import {
   listWaiting, listDecided, decide, type PermissionRequestRow,
 } from '../../lib/access/accessRequestService';
@@ -44,8 +46,28 @@ export interface AccessPageProps {
   canDecide?: boolean;
 }
 
-const SECTIONS = Object.keys(SECTION_LABELS) as AccessSection[];
-const ROLES = Object.keys(ROLE_LABELS) as WorkRole[];
+/**
+ * PM-03's eleven columns and eight rows, in the design's order.
+ *
+ * NOT Object.keys(SECTION_LABELS). That list is the request catalogue —
+ * nineteen sections, including change control, SOP library and the
+ * obligations register — and drawing all of it here made a matrix that
+ * was not the screen the design specifies and had no data behind two
+ * thirds of its cells.
+ *
+ * Audit trail is absent on purpose: PM-03 annotates it "a separate
+ * switch", so it is not a cell in this grid.
+ */
+const SECTIONS: AccessSection[] = [
+  'suppliers', 'goods_receipt', 'material_lots', 'qc_testing', 'qa_disposition',
+  'batch_records', 'batch_release', 'deviation_capa', 'coa_register',
+  'traceability', 'distribution',
+];
+
+const ROLES: WorkRole[] = [
+  'procurement', 'storekeeper', 'qc_analyst', 'qa_officer', 'qa_manager',
+  'production_supervisor', 'compliance_admin', 'management',
+];
 
 /**
  * The steps panel. Fixed rather than derived, because these are
@@ -132,6 +154,7 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
   const [decided, setDecided] = useState<DecidedRequest[]>([]);
   const [requestsReady, setRequestsReady] = useState<boolean | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [tab, setTab] = useState<'requests' | 'roles' | 'people'>('requests');
   const [notice, setNotice] = useState<string | null>(null);
 
   //  How many people hold each role. Counted from company_members,
@@ -171,10 +194,22 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
 
   useEffect(() => { void loadRequests(); }, [loadRequests]);
 
+  //  READ FROM PM-03's GRID, WHICH IS WHY CELLS CAN NOW BE EMPTY.
+  //
+  //  This used to be `forbidden.has(s) ? 'view' : 'act'`, which cannot
+  //  produce the design's third state. Every role therefore read as
+  //  acting or viewing on every section, and the one thing this screen
+  //  exists to show — that a Storekeeper has NO access to QC testing or
+  //  QA disposition — was not on it. A matrix that cannot say no is a
+  //  matrix nobody should be setting permissions from.
+  //
+  //  'none' is left undefined, which is how the cell draws no access.
   const roles: RoleRow[] = useMemo(() => ROLES.map((role) => {
-    const forbidden = new Set(forbiddenActSections(role));
     const access: RoleRow['access'] = {};
-    for (const s of SECTIONS) access[s] = forbidden.has(s) ? 'view' : 'act';
+    for (const s of SECTIONS) {
+      const held = sectionAccess(role, s as unknown as PmSection);
+      if (held !== 'none') access[s] = held;
+    }
     return { role, peopleCount: counts[role] ?? 0, access };
   }), [counts]);
 
@@ -194,6 +229,36 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
       {notice && <p style={noticeStyle} role="status">{notice}</p>}
+
+      {/*  PM-01's TABS. The design puts Access requests, Roles, People
+           and Change log across the top, with a count on each. They are
+           four different questions — who is waiting, what does a role
+           hold, what does one person hold, and what changed — and
+           stacking all of them down one page, which is what this screen
+           did, buries the queue that somebody is actually here for.
+
+           Change log is absent: nothing in this schema records access
+           changes as a readable history yet, and a tab that opened an
+           empty log would claim nothing had ever been changed. */}
+      <nav style={tabs} role="tablist" aria-label="Roles and permissions">
+        {([
+          ['requests', 'Access requests', waiting.length],
+          ['roles', 'Roles', ROLES.length],
+          ['people', 'People', null],
+        ] as const).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            style={{ ...tabBtn, ...(tab === key ? tabOn : null) }}
+            onClick={() => setTab(key)}
+          >
+            {label}
+            {count !== null && <span style={tabCount}>{count}</span>}
+          </button>
+        ))}
+      </nav>
 
       {/*  THE MATRIX IS DERIVED WHEN THE TABLES ARE ABSENT, and says so.
            access_act_owners names which roles may act in a section
@@ -215,9 +280,13 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
         />
       )}
 
-      <RolesMatrix roles={roles} sections={SECTIONS} steps={STEPS} />
+      {tab === 'roles' && <RolesMatrix roles={roles} sections={SECTIONS} steps={STEPS} />}
 
-      {requestsReady === false ? (
+      {tab === 'people' && (
+        <PeopleTab companyId={companyId} canManage={canDecide} />
+      )}
+
+      {tab === 'requests' && (requestsReady === false ? (
         <SectionNotReady
           section="Access requests"
           whatItWillShow={
@@ -237,7 +306,7 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
             setOpen(id);
           }}
         />
-      )}
+      ))}
 
       {pending && (
         <ReviewRequestDrawer
@@ -279,6 +348,23 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
 
 const empty: React.CSSProperties = {
   margin: 0, padding: '28px 0', fontSize: 15, lineHeight: '23px', color: '#5b6472',
+};
+const tabs: React.CSSProperties = {
+  display: 'flex', gap: 4, borderBottom: '1px solid #e3e6eb', minWidth: 0,
+  overflowX: 'auto',
+};
+const tabBtn: React.CSSProperties = {
+  border: 'none', background: 'transparent', cursor: 'pointer',
+  padding: '9px 13px', fontSize: 14, fontWeight: 600, color: '#5b6472',
+  borderBottom: '2px solid transparent', display: 'flex', alignItems: 'center',
+  gap: 7, whiteSpace: 'nowrap', font: 'inherit',
+};
+const tabOn: React.CSSProperties = {
+  color: '#1d2433', borderBottomColor: '#1d2433',
+};
+const tabCount: React.CSSProperties = {
+  fontSize: 11.5, fontWeight: 700, background: '#eceff4', color: '#3b4252',
+  borderRadius: 999, padding: '1px 7px', fontVariantNumeric: 'tabular-nums',
 };
 const noticeStyle: React.CSSProperties = {
   margin: 0, background: '#eef3fb', border: '1px solid #cfe0f5', borderRadius: 10,

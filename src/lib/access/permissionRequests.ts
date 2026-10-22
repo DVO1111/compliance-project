@@ -40,7 +40,14 @@ export type AccessSection =
   | 'batch_records' | 'batch_release' | 'qc_testing' | 'qa_disposition'
   | 'material_lots' | 'deviation_capa' | 'change_control' | 'sop_library'
   | 'gmp_inspection' | 'products' | 'registrations_licences'
-  | 'obligations' | 'risk_register' | 'policies' | 'audit_trail';
+  | 'obligations' | 'risk_register' | 'policies' | 'audit_trail'
+  //  PM-03 tabulates eleven sections and five of them had no entry
+  //  here, so they could not be drawn on the permissions matrix and
+  //  could not be asked for at all. A storekeeper looking at a locked
+  //  CoA register had no way to request it because the section did not
+  //  exist in the catalogue.
+  | 'suppliers' | 'goods_receipt' | 'coa_register'
+  | 'traceability' | 'distribution';
 
 /** What they want to do there. */
 export type AccessLevel = 'view' | 'act';
@@ -80,6 +87,11 @@ export const SECTION_LABELS: Record<AccessSection, string> = {
   risk_register:          'Risk register',
   policies:               'Policies',
   audit_trail:            'Audit trail',
+  suppliers:              'Suppliers',
+  goods_receipt:          'Goods receipt',
+  coa_register:           'CoA register',
+  traceability:           'Traceability',
+  distribution:           'Distribution',
 };
 
 // ── What can be asked for at all ─────────────────────────────────────
@@ -391,6 +403,32 @@ export const LEVEL_MEANING: Record<AccessSection, { view: string; act: string }>
     //  trail is append-only by design, and an Act level on it would be
     //  a contradiction rather than a permission.
     act: 'The audit trail cannot be edited by anyone.',
+  },
+  //  PM-03's five remaining columns. Each sentence says what the level
+  //  lets you DO, in the asker's terms, because the request dialog
+  //  shows it beside the radio and somebody is agreeing to it.
+  suppliers: {
+    view: 'See approved suppliers, their qualification status and their certificates.',
+    act: 'Qualify, requalify and suspend suppliers.',
+  },
+  goods_receipt: {
+    view: 'See deliveries booked in, against which order and from which supplier.',
+    act: 'Book a delivery in, raise the goods received note and open the lot.',
+  },
+  coa_register: {
+    view: 'See certificates of analysis and how each one compares to the specification.',
+    act: 'Record a certificate of analysis and raise a discrepancy against it.',
+  },
+  traceability: {
+    view: 'Trace a lot forward into batches, and a batch back to its materials.',
+    //  Tracing is a read of relationships between existing records.
+    //  There is nothing to act on, so the Act sentence says so rather
+    //  than inventing a verb for it.
+    act: 'Traceability is a view of records that already exist; there is nothing to change.',
+  },
+  distribution: {
+    view: 'See which released batches have shipped and which are waiting.',
+    act: 'Dispatch released batches and record what left the site.',
   },
 };
 

@@ -26,16 +26,37 @@ import { logger } from '../logger';
 /** null means "could not be read", which is not the same as zero. */
 export type Count = number | null;
 
+/**
+ * The slice of the query builder a count actually uses.
+ *
+ * Declared rather than reached for with `any`, so a filter nobody
+ * anticipated — a .or(), a .gte() — is a compile error here instead of
+ * a silently unfiltered count in production. Adding one is a one-line
+ * change made on purpose.
+ */
+interface CountQuery extends PromiseLike<{
+  count: number | null;
+  error: { message: string } | null;
+}> {
+  eq(column: string, value: unknown): CountQuery;
+  neq(column: string, value: unknown): CountQuery;
+  is(column: string, value: unknown): CountQuery;
+  in(column: string, values: readonly unknown[]): CountQuery;
+  lt(column: string, value: unknown): CountQuery;
+}
+
 async function countOf(
   table: string,
-  build: (q: any) => any,
+  build: (q: CountQuery) => CountQuery,
 ): Promise<Count> {
   try {
     //  The table name is a runtime value here — this helper exists to
     //  run the same shape of count against a dozen of them — so the
     //  generated per-table union cannot apply and the builder is
     //  reached through one cast, confined to this line.
-    const from = (supabase.from as unknown as (t: string) => any)(table);
+    const from = (supabase.from as unknown as (t: string) => {
+      select(cols: string, opts: { count: 'exact'; head: true }): CountQuery;
+    })(table);
     const { count, error } = await build(
       from.select('*', { count: 'exact', head: true }),
     );
