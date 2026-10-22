@@ -9,6 +9,7 @@ import QaDispositionPage from './components/Materials/QaDispositionPage';
 import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QcTestingPage from './components/Materials/QcTestingPage';
 import TraceabilityPage from './components/Materials/TraceabilityPage';
+import MyTasksPage from './components/Tasks/MyTasksPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -1209,12 +1210,17 @@ function AppContent() {
       //  them at the nearest existing page — looks finished, which is
       //  how a gap gets demonstrated, filed against, and discovered
       //  only after somebody has built on it.
+      //  Built, as a DERIVATION. There is no task register in the
+      //  schema, so a task is a record sitting in a state only this
+      //  role can move it out of — which is what DB-01's own example
+      //  rows are. The screen says so on itself, and there are no
+      //  invented due dates.
       case 'my-tasks':
-        return <ScreenNotBuilt
-          name="My tasks" designRef="DB-01"
-          whatItWillDo={'Everything waiting on you — signatures, investigations, '
-            + 'calibrations due and lots to disposition — in one list, ordered by what '
-            + 'blocks other people first.'} />;
+        return <MyTasksPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+          onOpen={(page) => setCurrentPage(page as PageId)}
+        />;
       //  Built. The upstream gate: a suspended or disqualified
       //  supplier is refused by a BEFORE INSERT trigger, not by the
       //  form, so the refusal holds for any caller.

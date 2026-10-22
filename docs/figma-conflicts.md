@@ -123,13 +123,15 @@ Manager's morning; nobody has written down a Procurement lead's.
 
 ## 7. Screens the rail names and no page answers
 
-DB-01 and DB-02 list five destinations with no page in this codebase:
-**My tasks**, **Goods receipt**, **QC testing**, **QA disposition**,
-**Traceability**. DB-02 adds **Issue to production** and **Dispatch**.
+DB-01 and DB-02 listed seven destinations with no page in this
+codebase. Five are now built — **Goods receipt**, **QC testing**,
+**QA disposition**, **Traceability** and **My tasks** — leaving
+DB-02's **Issue to production** and **Dispatch**.
 
-Each is routed to a panel that says the screen is not built and what it
-will do, rather than being omitted or pointed at the nearest existing
-page.
+Those two are still routed to a panel that says the screen is not built
+and what it will do, rather than being omitted or pointed at the
+nearest existing page. Neither has a frame of its own, and
+*Issue to production* has no column in PM-03 either (entry 3).
 
 ---
 
@@ -143,7 +145,25 @@ The list is derived: a record in a state only this role can move is a
 task for this role, which is what the design's own example rows are.
 The derivation has **no due date and no urgency ordering**, because
 nothing records them — the design shows "Today" and "Overdue 2 days"
-and the code shows a dash rather than inventing an age.
+and the code shows a dash rather than inventing an age. The My tasks
+screen says on itself that it is derived, because "my tasks" and
+"records waiting on my role" are different promises.
+
+**Two of the first derivation's three sources were dead**, and this is
+worth recording beside the design questions because it is how a
+derivation fails quietly:
+
+| Source | Why it never returned a row |
+|---|---|
+| `batch_records WHERE status = 'pending_qa'` | no such state — the batch lifecycle has `qc_in_progress` |
+| `deviations WHERE status <> 'closed'` | `deviations` has no status column; its state is in the lifecycle engine and `closed_at` is the mirror |
+
+The second errored on every call into a `logger.debug`. A QA Manager's
+dashboard showed material dispositions and never a batch release, for
+the life of the feature. The sources are now data in one module, and
+`src/tests/taskSources.test.ts` checks every state key and column they
+name against the migrations — proven to fail by reinstating
+`pending_qa`.
 
 *Decision needed:* whether a task register is being built, or whether
 derivation is the intended behaviour.

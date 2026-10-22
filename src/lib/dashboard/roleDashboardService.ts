@@ -22,6 +22,7 @@
 
 import { supabase } from '../supabase';
 import { logger } from '../logger';
+import { listTasksBy } from '../tasks/taskSources';
 
 /** null means "could not be read", which is not the same as zero. */
 export type Count = number | null;
@@ -220,65 +221,26 @@ export async function derivedTasks(
   companyId: string,
   canAct: (section: string) => boolean,
 ): Promise<DerivedTask[]> {
-  const out: DerivedTask[] = [];
-
-  const pull = async (
-    table: string,
-    build: (q: CountQuery) => CountQuery,
-    toTask: (row: Record<string, unknown>) => DerivedTask,
-  ) => {
-    try {
-      const from = (supabase.from as unknown as (t: string) => {
-        select(cols: string): CountQuery;
-      })(table);
-      const res = await build(from.select('*') as unknown as CountQuery) as unknown as {
-        data?: Record<string, unknown>[] | null; error?: { message: string } | null;
-      };
-      if (res.error || !res.data) return;
-      for (const row of res.data.slice(0, 5)) out.push(toTask(row));
-    } catch (e) {
-      logger.debug?.('[dashboard] task source unavailable', { table, error: String(e) });
-    }
-  };
-
-  if (canAct('qa_disposition')) {
-    await pull('material_lots',
-      (q) => q.eq('company_id', companyId).eq('status', 'quarantine'),
-      (r) => ({
-        id: `lot-${String(r.id)}`,
-        title: `Material disposition · lot ${String(r.lot_number ?? '')}`.trim(),
-        detail: 'Waiting for a QA decision',
-        state: 'pending',
-        due: '—',
-        page: 'materials',
-      }));
-  }
-
-  if (canAct('batch_release')) {
-    await pull('batch_records',
-      (q) => q.eq('company_id', companyId).eq('status', 'pending_qa'),
-      (r) => ({
-        id: `batch-${String(r.id)}`,
-        title: `Batch release · ${String(r.batch_number ?? '')}`.trim(),
-        detail: 'Awaiting QA review',
-        state: 'pending',
-        due: '—',
-        page: 'batch-release',
-      }));
-  }
-
-  if (canAct('deviation_capa')) {
-    await pull('deviations',
-      (q) => q.eq('company_id', companyId).neq('status', 'closed'),
-      (r) => ({
-        id: `dev-${String(r.id)}`,
-        title: `Deviation · ${String(r.reference ?? r.title ?? '')}`.trim(),
-        detail: 'Open investigation',
-        state: 'on_hold',
-        due: '—',
-        page: 'deviations',
-      }));
-  }
-
-  return out;
+  //  DELEGATED TO ONE LIST OF SOURCES (src/lib/tasks/taskSources.ts).
+  //
+  //  The version that stood here had three sources and two could never
+  //  return a row: batch_records WHERE status = 'pending_qa' names a
+  //  state the batch lifecycle does not have, and deviations has no
+  //  status column at all, so that query errored on every call into a
+  //  logger.debug. A QA Manager's dashboard showed material
+  //  dispositions and never a batch release, and nothing said so.
+  //
+  //  The sources are now data, with a test that checks every state key
+  //  and column they name against the migrations — see
+  //  src/tests/taskSources.test.ts, which fails if either dead filter
+  //  is reintroduced.
+  const { tasks } = await listTasksBy(companyId, (section) => canAct(section));
+  return tasks.map((t) => ({
+    id: t.id,
+    title: `${t.kind} · ${t.reference}`,
+    detail: t.detail,
+    state: 'pending',
+    due: t.due,
+    page: t.page,
+  }));
 }
