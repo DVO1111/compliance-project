@@ -1,6 +1,6 @@
 import { getPermissions } from '../../lib/permissions';
 import { getIndustryCategory } from '../../lib/regulatoryProfile';
-import { ReactNode, useEffect, useState, type CSSProperties } from 'react';
+import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
 import OfflineBadge from "../Common/OfflineBadge";
@@ -117,6 +117,16 @@ export type PageId =
   | 'materials'
   | 'in-process'
   | 'instruments'
+  //  DB-01 draws these five and no page answers to any of them yet.
+  //  They are real routes rather than dead labels: each opens a panel
+  //  that says the screen is not built, so the rail matches the design
+  //  without a tab that silently does nothing or opens something that
+  //  merely looks related.
+  | 'my-tasks'
+  | 'goods-receipt'
+  | 'qc-testing'
+  | 'qa-disposition'
+  | 'traceability'
   | 'batch-execution'
   | 'master-formulas'
   | 'training-simulation'
@@ -212,9 +222,11 @@ const COLLAPSED_NAV_KEY = 'cc_collapsed_nav_categories';
  */
 const CATEGORY_ORDER = [
   'Overview',
-  'Manufacturing & Quality',
+  'Materials',
+  'Quality',
+  'Production',
   'Regulatory',
-  'Governance',
+  'Traceability',
   'More',
 ];
 
@@ -253,41 +265,69 @@ const CATEGORY_ORDER = [
  * that it belongs under More. The earlier note said no page existed for
  * Materials; one does now, and the note outlived it.
  */
-const ONB08_NAV: Record<string, { group: string; label?: string; order: number }> = {
-  'dashboard':          { group: 'Overview', order: 1 },
+/**
+ * The design names its groups and the items in each. Anything the file
+ * does not name but that we still show inside those groups sorts after
+ * this mark, and the rail draws a rule above the first one.
+ */
+const BEYOND_DESIGN = 50;
 
-  //  In the order a batch actually moves: the materials arrive and are
-  //  released, the line and its instruments are fit to run, the batch
-  //  runs and is checked while it runs, then QA releases it. Anything
-  //  that went wrong on the way is a deviation.
-  'materials':          { group: 'Manufacturing & Quality', order: 1 },
-  'instruments':        { group: 'Manufacturing & Quality', order: 2 },
-  'master-formulas':    { group: 'Manufacturing & Quality', order: 3 },
-  'batch-execution':    { group: 'Manufacturing & Quality', order: 4 },
-  'in-process':         { group: 'Manufacturing & Quality', order: 5 },
-  'batch-release':      { group: 'Manufacturing & Quality', order: 6 },
-  'deviations':         { group: 'Manufacturing & Quality', order: 7 },
-  'capa-management':    { group: 'Manufacturing & Quality', order: 8 },
-  'change-control':     { group: 'Manufacturing & Quality', order: 9 },
-  'sop-library':        { group: 'Manufacturing & Quality', order: 10 },
-  'gmp-inspection':     { group: 'Manufacturing & Quality', order: 11 },
+/**
+ * DB-01's rail, item for item.
+ *
+ * THE DESIGN THIS MATCHES IS DB-01, NOT ONB-08. Those are two different
+ * frames with two different sidebars, and this file previously followed
+ * the onboarding one — four groups, Batch Records under Manufacturing &
+ * Quality. DB-01 is the dashboard a QA Manager actually lands on and it
+ * splits the work six ways: Overview, Materials, Quality, Production,
+ * Regulatory, Traceability.
+ *
+ * FIVE OF ITS FOURTEEN ENTRIES HAVE NO PAGE: My tasks, Goods receipt,
+ * QC testing, QA disposition and Traceability. They are listed anyway,
+ * because the rail is meant to read as the design draws it, and each
+ * opens a panel that says the screen is not built yet. A tab that opens
+ * nothing is a bug; a tab that opens an approximation is worse, because
+ * it looks finished.
+ *
+ * Declared before the object that reads it: below it, the reference is
+ * in the temporal dead zone and the module throws on import.
+ */
+const DB01_NAV: Record<string, { group: string; label?: string; order: number }> = {
+  'dashboard':              { group: 'Overview', order: 1 },
+  'my-tasks':               { group: 'Overview', label: 'My tasks', order: 2 },
 
-  //  The design's Regulatory group holds Products and Registrations &
-  //  Licences, and nothing else. Licence Vault is a real page but it is
-  //  not one of them, and two adjacent items both offering licences is
-  //  how people end up filing the same certificate twice — so it sits
-  //  under More with the rest until the design says otherwise.
-  'products':           { group: 'Regulatory', order: 1 },
-  'regulatory-affairs': { group: 'Regulatory', label: 'Registrations & Licences', order: 2 },
+  'supplier-qualification': { group: 'Materials', label: 'Suppliers', order: 1 },
+  'goods-receipt':          { group: 'Materials', label: 'Goods receipt', order: 2 },
+  //  The design says "Material lots", which is what the page lists.
+  'materials':              { group: 'Materials', label: 'Material lots', order: 3 },
 
-  'obligations':        { group: 'Governance', order: 1 },
-  'risk-register':      { group: 'Governance', order: 2 },
-  'policies':           { group: 'Governance', order: 3 },
-  //  W2·0. Who may act where, and the requests waiting on somebody.
-  //  Governance rather than Manufacturing & Quality because every
-  //  workspace has people and permissions whether or not it runs a
-  //  batch — which is also why its route carries no industry gate.
-  'access-control':     { group: 'Governance', label: 'Roles & Access', order: 4 },
+  'qc-testing':             { group: 'Quality', label: 'QC testing', order: 1 },
+  'qa-disposition':         { group: 'Quality', label: 'QA disposition', order: 2 },
+  'batch-release':          { group: 'Quality', label: 'Batch release', order: 3 },
+  //  ONE entry in the design. CAPA keeps its own page under More.
+  'deviations':             { group: 'Quality', label: 'Deviation / CAPA', order: 4 },
+  'coa':                    { group: 'Quality', label: 'CoA register', order: 5 },
+
+  //  A batch manufacturing record IS the batch being run and signed.
+  'batch-execution':        { group: 'Production', label: 'Batch records', order: 1 },
+
+  'products':               { group: 'Regulatory', order: 1 },
+  'license-vault':          { group: 'Regulatory', label: 'Licence Vault', order: 2 },
+
+  'traceability':           { group: 'Traceability', label: 'Traceability', order: 1 },
+  'audit-trail':            { group: 'Traceability', label: 'Audit trail', order: 2 },
+
+  //  BEYOND DB-01, AND MARKED AS SUCH. order >= BEYOND_DESIGN draws a
+  //  rule above the first of them, so each group reads as the design
+  //  draws it and anything added is visibly an addition.
+  //
+  //  These are built, working screens. They sit in the rail rather than
+  //  under More because More starts collapsed, and a screen nobody can
+  //  find reads as a screen that was never built.
+  'instruments':            { group: 'Production', order: BEYOND_DESIGN + 1 },
+  'in-process':             { group: 'Production', label: 'In-process checks', order: BEYOND_DESIGN + 2 },
+  'master-formulas':        { group: 'Production', order: BEYOND_DESIGN + 3 },
+  'access-control':         { group: 'Overview', label: 'Roles & Access', order: BEYOND_DESIGN + 1 },
 };
 
 /** Everything the design does not name starts collapsed. */
@@ -403,6 +443,17 @@ export default function MainLayout({
       //  W4·18's clearance conditions. Distinct from Batch Release,
       //  which is QA deciding on a finished batch — this is the stages
       //  being run.
+      //  DB-01 lists these five and no page answers to any of them. They
+      //  are listed so the rail reads as the design draws it; each opens
+      //  a panel that says so. Gated exactly like the manufacturing
+      //  screens beside them, so a finance workspace does not gain a tab
+      //  by way of a placeholder.
+      { id: 'my-tasks', label: 'My tasks', icon: ListChecks, category: 'Quality Operations', hidden: false },
+      { id: 'goods-receipt', label: 'Goods receipt', icon: Truck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'qc-testing', label: 'QC testing', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'qa-disposition', label: 'QA disposition', icon: ClipboardCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'traceability', label: 'Traceability', icon: Network, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+
       { id: 'materials', label: 'Materials', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'in-process', label: 'In-Process Checks', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
@@ -530,13 +581,13 @@ export default function MainLayout({
       { id: 'legal-partner-dashboard', label: 'Partner Console', icon: LayoutDashboard, category: 'External Partners', hidden: profile?.role !== 'legal_partner' },
     ];
 
-  //  ONB-08's grouping, applied AFTER the list above rather than written
+  //  DB-01's grouping, applied AFTER the list above rather than written
   //  into it. Every `hidden` test has already run, so an item the person
   //  may not see never reaches this and no permission is widened by it.
   //  An item the design does not name keeps its own label and moves to
   //  "More"; one it does name takes the design's group, order and words.
   const regrouped = navItems.map((item) => {
-    const placed = ONB08_NAV[item.id];
+    const placed = DB01_NAV[item.id];
     return placed
       ? { ...item, category: placed.group, label: placed.label ?? item.label, order: placed.order }
       : { ...item, category: item.category === 'Hidden' ? 'Hidden' : 'More', order: 99 };
@@ -648,29 +699,59 @@ export default function MainLayout({
             const holdsCurrentPage = items.some(item => item.id === currentPage);
             const isCollapsed = collapsedCategories.includes(category) && !holdsCurrentPage;
 
+            //  THE DESIGN'S FOUR GROUPS ARE NOT CARDS AND DO NOT COLLAPSE.
+            //  ONB-08 draws them flat on the navy rail: a green label, the
+            //  items under it, no panel, no border, no chevron. Only
+            //  "More" — which the design has no equivalent of, and which
+            //  holds every page the file does not name — keeps a toggle,
+            //  because it is the one group long enough to need one.
+            const isDesignGroup = category !== 'More';
+            const showItems = isDesignGroup || !isCollapsed;
+
             return (
-              <div key={category} className="dash-card border dash-border rounded-2xl p-2.5 shadow-sm space-y-1">
-                <button
-                  onClick={() => toggleCategory(category)}
-                  aria-expanded={!isCollapsed}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 rounded-lg hover:dash-surface-alt transition-colors group/cat"
-                >
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary text-left">{category}</h4>
-                  <span className="flex items-center gap-1.5 dash-text-tertiary">
-                    {isCollapsed && (
-                      <span className="text-[10px] font-semibold tabular-nums">{items.length}</span>
-                    )}
-                    {isCollapsed
-                      ? <ChevronRight size={14} strokeWidth={2} />
-                      : <ChevronDown size={14} strokeWidth={2} />}
-                  </span>
-                </button>
-                {!isCollapsed && items.map((item) => {
+              <div
+                key={category}
+                className={isDesignGroup
+                  ? 'space-y-1'
+                  : 'dash-card border dash-border rounded-2xl p-2.5 shadow-sm space-y-1'}
+              >
+                {isDesignGroup ? (
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 mb-1 text-left"
+                      style={{ color: 'var(--color-accent)' }}>
+                    {category}
+                  </h4>
+                ) : (
+                  <button
+                    onClick={() => toggleCategory(category)}
+                    aria-expanded={!isCollapsed}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 rounded-lg hover:dash-surface-alt transition-colors group/cat"
+                  >
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary text-left">{category}</h4>
+                    <span className="flex items-center gap-1.5 dash-text-tertiary">
+                      {isCollapsed && (
+                        <span className="text-[10px] font-semibold tabular-nums">{items.length}</span>
+                      )}
+                      {isCollapsed
+                        ? <ChevronRight size={14} strokeWidth={2} />
+                        : <ChevronDown size={14} strokeWidth={2} />}
+                    </span>
+                  </button>
+                )}
+                {showItems && items.map((item, i) => {
                   const Icon = item.icon;
                   const isActive = currentPage === item.id;
+                  //  The rule between what ONB-08 lists and what we added
+                  //  to its groups. Drawn above the FIRST item past the
+                  //  mark, and only when the design's own items precede
+                  //  it — a group that is entirely ours gets no rule.
+                  const opensExtras = item.order >= BEYOND_DESIGN
+                    && i > 0 && items[i - 1]!.order < BEYOND_DESIGN;
                   return (
+                    <Fragment key={item.id}>
+                    {opensExtras && (
+                      <div className="mx-3 my-1.5 border-t dash-border" aria-hidden />
+                    )}
                     <button
-                      key={item.id}
                       onClick={() => { onNavigate(item.id); setSidebarOpen(false); }}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all group ${isActive
                         ? 'text-white shadow-md'
@@ -683,8 +764,14 @@ export default function MainLayout({
                         strokeWidth={1.5}
                         className={`flex-shrink-0 ${isActive ? 'text-white' : 'dash-text-tertiary group-hover:text-[var(--color-text-primary)]'}`}
                       />
-                      <span className="font-medium text-sm tracking-wide truncate" title={item.label}>{item.label}</span>
+                      {/*  No tracking-wide, and 13px: at 14px with extra
+                           letter-spacing "Registrations & Licences" ran
+                           past the rail and truncated to
+                           "Registrations & Licenc…". The design fits it
+                           on one line, so the label does too. */}
+                      <span className="font-medium text-[13px] truncate" title={item.label}>{item.label}</span>
                     </button>
+                    </Fragment>
                   );
                 })}
               </div>
@@ -711,23 +798,29 @@ export default function MainLayout({
           </div>
         )}
 
-        {/* Settings & Logout Card */}
-        <div className="dash-card border dash-border rounded-2xl p-2 shrink-0 shadow-sm flex flex-col gap-1 mb-4">
+        {/*  ONB-08 ends the rail with a rule and two plain items, not a
+             card. */}
+        <div className="border-t dash-border mx-3 mb-2 shrink-0" aria-hidden />
+        <div className="p-2 shrink-0 flex flex-col gap-1 mb-4">
           <button
             onClick={() => { onNavigate('profile'); setTimeout(() => window.dispatchEvent(new CustomEvent('profile-tab', { detail: { tab: 'security' } })), 50); }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-[var(--color-text-secondary)] hover:dash-surface-alt hover:text-[var(--color-text-primary)] transition-colors group"
           >
             <KeyRound size={20} strokeWidth={1.5} className="flex-shrink-0 dash-text-tertiary group-hover:text-[var(--color-text-primary)]" />
-            {/* Opens the personal security tab — "Settings" collided with the
-                company-wide Company Settings page under Administration. */}
-            <span className="font-medium tracking-wide">My Account</span>
+            {/*  "Settings", as ONB-08 labels it. It opens the personal
+                 security tab. It was renamed to "My Account" to keep it
+                 apart from the company-wide page under Administration,
+                 but that page reads "Company Settings" in full, so the
+                 two were never actually ambiguous — and the design's
+                 word is the one people scan for. */}
+            <span className="font-medium text-[13px]">Settings</span>
           </button>
           <button
             onClick={() => signOut()}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] transition-colors group"
           >
             <LogOut size={20} strokeWidth={1.5} className="flex-shrink-0" />
-            <span className="font-medium tracking-wide">Log Out</span>
+            <span className="font-medium text-[13px]">Log Out</span>
           </button>
         </div>
       </div>
