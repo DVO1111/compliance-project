@@ -36,7 +36,7 @@
  * get what the design gives them, not a shared "quality staff" set.
  */
 
-import type { WorkRole } from './permissionRequests';
+import { ROLE_LABELS, type WorkRole } from './permissionRequests';
 
 /**
  * PM-03's eleven columns, in its order.
@@ -189,6 +189,10 @@ export const PAGE_SECTION: Record<string, PmSection> = {
   'capa-management':        'deviation_capa',
   'coa':                    'coa_register',
   'traceability':           'traceability',
+  //  PM-03's eleventh column finally has a page. Before 20261111000000
+  //  a Storekeeper held Act on Distribution with nowhere to exercise
+  //  it, and DB-02's drawn Dispatch item had nothing to open.
+  'dispatch':               'distribution',
 };
 
 /** Built pages with no column in PM-03. Named, not silently omitted. */
@@ -263,4 +267,27 @@ export function resolveWorkRole(profile: unknown): WorkRole | null {
     executive: 'management',
   };
   return ALIAS[key] ?? null;
+}
+
+
+/**
+ * The roles PM-03 gives `Act` on a section, named for a sentence.
+ *
+ * DERIVED, NOT TYPED OUT. A screen saying "reserved to the storekeeper
+ * and the QA officer" is a second copy of one cell of the grid, and
+ * the first version of the Dispatch page said exactly that while the
+ * grid gave Act to the storekeeper alone. A sentence built from the
+ * grid cannot disagree with it.
+ */
+export function actorsFor(section: PmSection): WorkRole[] {
+  return (Object.keys(GRID) as WorkRole[]).filter((r) => canAct(r, section));
+}
+
+/** "the storekeeper", "the storekeeper and the QA officer". */
+export function actorsSentence(section: PmSection): string {
+  const names = actorsFor(section).map((r) => ROLE_LABELS[r] ?? r);
+  if (names.length === 0) return 'nobody';
+  if (names.length === 1) return `the ${names[0]!.toLowerCase()}`;
+  const last = names.pop()!;
+  return `the ${names.map((n) => n.toLowerCase()).join(', the ')} and the ${last.toLowerCase()}`;
 }

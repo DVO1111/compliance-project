@@ -563,6 +563,174 @@ RESET ROLE;
 SELECT set_config('request.jwt.claims','', false);
 
 
+
+-- =====================================================================
+--  H — dispatch: PM-03's eleventh column, which had no page
+--
+--  `Distribution` is Act for the Storekeeper and the QA Officer and
+--  nothing answered to it, so a storekeeper held Act on a section they
+--  could not open. It is also the far end of a trace: nothing
+--  connected a released batch to a customer, so "who received this
+--  batch" had no answer (docs/figma-conflicts.md entry 17).
+--
+--  The rule the table exists around is that ONLY A RELEASED BATCH may
+--  be dispatched. The batch used here is NOT released — it was created
+--  directly by the fixture and never went through QC — so H1 is the
+--  gate, and H3 proves the refusal is about the batch rather than
+--  about the person by using the role PM-03 does permit.
+-- =====================================================================
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_qm'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $h$
+DECLARE
+  c_a uuid := current_setting('ar.c_a')::uuid;
+  b uuid := current_setting('ar.b')::uuid;
+  v_ok boolean := false; v_msg text;
+BEGIN
+  --  A QA Manager has VIEW on distribution, not Act.
+  PERFORM _ark('H','H1 the QA manager has view on distribution',
+    public.app_section_access(c_a,'distribution') = 'view',
+    public.app_section_access(c_a,'distribution'));
+
+  BEGIN
+    INSERT INTO public.batch_dispatches
+      (company_id,batch_id,destination,quantity,unit)
+    VALUES (c_a,b,'Lagos depot',10,'kg');
+    v_msg := 'A QA MANAGER RECORDED A DISPATCH';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'SECTION_FORBIDDEN%'; v_msg := SQLERRM;
+  END;
+  PERFORM _ark('H','H2 and cannot record a dispatch', v_ok, left(v_msg,140));
+END
+$h$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_sk'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $h2$
+DECLARE
+  c_a uuid := current_setting('ar.c_a')::uuid;
+  b uuid := current_setting('ar.b')::uuid;
+  v_ok boolean := false; v_msg text;
+BEGIN
+  PERFORM _ark('H','H3 the storekeeper does hold act on distribution',
+    public.app_section_access(c_a,'distribution') = 'act',
+    public.app_section_access(c_a,'distribution'));
+
+  --  THE GATE. The batch was never released.
+  BEGIN
+    INSERT INTO public.batch_dispatches
+      (company_id,batch_id,destination,quantity,unit)
+    VALUES (c_a,b,'Lagos depot',10,'kg');
+    v_msg := 'AN UNRELEASED BATCH WAS DISPATCHED';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'DISPATCH_NOT_RELEASED%'; v_msg := SQLERRM;
+  END;
+  PERFORM _ark('H','H4 but an unreleased batch cannot be dispatched', v_ok, left(v_msg,160));
+
+  PERFORM _ark('H','H5 and nothing was recorded',
+    NOT EXISTS (SELECT 1 FROM public.batch_dispatches WHERE batch_id = b));
+END
+$h2$;
+RESET ROLE;
+
+--  Release the batch through the service path, then dispatch it. The
+--  release itself is batch_release_gate_test's subject; here it is only
+--  the precondition, so it is done in a service context.
+DO $h3fx$
+DECLARE
+  c_a uuid := current_setting('ar.c_a')::uuid;
+  b uuid := current_setting('ar.b')::uuid;
+  v_sig uuid;
+BEGIN
+  INSERT INTO public.batch_qc_results
+    (batch_id,test_name,specification,result,pass,tested_by)
+  VALUES (b,'Assay','98-102 %','99.2 %',true,NULL);
+  PERFORM public.lifecycle_transition('batch_record', b, 'close_execution', c_a);
+  PERFORM public.lifecycle_transition('batch_record', b, 'submit_for_qc',   c_a);
+  PERFORM public.lifecycle_transition('batch_record', b, 'start_qc',        c_a);
+
+  --  RELEASING NEEDS PM-03'S SIGNATURE SINCE 20261107000000, and this
+  --  suite's own fixture met that rule the moment it was written —
+  --  which is the rule working. The signature is minted directly
+  --  because a password fixture is batch_release_gate_test's business,
+  --  not this one's; what matters here is that the batch is genuinely
+  --  released before section H dispatches it.
+  INSERT INTO public.electronic_signatures (
+    company_id, signer_id, signer_name, signer_email,
+    entity_type, entity_id, action, meaning, record_hash, signed_state
+  ) VALUES (
+    c_a, current_setting('ar.u_qm')::uuid, 'Ngozi Quality', 'qm@ar.test',
+    'batch_record', b, 'release', 'released',
+    public.electronic_signature_record_hash('batch_record', b, c_a), 'qc_in_progress'
+  ) RETURNING id INTO v_sig;
+
+  PERFORM public.lifecycle_transition('batch_record', b, 'release', c_a,
+    current_setting('ar.u_qm')::uuid, NULL, '{}'::jsonb, v_sig);
+END
+$h3fx$;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_sk'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $h3$
+DECLARE
+  c_a uuid := current_setting('ar.c_a')::uuid;
+  b uuid := current_setting('ar.b')::uuid;
+  v_ok boolean := false; v_msg text; v_id uuid;
+BEGIN
+  PERFORM _ark('H','H6 the batch is released',
+    (SELECT status FROM public.batch_records WHERE id=b) = 'released',
+    (SELECT status FROM public.batch_records WHERE id=b));
+
+  BEGIN
+    INSERT INTO public.batch_dispatches
+      (company_id,batch_id,destination,reference,quantity,unit)
+    VALUES (c_a,b,'Lagos depot','DN-00412',10,'kg')
+    RETURNING id INTO v_id;
+    v_ok := true; v_msg := 'recorded';
+  EXCEPTION WHEN OTHERS THEN v_msg := SQLERRM;
+  END;
+  PERFORM _ark('H','H7 and now the storekeeper can dispatch it', v_ok, left(v_msg,160));
+
+  --  THE TRACE FINALLY HAS A FAR END.
+  PERFORM _ark('H','H8 the trace names where it went',
+    EXISTS (SELECT 1 FROM public.batch_dispatch_trace(b)
+             WHERE destination = 'Lagos depot' AND reference = 'DN-00412'));
+
+  --  A dispatch is a fact, not a draft.
+  v_ok := false;
+  BEGIN
+    UPDATE public.batch_dispatches SET destination = 'Somewhere else' WHERE id = v_id;
+    v_msg := 'A DISPATCH WAS EDITED';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'DISPATCH_IMMUTABLE%'; v_msg := SQLERRM;
+  END;
+  PERFORM _ark('H','H9 a dispatch record cannot be edited', v_ok, left(v_msg,140));
+
+  v_ok := false;
+  BEGIN
+    DELETE FROM public.batch_dispatches WHERE id = v_id;
+    v_msg := 'A DISPATCH WAS DELETED';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'DISPATCH_IMMUTABLE%'; v_msg := SQLERRM;
+  END;
+  PERFORM _ark('H','H10 nor deleted', v_ok, left(v_msg,140));
+
+  --  And a restriction reaches this guard too.
+  PERFORM _ark('H','H11 a dispatch of zero is refused',
+    NOT EXISTS (SELECT 1 FROM public.batch_dispatches WHERE quantity <= 0));
+END
+$h3$;
+RESET ROLE;
+SELECT set_config('request.jwt.claims','', false);
+
+
 -- =====================================================================
 --  Results — COLUMN ORDER IS total, passed, failed.
 -- =====================================================================

@@ -25,6 +25,7 @@ import QcTestingPage from '../../src/components/Materials/QcTestingPage';
 import TraceabilityPage from '../../src/components/Materials/TraceabilityPage';
 import BatchExecutionPage from '../../src/components/Batch/BatchExecutionPage';
 import MyTasksPage from '../../src/components/Tasks/MyTasksPage';
+import DispatchPage from '../../src/components/Distribution/DispatchPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
@@ -46,6 +47,7 @@ const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
   'traceability': () => <TraceabilityPage companyId="c1" />,
   'batch-execution': (role) => <BatchExecutionPage companyId="c1" userId="u1" role={role} />,
   'my-tasks': (role) => <MyTasksPage companyId="c1" role={role} />,
+  'dispatch': (role) => <DispatchPage companyId="c1" userId="u1" role={role} />,
 };
 
 /** The same role-to-dashboard choice App.tsx makes. */

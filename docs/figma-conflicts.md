@@ -278,25 +278,29 @@ PM-03 holds them in **different columns with different holders**:
 | | QC testing | Batch release |
 |---|---|---|
 | QC Analyst | **Act** | no access |
-| QA Officer | View | **Act** |
+| QA Officer | View | View |
 | QA Manager | View | **Act** |
 
-and its step table narrows the release further still — "Release a
-batch — QA Manager — E-signature". Nobody holds Act on both columns.
+and its step table says the same thing again — "Release a batch — QA
+Manager — E-signature". Nobody holds Act on both columns.
 
 So completing QC **authorises nothing**. It removes an objection. The
 release is a separate decision by a separate person, and
 `20261107000000` additionally refuses a releaser who recorded the
 batch's own results.
 
-Note the section and the step disagree in scope: the QA Officer has Act
-on the batch-release *section* and is not a holder of the release
-*step*. The code follows the narrower rule and treats the section as
-covering everything else in that area — putting a batch on hold,
-reviewing it — while the release itself stays with the QA Manager.
+An earlier version of this entry said the section and the step
+disagreed, with the QA Officer holding Act on the batch-release
+section. **That was a transcription error in the SQL seed, not
+something in the design** — `roleAccess.ts` has View for that cell, and
+for `distribution` too, and the seed had Act for both. Two cells,
+transposed while re-typing the same grid into a second language.
 
-*Decision needed:* confirm that the QA Officer's Act on the section is
-meant to exclude the release itself.
+It was found by rendering the Dispatch page and noticing a QA Officer
+shown a read-only notice where the seeded grid said they could act.
+`src/tests/sectionGrid.test.ts` now parses the seed out of the
+migration and compares it with the TypeScript grid cell by cell, so
+the two cannot drift again.
 
 ---
 
@@ -505,3 +509,43 @@ Three choices worth recording:
 Who may set one comes from PM-03's existing step row — "Change roles
 and permissions — Compliance admin" — rather than a new rule invented
 for the table.
+
+---
+
+## 21. Distribution had a column and no page
+
+PM-03 tabulates eleven sections. Ten had a page. The eleventh,
+`Distribution`, is **Act for the Storekeeper** and View for five more
+roles — and nothing answered to it, so a storekeeper held Act on a
+section they could not open. DB-02's drawn rail carries a *Dispatch*
+item and the derived rail had nowhere to send it.
+
+That is the same gap as entry 17. Giving Distribution a record gives
+the trace its other end: `batch_dispatches` records which batch went
+where, in what quantity, on whose reference, and **only a released
+batch may be dispatched** — read from the lifecycle mirror, which is
+read-only to direct writes.
+
+It is deliberately small. There is no Figma frame for a dispatch
+screen, so it records the few facts a recall needs and nothing more. It
+is not an order model and should not become one without a design.
+
+*Decision needed:* whether dispatch needs customers, orders or part
+shipments as first-class records. Until somebody says so, a destination
+is free text and their reference is a string.
+
+---
+
+## 22. `Issue to production` is still not built, and should not be guessed
+
+DB-02 draws it. It has **no frame of its own and no column in PM-03**,
+so there is nothing to build it from: no screen says what it shows, and
+no cell says who may use it.
+
+Nothing is routed to it. Issuing material to production is partly
+covered by dispensing, which is a step inside running a batch and has
+both a design and a gate — so inventing a second, ungoverned route to
+the same place would be the worse of the two available mistakes.
+
+*Decision needed:* whether *Issue to production* is dispensing under
+another name, or a warehouse step before it.

@@ -234,6 +234,18 @@ isOneToOne: false
                     "company_id"?: string,"id"?: string,"lift_reason"?: string | null,"lifted_at"?: string | null,"lifted_by"?: string | null,"reason"?: string,"section_key"?: string,"set_at"?: string,"set_by"?: string | null,"to_level"?: string,"until"?: string | null,"user_id"?: string
                   }
                   Relationships: []
+                },"batch_dispatches": {
+                  Row: {
+                    "batch_id": string,"company_id": string,"created_at": string,"destination": string,"dispatched_at": string,"dispatched_by": string | null,"id": string,"notes": string | null,"quantity": number,"reference": string | null,"unit": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "batch_id": string,"company_id": string,"created_at"?: string,"destination": string,"dispatched_at"?: string,"dispatched_by"?: string | null,"id"?: string,"notes"?: string | null,"quantity": number,"reference"?: string | null,"unit": string
+                  }
+                  Update: {
+                    "batch_id"?: string,"company_id"?: string,"created_at"?: string,"destination"?: string,"dispatched_at"?: string,"dispatched_by"?: string | null,"id"?: string,"notes"?: string | null,"quantity"?: number,"reference"?: string | null,"unit"?: string
+                  }
+                  Relationships: []
                 },"access_grants": {
                   Row: {
                     "company_id": string,"granted_at": string,"granted_by": string,"id": string,"level": string,"request_id": string | null,"revoke_reason": string | null,"revoked_at": string | null,"revoked_by": string | null,"scope": string,"section_key": string,"user_id": string,"valid_until": string | null

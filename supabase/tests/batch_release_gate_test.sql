@@ -241,10 +241,15 @@ BEGIN
   PERFORM _brk('A','A1 QC testing is Act for the QC analyst alone',
     v = 'qc_analyst', v);
 
+  --  THE QA MANAGER ALONE. An earlier version of the seed gave the QA
+  --  Officer act here too, and this assertion was written to match it;
+  --  both were wrong. roleAccess.ts has View for that cell, and
+  --  src/tests/sectionGrid.test.ts now compares the two grids so the
+  --  transposition cannot come back.
   SELECT string_agg(role, ',' ORDER BY role) INTO v
     FROM public.section_permissions WHERE section = 'batch_release' AND access = 'act';
-  PERFORM _brk('A','A2 batch release is Act for the QA officer and QA manager',
-    v = 'qa_manager,qa_officer', v);
+  PERFORM _brk('A','A2 batch release is Act for the QA manager alone',
+    v = 'qa_manager', v);
 
   --  And the STEP is narrower than the section: PM-03's step table
   --  reserves "Release a batch" to the QA Manager, with a signature.
@@ -469,9 +474,11 @@ END
 $f$;
 RESET ROLE;
 
---  The QA Officer has Act on the batch_release SECTION and is still not
---  the holder of the release STEP. Two rules of PM-03's, and the
---  narrower one wins.
+--  The QA Officer is refused twice over: View on the batch_release
+--  section, and not a holder of the release step either. Both of
+--  PM-03's statements agree, which is worth asserting because an
+--  earlier seed had them disagreeing — through a transcription error
+--  in the seed, not through anything in the design.
 SELECT set_config('request.jwt.claims',
   json_build_object('sub', current_setting('br.u_qo'), 'role','authenticated')::text, false);
 SET ROLE authenticated;
@@ -486,8 +493,8 @@ DECLARE
   --  leaves the step guard as the only thing able to refuse.
   b uuid := current_setting('br.b_self')::uuid; v_msg text; v_ok boolean := false;
 BEGIN
-  PERFORM _brk('F','F4 the QA officer does hold Act on the section',
-    public.app_section_access(c_a,'batch_release') = 'act',
+  PERFORM _brk('F','F4 the QA officer has View on the batch release section',
+    public.app_section_access(c_a,'batch_release') = 'view',
     public.app_section_access(c_a,'batch_release'));
 
   BEGIN
@@ -497,7 +504,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     v_ok := SQLERRM LIKE 'STEP_FORBIDDEN%'; v_msg := SQLERRM;
   END;
-  PERFORM _brk('F','F5 and is still refused the release step', v_ok, left(v_msg,160));
+  PERFORM _brk('F','F5 and is refused the release step as well', v_ok, left(v_msg,160));
 END
 $f2$;
 RESET ROLE;

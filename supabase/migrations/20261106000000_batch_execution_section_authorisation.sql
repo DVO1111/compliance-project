@@ -75,14 +75,23 @@ CREATE POLICY section_permissions_select ON public.section_permissions
 --  PM-03 cell for cell. Written as one VALUES list per role, in the
 --  design's own column order, so a row reads left to right against the
 --  frame. Deliberately the same shape and the same order as the tuples
---  in src/lib/access/roleAccess.ts — a test compares the two.
+--  in src/lib/access/roleAccess.ts.
+--
+--  THE TWO ARE COMPARED BY A TEST, and they need to be: the qa_officer
+--  row here was wrong when it was first written. It gave that role Act
+--  on `batch_release` and on `distribution` where roleAccess.ts has
+--  View for both — a transposition made while re-typing the same grid
+--  into a second language, which is the exact failure the tuple layout
+--  was chosen to make visible and which happened anyway on the way
+--  across. src/tests/sectionGrid.test.ts now reads this array out of
+--  this file and compares it cell by cell.
 --
 --                        sup   gds   lot   qc    dis   bat   rel   dev   coa   trc   dst
 WITH grid(role, cells) AS (VALUES
   ('procurement',           ARRAY['act','view','view','none','none','none','none','view','view','view','none']),
   ('storekeeper',           ARRAY['view','act','act','none','none','view','none','none','none','view','act']),
   ('qc_analyst',            ARRAY['none','view','view','act','none','view','none','act','view','view','none']),
-  ('qa_officer',            ARRAY['view','view','view','view','act','view','act','act','act','view','act']),
+  ('qa_officer',            ARRAY['view','view','view','view','act','view','view','act','act','view','view']),
   ('qa_manager',            ARRAY['act','view','view','view','act','view','act','act','act','act','view']),
   ('production_supervisor', ARRAY['none','none','view','none','none','act','none','act','none','view','none']),
   ('compliance_admin',      ARRAY['view','view','view','view','view','view','view','view','view','view','view']),

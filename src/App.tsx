@@ -10,6 +10,7 @@ import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QcTestingPage from './components/Materials/QcTestingPage';
 import TraceabilityPage from './components/Materials/TraceabilityPage';
 import MyTasksPage from './components/Tasks/MyTasksPage';
+import DispatchPage from './components/Distribution/DispatchPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -36,6 +37,7 @@ import ConfigurationNeeded from './components/ConfigurationNeeded';
 import WorkspaceSetupNeeded from './components/WorkspaceSetupNeeded';
 import { isSupabaseConfigured } from './lib/supabase';
 import MainLayout from './components/Layout/MainLayout';
+import { isPageId } from './components/Layout/MainLayout';
 import type { PageId } from './components/Layout/MainLayout';
 import { useCalendarReminders } from './hooks/useCalendarReminders';
 import { useRoutePersistence } from './hooks/useRoutePersistence';
@@ -246,108 +248,24 @@ const FINISH_ROW_PAGES: Record<'invitations' | 'licence-details' | 'starter-reco
   'starter-records': 'obligations',
 };
 
-function isValidPageId(value: any): value is PageId {
-  return (
-    value === 'dashboard' ||
-    value === 'products' ||
-    value === 'upload' ||
-    value === 'archive' ||
-    value === 'regulations' ||
-    value === 'legal-review' ||
-    value === 'training-log' ||
-    value === 'company-settings' ||
-    value === 'company-members' ||
-    value === 'company-invites' ||
-    value === 'company-departments' ||
-    value === 'correction-editor' ||
-    value === 'profile' ||
-    value === 'license-vault' ||
-    value === 'integrations' ||
-    value === 'audit-trail' ||
-    value === 'role-management' ||
-    value === 'content-calendar' ||
-    value === 'team-chat' ||
-    value === 'drift-monitor' ||
-    value === 'consent-management' ||
-    value === 'content-blocks' ||
-    value === 'agency-portal' ||
-    value === 'compliance-reporting' ||
-    value === 'horizon-scanning' ||
-    value === 'channel-rules' ||
-    value === 'regulatory-library' ||
-    value === 'translation-compliance' ||
-    value === 'crisis-response' ||
-    value === 'programmatic-ad' ||
-    value === 'whistleblower' ||
-    value === 'predictive-risk' ||
-    value === 'social-listening' ||
-    value === 'website-monitoring' ||
-    value === 'vendor-scorecard' ||
-    value === 'capa-management' ||
-    value === 'training-simulation' ||
-    value === 'claim-extraction' ||
-    value === 'secret-vault' ||
-    value === 'legal-marketplace' ||
-    value === 'legal-partner-dashboard' ||
-    value === 'partner-verification' ||
-    value === 'policy-assistant' ||
-    value === 'grc-frameworks' ||
-    value === 'grc-controls' ||
-    value === 'grc-automation' ||
-    value === 'grc-dashboard' ||
-    value === 'policies' ||
-    value === 'policy-detail' ||
-    value === 'my-policies' ||
-    value === 'vendors' ||
-    value === 'vendor-detail' ||
-    value === 'audit-sessions' ||
-    value === 'audit-session-detail' ||
-    value === 'risk-register' ||
-    value === 'risk-detail' ||
-    value === 'command-center' ||
-    value === 'obligations' ||
-    value === 'obligation-detail' ||
-    value === 'identity-providers' ||
-    value === 'platform-jobs' ||
-    value === 'retention-policies' ||
-    value === 'legal-holds' ||
-    value === 'governance-timeline' ||
-    value === 'ai-reviews' ||
-    value === 'ai-prompts' ||
-    value === 'platform-webhooks' ||
-    value === 'platform-evidence-ingestions' ||
-    value === 'platform-ecosystem' ||
-    value === 'billing' ||
-    value === 'notifications' ||
-    value === 'batch-release' ||
-    value === 'change-control' ||
-    value === 'sop-library' ||
-    value === 'supplier-qualification' ||
-    value === 'gmp-inspection' ||
-    value === 'ai-insights' ||
-    value === 'framework-library' ||
-    value === 'control-monitoring' ||
-    value === 'regulatory-affairs' ||
-    value === 'son-compliance' ||
-    value === 'ctd-dossier' ||
-    value === 'contraband-rejection' ||
-    value === 'shipment-event-log' ||
-    value === 'cn-declarations' ||
-    value === 'compliance-alerting' ||
-    value === 'audit-prep' ||
-    value === 'coa' ||
-    // Previously missing, so a reload or deep link while on any of these
-    // silently dropped the user back to the dashboard.
-    value === 'ai-dashboard' ||
-    value === 'ai-assets' ||
-    value === 'ai-asset-detail' ||
-    value === 'ai-usage' ||
-    value === 'ai-incidents' ||
-    value === 'org-management' ||
-    value === 'enterprise-dashboard' ||
-    value === 'pharma-integrations'
-  );
-}
+/**
+ * Whether a stored or deep-linked value names a page that exists.
+ *
+ * DELEGATED TO MainLayout's PAGE_IDS, which a compile-time
+ * exhaustiveness check keeps in step with the PageId union. What stood
+ * here was a hand-written `a || b || c` chain, and its own comment
+ * recorded the last time it fell behind — "Previously missing, so a
+ * reload or deep link while on any of these silently dropped the user
+ * back to the dashboard".
+ *
+ * It had fallen behind again. Every page built during this repair was
+ * absent from it — my tasks, goods receipt, QC testing, QA
+ * disposition, traceability, batch execution, materials, instruments,
+ * in-process, master formulas, access control, deviations, CAPA — so
+ * reloading on any of them returned the person to the dashboard. A
+ * list that has to be remembered is a list that will be forgotten.
+ */
+const isValidPageId = isPageId;
 
 /**
  * What is shown while a page's chunk is in flight.
@@ -1253,6 +1171,17 @@ function AppContent() {
       //  what it cannot see.
       case 'traceability':
         return <TraceabilityPage companyId={profile?.company_id} />;
+
+      //  PM-03's eleventh column, which had no page: a Storekeeper held
+      //  Act on Distribution and nowhere to exercise it. It is also the
+      //  far end of a trace — before this, nothing connected a released
+      //  batch to a customer.
+      case 'dispatch':
+        return <DispatchPage
+          companyId={profile?.company_id}
+          userId={user?.id}
+          role={resolveWorkRole(profile)}
+        />;
 
       //  W4·15. Lots, and why a lot may or may not be released.
       case 'materials':
