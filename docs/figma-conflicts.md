@@ -147,3 +147,78 @@ and the code shows a dash rather than inventing an age.
 
 *Decision needed:* whether a task register is being built, or whether
 derivation is the intended behaviour.
+
+---
+
+## 9. Transitions the design does not rule on
+
+PM-03 names five steps and who may perform them. The lifecycle engine
+has **ten** entity types that reach a protected terminal state.
+
+| Entity | Reaches | Guarded? |
+|---|---|---|
+| `material_lot` | approved, rejected | yes — `material_disposition` |
+| `batch_record` | released, rejected | yes — `batch_release` |
+| `deviation` | closed | yes — `deviation_close` |
+| `supplier` | qualified, conditional | yes — `supplier_approve` |
+| `capa_record` | closed | yes — **derived** from `deviation_close` |
+| `change_control` | approved, closed, rejected | **no rule** |
+| `sop_document` | approved, effective | **no rule** |
+| `regulatory_submission` | approved, rejected | **no rule** |
+| `regulatory_licence` | active | **no rule** |
+| `licence_variation` | approved, rejected | **no rule** |
+| `product` | active | **no rule** |
+
+**CAPA is a derivation and is marked as one.** PM-03 has no "Close a
+CAPA" row, but it puts Deviation / CAPA in one column and reserves
+"Close a deviation" to the QA Officer and QA Manager. Closing the
+corrective action that came out of a deviation is the same decision by
+the same people in the same section.
+
+**The six with no rule are left unguarded on purpose.** PM-03
+tabulates none of those sections — no column, no step row. Guarding
+them would mean inventing a permission and enforcing it against
+working features.
+
+Failing closed is right where authorisation is *ambiguous*. It is
+wrong where the design simply does not reach, because the result is
+removing a feature on a rule nobody wrote.
+
+*Decision needed:* who approves a change control, makes an SOP
+effective, and approves a regulatory submission.
+
+---
+
+## 10. A guard can name a state that does not exist
+
+Not a Figma conflict — a hazard this repair walked into and is worth
+recording beside them.
+
+`20261104000000` guarded suppliers on the state `approved`. The
+supplier lifecycle has `pending · qualified · conditional · suspended
+· disqualified`. The trigger was installed, attached, and never fired,
+so a PM-03 step read as enforced while it was not. A test asserting
+the trigger *existed* passed throughout.
+
+`20261105000000` fixes the states and adds a `DO` block that refuses
+to apply if any guarded entity/state pair is absent from
+`lifecycle_definitions`. `F1` asserts the same thing in the suite.
+
+---
+
+## 11. Traceability sees only what was dispensed
+
+W5·13 (Genealogy trace) has a frame and was never implemented, and no
+genealogy function exists in the schema. The screen is built from the
+relationships that do exist: `dispensing_records` links a lot to a
+batch stage, and a stage to its batch.
+
+So a lot consumed any other way — reworked, sampled to destruction,
+transferred between sites — leaves no dispensing record and does not
+appear in a trace. **That limit is printed on the screen**, because
+somebody scoping a recall has to know the difference between "nothing
+used this lot" and "nothing we can see used this lot".
+
+*Decision needed:* whether other consumption paths must be traceable,
+which would need either a genealogy function or consumption records
+that do not exist yet.

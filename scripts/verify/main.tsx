@@ -22,6 +22,7 @@ import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
+import TraceabilityPage from '../../src/components/Materials/TraceabilityPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
@@ -40,6 +41,7 @@ const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
   'qa-disposition': (role) => <QaDispositionPage companyId="c1" role={role} />,
   'goods-receipt': (role) => <GoodsReceiptPage companyId="c1" role={role} />,
   'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} />,
+  'traceability': () => <TraceabilityPage companyId="c1" />,
 };
 
 /** The same role-to-dashboard choice App.tsx makes. */

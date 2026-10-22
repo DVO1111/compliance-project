@@ -8,6 +8,7 @@ import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
 import QaDispositionPage from './components/Materials/QaDispositionPage';
 import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QcTestingPage from './components/Materials/QcTestingPage';
+import TraceabilityPage from './components/Materials/TraceabilityPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -1240,11 +1241,12 @@ function AppContent() {
           companyId={profile?.company_id}
           role={resolveWorkRole(profile)}
         />;
+      //  Built from the relationships that exist — dispensing records
+      //  link a lot to a stage and a stage to its batch — because
+      //  W5·13's genealogy function was never written. The screen says
+      //  what it cannot see.
       case 'traceability':
-        return <ScreenNotBuilt
-          name="Traceability" designRef="DB-01"
-          whatItWillDo={'Forward and backward genealogy: which batches a lot went into, '
-            + 'and every material that went into a batch.'} />;
+        return <TraceabilityPage companyId={profile?.company_id} />;
 
       //  W4·15. Lots, and why a lot may or may not be released.
       case 'materials':
