@@ -263,6 +263,69 @@ BEGIN
 END $e$;
 
 
+-- ── F. Every guard fires on a state that EXISTS ─────────────────────
+--
+--  THE ASSERTION THAT WAS MISSING. 20261104000000 guarded suppliers on
+--  the state 'approved'; the supplier lifecycle has pending,
+--  qualified, conditional, suspended and disqualified, and no
+--  'approved'. The trigger was installed, attached, and never fired —
+--  so "Approve a supplier", a QA-Manager-only step, was unenforced by
+--  a migration that claimed to enforce it.
+--
+--  D1-D5 above did not catch it, because asserting that a trigger
+--  EXISTS says nothing about whether its condition can ever be true.
+--  This asserts the states themselves.
+
+DO $f$
+DECLARE
+  v_missing text;
+BEGIN
+  SELECT string_agg(x.entity_type || '.' || x.state_key, ', ')
+    INTO v_missing
+    FROM (VALUES
+            ('material_lot','approved'), ('material_lot','rejected'),
+            ('batch_record','released'), ('batch_record','rejected'),
+            ('deviation','closed'),      ('capa_record','closed'),
+            ('supplier','qualified'),    ('supplier','conditional')
+         ) AS x(entity_type, state_key)
+   WHERE NOT EXISTS (
+     SELECT 1 FROM public.lifecycle_definitions d
+       JOIN public.lifecycle_states s ON s.definition_id = d.id
+      WHERE d.entity_type = x.entity_type AND s.state_key = x.state_key);
+
+  PERFORM wra_assert('F1','every guarded state exists in its lifecycle',
+    v_missing IS NULL, coalesce('missing: ' || v_missing, 'all present'));
+END $f$;
+
+DO $f2$
+BEGIN
+  PERFORM wra_assert('F2','CAPA closure is guarded',
+    to_regprocedure('public.fn_capa_close_role()') IS NOT NULL);
+
+  PERFORM wra_assert('F3','five role guards are attached to the state table',
+    (SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+      WHERE c.relname = 'entity_current_state'
+        AND t.tgname IN ('trg_material_lots_disposition_role','trg_batch_release_role',
+                         'trg_supplier_approve_role','trg_deviation_close_role',
+                         'trg_capa_close_role')) = 5);
+
+  --  The other mutation path: a status column somebody could PATCH
+  --  directly through PostgREST, going round the lifecycle engine and
+  --  every guard hanging off it. Each workflow table either has no
+  --  status column or refuses a direct write to it.
+  PERFORM wra_assert('F4','material_lots.status cannot be written directly',
+    to_regprocedure('public.fn_material_lots_guard_status()') IS NOT NULL);
+  PERFORM wra_assert('F5','batch_records.status cannot be written directly',
+    to_regprocedure('public.fn_batch_records_guard_status()') IS NOT NULL);
+  PERFORM wra_assert('F6','suppliers.status cannot be written directly',
+    to_regprocedure('public.fn_suppliers_guard_status()') IS NOT NULL);
+  PERFORM wra_assert('F7','deviations has no status column to write',
+    NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='deviations'
+                   AND column_name='status'));
+END $f2$;
+
+
 -- ── Results ─────────────────────────────────────────────────────────
 SELECT id, name, verdict, detail FROM wra_results ORDER BY seq;
 
