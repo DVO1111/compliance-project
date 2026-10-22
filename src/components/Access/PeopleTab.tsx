@@ -33,6 +33,10 @@ import {
   type WorkRole, type AccessSection, type AccessLevel,
 } from '../../lib/access/permissionRequests';
 import { sectionAccess, resolveWorkRole, type PmSection } from '../../lib/access/roleAccess';
+import {
+  listRestrictions, liftRestriction, listAccessHistory,
+  type RestrictionRow, type HistoryRow,
+} from '../../lib/access/restrictionService';
 import { supabase } from '../../lib/supabase';
 import { logger } from '../../lib/logger';
 
@@ -66,6 +70,11 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
   const [ready, setReady] = useState<boolean | null>(null);
   const [open, setOpen] = useState<Member | null>(null);
   const [grants, setGrants] = useState<GrantRow[]>([]);
+  const [restrictionRows, setRestrictionRows] = useState<RestrictionRow[]>([]);
+  //  Null until read. An empty history and an unreadable one look the
+  //  same on a panel, and on an access screen that difference matters:
+  //  one of them says nothing has been changed for this person.
+  const [history, setHistory] = useState<{ rows: HistoryRow[]; ok: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -106,10 +115,19 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
 
   useEffect(() => { void loadMembers(); }, [loadMembers]);
 
+  const loadPerson = useCallback(async (userId: string) => {
+    const [g, r, h] = await Promise.all([
+      listActiveGrants(companyId, userId),
+      listRestrictions(companyId, userId),
+      listAccessHistory(companyId, userId),
+    ]);
+    setGrants(g); setRestrictionRows(r); setHistory(h);
+  }, [companyId]);
+
   useEffect(() => {
-    if (!open) { setGrants([]); return; }
-    void (async () => { setGrants(await listActiveGrants(companyId, open.userId)); })();
-  }, [open, companyId]);
+    if (!open) { setGrants([]); setRestrictionRows([]); setHistory(null); return; }
+    void loadPerson(open.userId);
+  }, [open, loadPerson]);
 
   const roleAccess: RoleAccessLine[] = useMemo(() => {
     if (!open) return [];
@@ -130,12 +148,55 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
     provenance: `Granted ${g.granted_at ? new Date(g.granted_at).toLocaleDateString('en-GB') : ''}`.trim(),
   })), [grants]);
 
+  const activeRestrictions: Restriction[] = useMemo(() => restrictionRows
+    .filter((r) => !r.liftedAt && (!r.until || r.until >= new Date().toISOString().slice(0, 10)))
+    .map((r) => ({
+      id: r.id,
+      section: r.sectionKey as AccessSection,
+      //  What it was before is the role's own cell — the restriction
+      //  table records what it was lowered TO, and the grid is where
+      //  the other end of that sentence lives.
+      from: (open ? sectionAccess(open.role, r.sectionKey as PmSection) : 'none') as AccessLevel,
+      to: r.toLevel as AccessLevel,
+      until: r.until,
+      reason: r.reason,
+      setBy: `Set ${new Date(r.setAt).toLocaleDateString('en-GB')}`,
+    })), [restrictionRows, open]);
+
+  const historyEntries: HistoryEntry[] = useMemo(() => {
+    if (history === null) return [];
+    if (!history.ok) {
+      //  SAID, NOT SWALLOWED. An empty list here would read as "nothing
+      //  has ever been changed for this person".
+      return [{
+        at: '—',
+        what: 'The history could not be read',
+        detail: 'This is not the same as there being none.',
+      }];
+    }
+    return history.rows.map((r) => ({
+      at: r.at === '—' ? r.at : new Date(r.at).toLocaleString('en-GB'),
+      what: r.what,
+      detail: r.detail,
+    }));
+  }, [history]);
+
   const revoke = useCallback(async (grantId: string, reason: string) => {
     const result = await revokeGrant(grantId, reason);
     if (!result.ok) { setNotice(result.message); return; }
     setNotice('Access revoked. The change is in the audit trail.');
-    if (open) setGrants(await listActiveGrants(companyId, open.userId));
-  }, [companyId, open]);
+    if (open) await loadPerson(open.userId);
+  }, [open, loadPerson]);
+
+  //  Lifting a restriction is its own decision with its own reason, and
+  //  the database refuses one without. The refusal arrives as a
+  //  sentence and is shown as written.
+  const lift = useCallback(async (restrictionId: string, reason: string) => {
+    const result = await liftRestriction(restrictionId, reason);
+    if (!result.ok) { setNotice(result.message); return; }
+    setNotice('Restriction lifted. Their role\u2019s access applies again.');
+    if (open) await loadPerson(open.userId);
+  }, [open, loadPerson]);
 
   if (ready === false) {
     return (
@@ -164,14 +225,18 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
           }}
           roleAccess={roleAccess}
           extraGrants={extraGrants}
-          //  Individual restrictions and the per-person history are
-          //  real features of PM-04 with no table behind them yet.
-          //  Passed empty rather than filled with examples: a revoke
-          //  history that invents entries is worse than one that is
-          //  honestly short.
-          restrictions={[] as Restriction[]}
-          history={[] as HistoryEntry[]}
-          onRestrict={canManage ? (id, c) => void revoke(id, c.reason) : () => {}}
+          //  REAL NOW. Restrictions have a table (20261110000000) and
+          //  the history is derived from access_grants and that table —
+          //  no second record of the same events, which is how two
+          //  records start disagreeing.
+          //
+          //  Only the ACTIVE restrictions are shown here, because this
+          //  list is what currently applies to the person; the lifted
+          //  and expired ones appear in the history below it, which is
+          //  where a reader goes to ask what changed and when.
+          restrictions={activeRestrictions}
+          history={historyEntries}
+          onRestrict={canManage ? (id, c) => void lift(id, c.reason) : () => {}}
           onRevoke={canManage ? (id, reason) => void revoke(id, reason) : () => {}}
         />
       </div>

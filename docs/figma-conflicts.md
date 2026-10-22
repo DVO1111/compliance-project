@@ -428,3 +428,80 @@ the system validated or establishes regulatory compliance.
 
 *Decision needed:* what to do about pre-sealing entries in existing
 workspaces, which can never become content-verifiable.
+
+---
+
+## 19. Two role models, one table further on
+
+The repair started from an application with two disconnected role
+models. `certificate_of_analysis` shows the same split in the database:
+
+- Its **update policy** was `app_has_company_role(company_id,
+  ARRAY['owner','admin'])` — the platform's legacy pair, unrelated to
+  PM-03's eight work roles. In a workspace using work roles, **nobody
+  could approve a certificate**: not the QA Officer, not the QA
+  Manager, not the compliance admin. The screen offered the button and
+  the row silently did not change.
+- Its **insert policy** was `app_is_company_member(company_id)`, so
+  **any member could issue one** — a statement about a batch made to
+  somebody outside the company.
+- The **screen** gated approval on `canManageGrcControls ||
+  canManageAuditWorkspace`, which is a third model again.
+
+`20261109000000` guards the table on PM-03's `CoA register` column
+(Act: QA Officer, QA Manager) and widens the update policy to admit
+that cell **beside** the owner/admin clause rather than instead of it —
+AND-ing two role models can only subtract, which is how Deviation /
+CAPA went missing for every role earlier in this work.
+
+**A refusal on this table is silent, and that is worth knowing.** Row
+level security filters the caller's row out before the trigger runs, so
+an excluded caller's `UPDATE` succeeds having changed nothing. Every
+other table guarded by this work raises `SECTION_FORBIDDEN`. A screen
+that reads "no error" as "it worked" will report an approval that did
+not happen. Issuing a certificate goes through the trigger instead and
+does raise.
+
+*Decision needed:* whether other tables still carry owner/admin
+policies that exclude the work roles. This one was found because a test
+asserted a refusal and got silence.
+
+---
+
+## 20. PM-04's restrictions now exist, and they bite
+
+PM-04 draws individual restrictions and a per-person history. Both were
+passed as empty arrays.
+
+The **history** needed no table: `access_grants` already carries
+`granted_at`, `granted_by`, `revoked_at`, `revoked_by`,
+`revoke_reason` and `valid_until`, which is the whole of what the panel
+prints. A second record of the same events is how two records start
+disagreeing.
+
+**Restrictions** needed one, and `20261110000000` adds it with the
+property that makes it a feature rather than a row: `app_section_access`
+applies an active restriction, so **every section guard honours it
+without knowing restrictions exist**. A guard written in
+`20261106000000` refuses a person restricted in `20261110000000`.
+
+The alternative — a table the access screen reads and nothing else does
+— produces a system that displays a restriction it is not applying,
+which is worse than having none, because somebody believes it.
+
+Three choices worth recording:
+
+- A restriction only ever **lowers** (`view` or `none`). Raising
+  somebody above their role is what a grant is, and grants have a
+  request, an approver and an expiry behind them. A restriction that
+  could raise access would be a second, unreviewed route to the same
+  place.
+- Where two overlap, the **strictest** applies, so adding a gentler one
+  cannot loosen an existing one.
+- A restriction is **lifted, not deleted**, and what it says cannot be
+  edited. The row is the record of a decision; its reversal is another
+  decision with its own reason.
+
+Who may set one comes from PM-03's existing step row — "Change roles
+and permissions — Compliance admin" — rather than a new rule invented
+for the table.

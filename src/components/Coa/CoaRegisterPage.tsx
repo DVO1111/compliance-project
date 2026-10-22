@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPermissions } from '../../lib/permissions';
+import { canAct, resolveWorkRole } from '../../lib/access/roleAccess';
 import { logger } from '../../lib/logger';
 import {
     listCoasForCompany,
@@ -59,7 +60,22 @@ export default function CoaRegisterPage() {
         industryType: (profile as any)?.industry_type,
     });
     // QA sign-off is the same authority that manages controls and evidence.
-    const canApprove = perms.canManageGrcControls || perms.canManageAuditWorkspace;
+    //  PM-03's `CoA register` column: Act for the QA Officer and QA
+    //  Manager. This used to read canManageGrcControls ||
+    //  canManageAuditWorkspace — the legacy GRC model, which has no
+    //  relationship to the grid, so the people who could approve a
+    //  certificate were whoever those two flags happened to cover.
+    //
+    //  The grid is the authority on role for a governed section, and
+    //  the database enforces the same cell (20261109000000), so a
+    //  caller going round this screen meets it anyway. The legacy
+    //  permission is kept as a floor for a member whose work role does
+    //  not resolve, because AND-ing two models can only subtract and
+    //  that is how Deviation / CAPA went missing for every role.
+    const workRole = resolveWorkRole(profile);
+    const canApprove = workRole
+        ? canAct(workRole, 'coa_register')
+        : (perms.canManageGrcControls || perms.canManageAuditWorkspace);
 
     const load = useCallback(async () => {
         if (!profile?.company_id) return;
