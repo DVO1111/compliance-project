@@ -4,7 +4,9 @@ import { appPath, appUrl, SIGN_IN_PATHS, WORKSPACE_PATH } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
-import { pageRefused } from './lib/access/roleAccess';
+import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
+import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
+import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
@@ -945,7 +947,38 @@ function AppContent() {
   //  DECLARED ONCE AND USED TWICE, because the switch below ends in
   //  `default: dashboard`, so an unmatched PageId lands on the same
   //  screen rather than somewhere else.
-  const dashboard = () => (
+  /**
+   * WHICH DASHBOARD THIS PERSON GETS.
+   *
+   * DB-01 and DB-02 are different screens, not one screen with the role
+   * printed on it: six tiles against seven, not a single metric shared,
+   * Release readiness where the other has "Sections you can't open",
+   * and a different sentence about what the role may not do. So the
+   * role chooses the body.
+   *
+   * A role the design draws no dashboard for keeps FirstRunDashboard.
+   * Handing a QC Analyst the QA Manager's screen because it is the
+   * closest one would be exactly the defect this repair is undoing —
+   * and the dashboards for the other six roles are not in the file.
+   */
+  const dashboard = () => {
+    const role = resolveWorkRole(profile);
+    const common = {
+      companyId: profile?.company_id,
+      personName: (profile as any)?.full_name as string | undefined,
+      siteName: (profile as any)?.site_name as string | undefined,
+      onNavigate: (page: string) => setCurrentPage(page as PageId),
+    };
+    if (role === 'qa_manager') {
+      return <QaManagerDashboard {...common} role={role} />;
+    }
+    if (role === 'storekeeper') {
+      return <StorekeeperDashboard {...common} role={role} userId={user?.id} />;
+    }
+    return firstRunDashboard();
+  };
+
+  const firstRunDashboard = () => (
     <FirstRunDashboard
       companyId={profile?.company_id}
       userId={user?.id}

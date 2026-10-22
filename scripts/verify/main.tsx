@@ -19,6 +19,9 @@ import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
 import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
+import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
+import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
+import { resolveWorkRole } from '../../src/lib/access/roleAccess';
 import '../../src/index.css';
 
 const PAGES: Record<string, () => JSX.Element> = {
@@ -27,6 +30,20 @@ const PAGES: Record<string, () => JSX.Element> = {
   'in-process': () => <InprocessPage companyId="c1" userId="u1" canDecide />,
   'instruments': () => <InstrumentsPage companyId="c1" />,
 };
+
+/** The same role-to-dashboard choice App.tsx makes. */
+function DashboardFor({ profile }: { profile: any }) {
+  const role = resolveWorkRole(profile);
+  const common = { companyId: 'c1', personName: 'Adaeze Okafor', siteName: 'Ikeja plant' };
+  if (role === 'qa_manager') return <QaManagerDashboard {...common} role={role} />;
+  if (role === 'storekeeper') {
+    return <StorekeeperDashboard {...common} role={role} userId="u1" personName="Tunde Bello" />;
+  }
+  return <p style={{ fontSize: 15, color: '#5b6472' }}>
+    No dashboard is drawn in the design for this role, so the first-run
+    dashboard is shown in the application.
+  </p>;
+}
 
 function Harness() {
   const initial = new URLSearchParams(location.search).get('page') ?? 'materials';
@@ -40,7 +57,9 @@ function Harness() {
   const refused = pageRefused(profile, String(page));
   return (
     <MainLayout currentPage={page} onNavigate={(p) => setPage(p)}>
-      {refused ? <AccessDenied /> : render ? render() : (
+      {refused ? <AccessDenied />
+        : page === 'dashboard' ? <DashboardFor profile={profile} />
+        : render ? render() : (
         <p style={{ font: '15px/1.5 system-ui', color: '#5b6472' }}>
           No verification fixture wired for “{String(page)}”. The sidebar is the
           subject here: this pane only renders the four pages built from the
