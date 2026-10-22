@@ -384,3 +384,47 @@ telephoned.
 *Decision needed:* whether batch distribution is being recorded. Until
 it is, "which customers received this batch" has no answer in this
 system.
+
+---
+
+## 18. The audit chain was computed by the browser
+
+Not a Figma conflict — a finding, recorded beside entry 10 and entry 14
+because it is the same shape: a control that looked like one.
+
+`audit_logs` refuses `UPDATE`, `DELETE` and `TRUNCATE`. That part was
+real and still holds. The **integrity chain** was not:
+
+- `integrity_hash`, `previous_hash` and `sequence_number` were all
+  written by the browser. `src/lib/auditService.ts` read the last row,
+  took its hash and its sequence number, and computed a SHA-256 over a
+  payload it assembled itself. The browser holds the anon key.
+- `verify_audit_chain` compared each row's `previous_hash` to the prior
+  row's `integrity_hash` and **recomputed nothing**, so an entry whose
+  hash never matched its own contents passed.
+- It also filtered on `integrity_hash IS NOT NULL`, so an entry written
+  with no hash was not merely unverified — it was **invisible to
+  verification**, and the chain closed over the gap.
+- The screen's "Hash-Chained" tile counted rows that carry a hash. A
+  tampered row carries one too.
+- `verifyChainIntegrity`'s own comment said it "re-computes every hash
+  in the chain". It did not, and neither did the RPC.
+
+`20261108000000` moves sealing into a `BEFORE INSERT` trigger that
+assigns the sequence number, links the previous hash and computes the
+integrity hash from the row's contents, discarding whatever the client
+sent. `verify_audit_chain` now recomputes the contents of every sealed
+entry, checks the linkage of every entry, and treats an unhashed entry
+as a finding. The banner says which of those it is reporting.
+
+**Entries written before sealing are not retro-hashed.** Recomputing a
+hash over content nobody can vouch for turns an unverifiable entry into
+one that looks verified. They are counted separately as `unsealed`, and
+the screen says their contents cannot be checked.
+
+Two things are still true and should not be overstated: a sealed chain
+is self-consistent, not proof of what happened; and none of this makes
+the system validated or establishes regulatory compliance.
+
+*Decision needed:* what to do about pre-sealing entries in existing
+workspaces, which can never become content-verifiable.

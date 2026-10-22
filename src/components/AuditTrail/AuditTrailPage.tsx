@@ -51,6 +51,23 @@ interface ChainStatus {
     verified: boolean;
     totalEntries: number;
     brokenAt: string | null; // UUID of the broken entry
+    /** What was wrong with it, in words from the database. */
+    brokenReason: string | null;
+    /** Entries the server sealed, whose CONTENTS were recomputed. */
+    sealed: number;
+    /**
+     * Entries carrying a hash a client computed, from before
+     * 20261108000000. Their linkage is checked; their contents cannot
+     * be, because nothing records which convention produced the hash.
+     */
+    unsealed: number;
+    /** Entries with no hash at all. Each one is a finding. */
+    unhashed: number;
+    /**
+     * False when the browser's fallback produced this verdict, which
+     * checks LINKAGE ONLY. Shown, because it is the weaker answer.
+     */
+    serverVerified: boolean;
     checkedAt: string;
     loading: boolean;
 }
@@ -101,6 +118,11 @@ export default function AuditTrailPage() {
         verified: false,
         totalEntries: 0,
         brokenAt: null,
+        brokenReason: null,
+        sealed: 0,
+        unsealed: 0,
+        unhashed: 0,
+        serverVerified: false,
         checkedAt: '',
         loading: false,
     });
@@ -197,6 +219,11 @@ export default function AuditTrailPage() {
                 verified: result.valid,
                 totalEntries: result.totalChecked,
                 brokenAt: result.brokenAt ?? null,
+                brokenReason: result.brokenReason ?? null,
+                sealed: result.sealed ?? 0,
+                unsealed: result.unsealed ?? 0,
+                unhashed: result.unhashed ?? 0,
+                serverVerified: result.serverVerified ?? false,
                 checkedAt: new Date().toISOString(),
                 loading: false,
             });
@@ -381,18 +408,49 @@ export default function AuditTrailPage() {
                                     className={`font-semibold text-sm ${chainStatus.verified ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
                                         }`}
                                 >
+                                    {/*  THE HEADLINE SAYS WHAT WAS CHECKED.
+                                        "No tampering detected" was the old
+                                        wording, and it was not supported:
+                                        verification compared links and never
+                                        recomputed a hash, so an entry whose
+                                        hash never matched its contents passed.
+                                        It does recompute now — for the entries
+                                        the server sealed, which is not all of
+                                        them. */}
                                     {chainStatus.verified
-                                        ? '✓ Chain Integrity Verified — No Tampering Detected'
-                                        : `⚠ Chain Integrity Broken at Sequence #${
+                                        ? (chainStatus.serverVerified
+                                            ? `✓ Chain intact — ${chainStatus.sealed} entr${chainStatus.sealed === 1 ? 'y' : 'ies'} re-checked against their contents`
+                                            : '✓ Links join up — checked in the browser, which cannot re-check contents')
+                                        : `⚠ Chain broken at sequence #${
                                             chainStatus.brokenAt
                                               ? (entries.find(e => e.id === chainStatus.brokenAt)?.sequence_number ?? chainStatus.brokenAt.slice(0, 8))
                                               : '?'
-                                          }`}
+                                          }${chainStatus.brokenReason ? ` — ${chainStatus.brokenReason}` : ''}`}
                                 </p>
                                 <p className="text-xs dash-text-secondary mt-0.5">
-                                    {chainStatus.totalEntries} entries verified • Last checked{' '}
+                                    {chainStatus.totalEntries} entries examined • Last checked{' '}
                                     {new Date(chainStatus.checkedAt).toLocaleString()}
                                 </p>
+
+                                {/*  THE LIMITS, BESIDE THE VERDICT. An entry
+                                    written before server-side sealing carries a
+                                    hash a client computed, so its contents
+                                    cannot be re-checked — saying "verified"
+                                    over the top of those is the overstatement
+                                    this banner used to make. */}
+                                {chainStatus.unsealed > 0 && (
+                                    <p className="text-xs dash-text-secondary mt-1">
+                                        {chainStatus.unsealed} entr{chainStatus.unsealed === 1 ? 'y was' : 'ies were'} written
+                                        before entries were sealed by the server. Their links were checked; their
+                                        contents cannot be.
+                                    </p>
+                                )}
+                                {chainStatus.unhashed > 0 && (
+                                    <p className="text-xs font-semibold text-[var(--color-danger)] mt-1">
+                                        {chainStatus.unhashed} entr{chainStatus.unhashed === 1 ? 'y has' : 'ies have'} no
+                                        integrity hash at all.
+                                    </p>
+                                )}
                             </div>
 
                             <div
@@ -420,9 +478,16 @@ export default function AuditTrailPage() {
                             icon={<Eye className="w-4 h-4 text-[var(--color-purple)]" />}
                             color="border-indigo-100"
                         />
+                        {/*  WAS "Hash-Chained", COUNTING ROWS THAT CARRY A
+                            HASH. A tampered row carries one too, so the
+                            number said nothing about integrity. This counts
+                            the entries the server sealed, whose contents the
+                            last verification actually recomputed — and reads
+                            zero until a verification has been run, rather
+                            than implying one. */}
                         <StatCard
-                            label="Hash-Chained"
-                            value={entries.filter((e) => e.integrity_hash).length}
+                            label="Contents Re-checked"
+                            value={chainStatus.checkedAt ? chainStatus.sealed : 0}
                             icon={<Link2 className="w-4 h-4 text-[var(--color-purple)]" />}
                             color="border-violet-100"
                         />
