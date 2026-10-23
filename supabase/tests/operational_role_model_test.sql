@@ -528,18 +528,16 @@ BEGIN
   --  migration at deploy time and again here, because a later seed
   --  could add a pair the matrix does not separate.
   SELECT string_agg(format('%s/%s', k.section_a, k.section_b), '; ') INTO v_bad
-    FROM public.batch_duty_conflicts k
-   WHERE EXISTS (SELECT 1 FROM public.section_permissions a
-                   JOIN public.section_permissions b ON b.role = a.role
-                  WHERE a.section = k.section_a AND a.access = 'act'
-                    AND b.section = k.section_b AND b.access = 'act');
+    FROM public.duty_conflicts k
+   WHERE k.scope = 'batch' AND k.enforced
+     AND NOT public.duty_pair_is_derived(k.section_a, k.section_b);
   PERFORM _ork('F','F1 every conflicting pair is one PM-03 already separated',
     v_bad IS NULL, coalesce(v_bad,'(all disjoint)'));
 
   --  (2) Every duty named is one the reader can actually report.
   SELECT string_agg(d, ', ') INTO v_bad FROM (
-    SELECT duty_a AS d FROM public.batch_duty_conflicts
-    UNION SELECT duty_b FROM public.batch_duty_conflicts) u
+    SELECT duty_a AS d FROM public.duty_conflicts WHERE scope = 'batch'
+    UNION SELECT duty_b FROM public.duty_conflicts WHERE scope = 'batch') u
    WHERE d NOT IN ('qc_testing','execution','release','dispatch');
   PERFORM _ork('F','F2 and is one batch_actor_duties reports',
     v_bad IS NULL, coalesce(v_bad,'(all known)'));
@@ -551,8 +549,9 @@ BEGIN
       current_setting('or.u_qm')::uuid) IS NULL);
 
   PERFORM _ork('F','F4 the qc/release pair keeps its original code',
-    (SELECT error_code FROM public.batch_duty_conflicts
-      WHERE duty_a='qc_testing' AND duty_b='release') = 'BATCH_RELEASE_SELF_TESTED');
+    (SELECT error_code FROM public.duty_conflicts
+      WHERE scope='batch' AND duty_a='qc_testing' AND duty_b='release')
+    = 'BATCH_RELEASE_SELF_TESTED');
 END $f$;
 
 DO $f2$

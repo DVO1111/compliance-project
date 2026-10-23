@@ -1008,3 +1008,117 @@ Three limits, asserted rather than hoped for:
 *Decision needed:* whether these three pairs are the right three. They
 are a table precisely so that a quality system which disagrees deletes
 a row rather than editing a function.
+
+---
+
+## 34. Appointing a QA Manager is itself a GMP act
+
+§31 required a reason, an assigner and a timestamp for every
+operational role. For the roles that carry a quality authority that is
+not enough: appointing a QA Manager is the act that decides who may
+release batches, and it should be signed by the same mechanism that
+signs the release.
+
+`20261121000000` requires an electronic signature to grant or revoke a
+**GMP-critical** role, minted by password through the existing
+throttled path. No second way to produce one, and no test-only path.
+
+**Which roles is derived, not chosen.** A role needs a signature when
+PM-03 names it in `step_permissions` — when it carries one of the five
+authorities the design singled out. That is `qa_manager`, `qa_officer`
+and `compliance_admin`. The migration fails if a seeded role holds no
+protected step, and raises a NOTICE the other way, because a role
+PM-03 trusts with a step that needs no signature to grant is a gap
+rather than a decision.
+
+The binding is to the **action**, not the record: at grant time there
+is no row yet, so the hash covers company, person, role, action and —
+for a revocation — the assignment. A signature for appointing one
+person cannot be replayed to appoint another, in another company, to
+another role, or in the other direction.
+
+*Decision needed:* whether `qc_analyst` and `production_supervisor`
+should join the list. The derivation permits it only if PM-03 gives
+them a protected step, which today it does not — so this needs the
+matrix changed, not just a seed.
+
+**No existing signing control was weakened.**
+`electronic_signatures.meaning` carries a fixed Part 11 vocabulary;
+signing a role action records `approved` — of the appointment, or of
+the withdrawal — rather than widening the vocabulary to add a word
+`action` already carries.
+
+---
+
+## 35. A workspace of one cannot verify itself
+
+§31 refused self-assignment outright, which means a workspace with one
+active member can never create its first operational role. Correct as
+a rule, unusable as a product.
+
+**The honest finding first: independent verification is impossible
+here, and the design does not pretend otherwise.** Independent
+verification means a second party who is not the person being
+appointed. In a workspace of one there is no second party — the owner
+controls the account, the password and the email. A code sent by email
+and a signature taken with the same password verify the same thing.
+
+So `operational_role_bootstrap` makes the act narrow, signed,
+declared, marked and reported instead:
+
+- **narrow** — refused the moment any other owner, admin or compliance
+  admin exists who could appoint properly, so it is unavailable
+  wherever the ordinary path works;
+- **signed** — always, even for a role that would not otherwise need
+  one;
+- **declared** — a written statement of what authority is held and
+  under what appointment;
+- **marked** — `provenance = 'bootstrap_self_declared'`, permanently,
+  and the immutability trigger refuses to edit it;
+- **reported** — listed with the finding *"Authority is declared, not
+  independently verified."*
+
+The compensating control is **external**: the registered QA person is
+named on the regulatory submission, and that document says whether the
+declaration is true. A reviewer compares the two.
+
+Ordinary self-assignment stays refused everywhere, including here.
+Bootstrap is a separate function with its own conditions, not an
+exception bolted onto the general path.
+
+---
+
+## 36. The rules themselves were writable
+
+Found by the security recheck, not by design, and the most serious
+thing in this register.
+
+```sql
+SET ROLE authenticated;
+DELETE FROM public.duty_conflicts;      -- DELETE 6
+DELETE FROM public.gmp_critical_roles;  -- DELETE 3
+```
+
+Both succeeded. Any signed-in user — and `anon`, which is every
+visitor — could have removed every separation-of-duties rule and every
+signature requirement. The gates would then have run on every write
+and found nothing to object to.
+
+The cause is the project-wide default grant: a new table in `public`
+arrives with full DML for `anon` and `authenticated`, and §33's and
+§34's migrations created their tables without RLS on the reasoning
+that the rows are not tenant data. They are not — they are something
+more sensitive, and the other rule tables had been protected by RLS
+without anyone having said so.
+
+`20261123000000` revokes the write privileges on all six rule tables
+and adds RLS with a read-only policy as a backstop. Its assertion
+**runs the DELETE** rather than checking that a privilege is absent,
+because "the privilege looks right" was true of four of those tables
+the whole time the other two were open.
+
+The lesson worth keeping: **a control is only as strong as the table
+it reads its rule from.** Moving a rule out of a function body and
+into a table — which §31 and §33 both did, for good reasons — moves
+the thing that has to be protected, and that move was not noticed
+until somebody went looking.

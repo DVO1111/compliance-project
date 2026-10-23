@@ -778,6 +778,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  //  ── A REVOKED ROLE AND AN OPEN TAB ──
+  //
+  //  The server stops authorising a revoked role on the next
+  //  statement: app_work_roles reads the table and the session carries
+  //  no copy of the answer. The CLIENT does carry a copy — the roles
+  //  loaded at sign-in sit in React state — so a tab left open since
+  //  before a revocation keeps drawing the navigation of a role its
+  //  owner no longer holds.
+  //
+  //  Nothing is exposed by that: every write is refused server-side
+  //  and the screen was never the control. What it produces is a
+  //  person clicking something that then fails, which is a bad way to
+  //  find out. So the roles are re-read when the tab comes back to
+  //  the foreground, which is when somebody returns to a screen they
+  //  left open.
+  //
+  //  It bounds the staleness; it does not eliminate it, and it is not
+  //  a security boundary. docs/operational-role-model.md says so.
+  useEffect(() => {
+    if (!user) return;
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') {
+        loadProfile(user.id).catch(() => { /* a failed refresh keeps the last answer */ });
+      }
+    };
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [user?.id]);
+
   return (
     <AuthContext.Provider
       value={{ user, profile, session, loading, activeBrandId, signUp, verifySignupCode, resendSignupCode, signIn, signOut, requestPasswordReset, completePasswordReset, isRecoveringPassword, isRecoveryCallback, isInitialPasswordSetup, refreshProfile, switchBrand, profileLoadError, provisionWorkspace }}

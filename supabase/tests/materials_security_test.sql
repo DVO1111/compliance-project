@@ -107,11 +107,19 @@ DECLARE
   c_b uuid := '00000000-0000-4000-e000-0000000000b1';
   u_qa uuid := '00000000-0000-4000-e000-0000000000a2';   -- designated QA
   u_no uuid := '00000000-0000-4000-e000-0000000000a3';   -- member, not QA
+  --  A THIRD PERSON, ADDED FOR 20261122000000. The analyst has to be
+  --  somebody who is neither the QA who dispositions (u_qa, whom F8
+  --  needs to succeed) nor the non-QA caller under test (u_no, whom F2
+  --  and F3 need refused for want of AUTHORITY rather than for having
+  --  tested the lot). With only two people in the company, whichever
+  --  one records the result makes one of those assertions test the
+  --  wrong refusal.
+  u_an uuid := '00000000-0000-4000-e000-0000000000a5';   -- analyst, tests only
   u_b  uuid := '00000000-0000-4000-e000-0000000000b2';
   m uuid; spec uuid; p1 uuid; l uuid; coa uuid; d1 uuid;
 BEGIN
   DELETE FROM public.electronic_signature_attempts
-   WHERE user_id IN (u_qa,u_no,u_b) OR company_id IN (c_a,c_b);
+   WHERE user_id IN (u_qa,u_no,u_an,u_b) OR company_id IN (c_a,c_b);
   DELETE FROM public.material_lot_rejections      WHERE company_id IN (c_a,c_b);
   DELETE FROM public.material_lot_release_records WHERE company_id IN (c_a,c_b);
   DELETE FROM public.material_test_results        WHERE company_id IN (c_a,c_b);
@@ -138,18 +146,20 @@ BEGIN
   INSERT INTO public.companies(id,name) VALUES (c_a,'Secure Pharma') ON CONFLICT (id) DO NOTHING;
   INSERT INTO public.companies(id,name) VALUES (c_b,'Outsider Ltd')  ON CONFLICT (id) DO NOTHING;
   INSERT INTO auth.users(id,email) VALUES
-    (u_qa,'qa@secure.test'),(u_no,'nobody@secure.test'),(u_b,'admin@outsider.test')
+    (u_qa,'qa@secure.test'),(u_no,'nobody@secure.test'),
+    (u_an,'analyst@secure.test'),(u_b,'admin@outsider.test')
   ON CONFLICT (id) DO NOTHING;
   UPDATE auth.users SET encrypted_password = extensions.crypt('CorrectHorse1!', extensions.gen_salt('bf'))
-   WHERE id IN (u_qa,u_no,u_b);
+   WHERE id IN (u_qa,u_no,u_an,u_b);
   INSERT INTO public.profiles(id,email,full_name,company_id,role) VALUES
     (u_qa,'qa@secure.test','Ngozi Eze',c_a,'admin'),
     (u_no,'nobody@secure.test','Tunde Bello',c_a,'compliance_officer'),
+    (u_an,'analyst@secure.test','Chidi Lab',c_a,'compliance_officer'),
     (u_b ,'admin@outsider.test','Far Away',c_b,'admin')
   ON CONFLICT (id) DO UPDATE SET company_id=excluded.company_id, role=excluded.role,
                                  full_name=excluded.full_name;
   INSERT INTO public.company_members(company_id,user_id,role) VALUES
-    (c_a,u_qa,'admin'),(c_a,u_no,'member'),(c_b,u_b,'admin')
+    (c_a,u_qa,'admin'),(c_a,u_no,'member'),(c_a,u_an,'member'),(c_b,u_b,'admin')
   ON CONFLICT DO NOTHING;
 
   INSERT INTO public.company_numbering_formats(company_id,scope,pattern,prefix,seq_width)
@@ -177,7 +187,12 @@ BEGIN
   --  Put the lot in under_test with its required test passing, so the
   --  only thing standing between a caller and 'approved' is authority.
   PERFORM public.lifecycle_transition('material_lot', l, 'sample', c_a, u_qa, 'Sampled');
-  PERFORM public.material_test_record_result(l,d1,99.2,NULL,u_qa);
+  --  RECORDED BY SOMEBODY ELSE, deliberately. This suite is about
+  --  authority: F8 asserts that the designated QA authority CAN
+  --  release, and with u_qa as the analyst 20261122000000 would refuse
+  --  them for having tested the lot — which would make F8 fail for a
+  --  reason that has nothing to do with what it tests.
+  PERFORM public.material_test_record_result(l,d1,99.2,NULL,u_an);
 
   INSERT INTO public.material_qa_authorities(company_id,user_id,designated_by)
   VALUES (c_a,u_qa,u_qa) ON CONFLICT DO NOTHING;

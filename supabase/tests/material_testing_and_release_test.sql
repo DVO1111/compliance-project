@@ -183,6 +183,11 @@ RETURNS uuid LANGUAGE plpgsql AS $$
 DECLARE
   c_a uuid := '00000000-0000-4000-d000-0000000000a1';
   u_qa uuid := '00000000-0000-4000-d000-0000000000a2';
+  --  THE ANALYST IS A THIRD PERSON. Not u_qa, who dispositions these
+  --  lots, and not u_co either: E5 needs u_co refused by the AUTHORITY
+  --  gate, and an analyst is refused by the duty gate first, which
+  --  would have made E5 pass for the wrong reason.
+  u_an uuid := '00000000-0000-4000-d000-0000000000a4';   -- analyst, tests only
   m uuid; l uuid; coa uuid; d_assay uuid; d_id uuid;
 BEGIN
   SELECT id INTO m FROM public.materials WHERE company_id=c_a AND code='LAC';
@@ -206,14 +211,19 @@ BEGIN
     JOIN public.material_specification_parameters p ON p.id=d.specification_parameter_id
    WHERE d.company_id=c_a AND p.parameter='Identification';
 
+  --  THE ANALYST IS NOT THE QA WHO DISPOSITIONS. It used to be u_qa
+  --  for both, which was convenience in the fixture rather than a
+  --  scenario, and 20261122000000 refuses it: whoever tested a lot may
+  --  not disposition it. Recording results as a third person makes
+  --  this suite model the separation the schema now enforces.
   IF p_tests = 'all_pass' THEN
-    PERFORM public.material_test_record_result(l,d_assay,99.1,NULL,u_qa,current_date,NULL,'HPLC-07');
-    PERFORM public.material_test_record_result(l,d_id,NULL,'Complies',u_qa,current_date,NULL,'FTIR-02');
+    PERFORM public.material_test_record_result(l,d_assay,99.1,NULL,u_an,current_date,NULL,'HPLC-07');
+    PERFORM public.material_test_record_result(l,d_id,NULL,'Complies',u_an,current_date,NULL,'FTIR-02');
   ELSIF p_tests = 'one_fail' THEN
-    PERFORM public.material_test_record_result(l,d_assay,91.0,NULL,u_qa,current_date,NULL,'HPLC-07');
-    PERFORM public.material_test_record_result(l,d_id,NULL,'Complies',u_qa,current_date,NULL,'FTIR-02');
+    PERFORM public.material_test_record_result(l,d_assay,91.0,NULL,u_an,current_date,NULL,'HPLC-07');
+    PERFORM public.material_test_record_result(l,d_id,NULL,'Complies',u_an,current_date,NULL,'FTIR-02');
   ELSIF p_tests = 'one_missing' THEN
-    PERFORM public.material_test_record_result(l,d_assay,99.1,NULL,u_qa,current_date,NULL,'HPLC-07');
+    PERFORM public.material_test_record_result(l,d_assay,99.1,NULL,u_an,current_date,NULL,'HPLC-07');
   END IF;
 
   RETURN l;

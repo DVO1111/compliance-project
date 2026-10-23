@@ -6582,10 +6582,30 @@ isOneToOne: false
 { Args: { "p_restriction_id": string,"p_reason": string }; Returns: undefined
                            },
 "operational_role_assign":
-{ Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_reason": string }; Returns: string
+{ Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_reason": string,"p_signature_id"?: string }; Returns: string
                            },
 "operational_role_revoke":
-{ Args: { "p_assignment_id": string,"p_reason": string }; Returns: undefined
+{ Args: { "p_assignment_id": string,"p_reason": string,"p_signature_id"?: string }; Returns: undefined
+                           },
+"operational_role_sign":
+{ Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_action": string,"p_password": string,"p_assignment_id"?: string,"p_reason"?: string }; Returns: Json
+                           },
+"operational_role_bootstrap":
+{ Args: { "p_company_id": string,"p_role": string,"p_declaration": string,"p_signature_id": string }; Returns: string
+                           },
+"operational_role_unsigned_grants":
+{ Args: { "p_company_id": string }; Returns: {
+              "assignment_id": string,"user_id": string,"role": string,"provenance": string,"reason": string,"declaration": string,"assigned_at": string,"still_live": boolean,"finding": string
+            }[]
+                           },
+"operational_role_needs_signature":
+{ Args: { "p_role": string }; Returns: boolean
+                           },
+"material_lot_actor_duties":
+{ Args: { "p_lot_id": string,"p_user_id": string }; Returns: string[]
+                           },
+"duty_conflict":
+{ Args: { "p_scope": string,"p_entity_id": string,"p_duty": string,"p_user_id"?: string }; Returns: string
                            },
 "app_work_roles":
 { Args: { "p_company_id": string,"p_user_id"?: string }; Returns: string[]

@@ -223,6 +223,9 @@ assert their own prerequisites rather than trusting the filename sort:
 | 13 | `20261118000000` governing specification preserved | `product_specifications` (8); `batch_records` |
 | 14 | `20261119000000` operational role assignments | the grid; `access_restrictions`; `app_is_company_member`; `product_specification_approver_error` (12) |
 | 15 | `20261120000000` separation of duties per batch | 14; `batch_qc_results`, `batch_stages`, `batch_dispatches` |
+| 16 | `20261121000000` role assignment signatures | 14; `step_permissions`, `electronic_signatures`, `verify_user_password` |
+| 17 | `20261122000000` material separation of duties | 15; renames `batch_duty_conflicts` to `duty_conflicts` |
+| 18 | `20261123000000` rule tables are not writable | 16 and 17 — it locks down tables those two create |
 
 Each is idempotent: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT
 EXISTS`, `CREATE OR REPLACE FUNCTION`, `DROP TRIGGER IF EXISTS` before
@@ -371,7 +374,28 @@ that stops deployment being useful at all.
    rewrite it undetectably with enough effort. Acceptable or not is a
    decision, not a bug.
 
-7. **Separation of duties now depends on the per-batch check, not on
+7. **Four conflict pairs are proposed and unenforced, awaiting your
+   decision.** One material pair is enforced (whoever tested a lot may
+   not disposition it — the batch rule applied where the same facts
+   hold). Three more are recorded in `duty_conflicts` with
+   `enforced = false`: one is permissible under PM-03 but required by
+   no product decision, and two are **not derivable** — PM-03 gives
+   both columns to the same roles, so enforcing them would contradict
+   the matrix rather than read it. The site's own written procedures
+   are not in the repository or the database, so these could not be
+   validated against them. Six questions in
+   [`docs/separation-of-duties.md`](separation-of-duties.md) §5.
+
+8. **Anyone who can run a migration can appoint a QA Manager.** A
+   service context has no password and cannot sign, so it is exempt
+   from the authority and signature checks. Not closable from inside
+   the database — a migration is what defines what the database
+   enforces. What is closable is invisibility: every such grant is
+   stamped `provenance = 'service'` and listed by
+   `operational_role_unsigned_grants()`. **Treat a non-empty result on
+   production as a finding to explain, not a list to skim.**
+
+9. **Separation of duties now depends on the per-batch check, not on
    PM-03's arithmetic.** One person may hold several operational
    roles, so "nobody holds both columns" is no longer true by
    construction. `20261120000000` enforces it against the batch
