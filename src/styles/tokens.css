@@ -58,6 +58,23 @@
      Weights in use: 400 Regular, 500 Medium, 600 SemiBold. */
   --font-sans: 'Mulish Variable', 'Mulish', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
+  /* Headings on the dashboard, from the Criateur Dashboard and Admin
+     designs. Already self-hosted via @fontsource-variable/bricolage-
+     grotesque and already the landing page's --lp-font-display, so this
+     introduces no new font — it gives the product a name for the one the
+     site was already using. Body copy stays Mulish; only display-sized
+     headings take it, which is what the designs do.
+
+     It is a variable font with a width axis, so font-stretch below 100%
+     condenses it rather than synthesising a fake narrow face. The designs
+     set 92% for the page title and 94% for section headings. */
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', var(--font-sans);
+
+  /* The designs set every label, count, timestamp and hash in IBM Plex
+     Mono — the regulator pill, the KPI captions, the audit-trail entries.
+     Also already bundled, and already --lp-font-mono on the landing. */
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
   /* ── Type scale ───────────────────────────────────────────────
      size / line-height, letter-spacing 0 throughout.
      Headings 01–02 are for component and layout headings; 03–07 are
