@@ -13,6 +13,12 @@
 --
 --  Re-run it immediately before deploying. Every figure here is a
 --  statement about a moment.
+--
+--  Sections 1 and 2 read supabase_migrations.schema_migrations, which
+--  the Supabase CLI maintains. A local database built straight from
+--  the migration files has no such schema and those two sections will
+--  error there. That is expected and is not a finding; every other
+--  section runs on both.
 -- =====================================================================
 
 \echo '=== 1. Identity and migration position ==='
@@ -36,10 +42,13 @@ SELECT e.version,
   LEFT JOIN supabase_migrations.schema_migrations m ON m.version = e.version
  ORDER BY e.version;
 
-\echo '=== 3. THE WORK-ROLE BLOCKER ==='
-\echo '-- PM-03 enforcement reads company_members.role. If that column is an'
-\echo '-- enum without the eight work roles, every guard ABSTAINS and the'
-\echo '-- whole layer is inert until roles can be assigned.'
+\echo '=== 3. OPERATIONAL ROLES ==='
+\echo '-- Since 20261119000000 PM-03 reads operational_role_assignments,'
+\echo '-- NOT company_members.role. The membership column below is shown'
+\echo '-- because it must stay untouched, and because a value of one of'
+\echo '-- the eight would be bridged -- which no company_role can be.'
+\echo '-- Until assignments exist, every guard ABSTAINS and the layer is'
+\echo '-- inert. members_with_a_pm03_role should read 0 here, always.'
 SELECT
   (SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a
     WHERE a.attrelid='public.company_members'::regclass
@@ -59,6 +68,41 @@ SELECT role::text AS member_role, count(*) AS members
 
 SELECT coalesce(job_title,'(none recorded)') AS job_title, count(*) AS people
   FROM public.company_members GROUP BY 1 ORDER BY 2 DESC;
+
+\echo '-- The register that now decides. Before deployment this table does'
+\echo '-- not exist; after it, it is empty until somebody appoints people.'
+\echo '-- Wrapped in EXECUTE so the script runs on either side of the'
+\echo '-- deployment rather than failing to parse on one of them.'
+DO $$
+DECLARE v record;
+BEGIN
+  IF to_regclass('public.operational_role_assignments') IS NULL THEN
+    RAISE NOTICE 'operational_role_assignments: NOT DEPLOYED YET';
+    RETURN;
+  END IF;
+
+  EXECUTE $q$
+    SELECT (SELECT count(*) FROM public.operational_role_assignments
+             WHERE revoked_at IS NULL)                              AS live_assignments,
+           (SELECT count(DISTINCT user_id) FROM public.operational_role_assignments
+             WHERE revoked_at IS NULL)                              AS people_with_a_role,
+           (SELECT count(*) FROM public.operational_role_assignments
+             WHERE revoked_at IS NULL AND role = 'qa_manager')      AS qa_managers,
+           (SELECT legacy_membership_bridge
+              FROM public.work_role_resolution)                     AS bridge_on
+  $q$ INTO v;
+
+  RAISE NOTICE 'live assignments: %, people with a role: %, QA Managers: %, bridge on: %',
+    v.live_assignments, v.people_with_a_role, v.qa_managers, v.bridge_on;
+END $$;
+
+\echo '-- Companies with only one active member cannot appoint anybody,'
+\echo '-- because nobody may assign themselves an operational role.'
+SELECT company_id, count(*) AS active_members
+  FROM public.company_members
+ WHERE coalesce(status::text,'active') = 'active'
+ GROUP BY 1 HAVING count(*) < 2
+ ORDER BY 2;
 
 \echo '=== 4. Specification readiness ==='
 \echo '-- A batch cannot be released without an approved specification in'

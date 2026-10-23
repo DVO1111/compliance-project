@@ -221,6 +221,8 @@ assert their own prerequisites rather than trusting the filename sort:
 | 11 | `20261116000000` audit immutability restored | `audit_logs`; must come **after** 10, which disables the update trigger for one statement |
 | 12 | `20261117000000` specification approval by QA Manager | `product_specifications` (8); `electronic_signatures` |
 | 13 | `20261118000000` governing specification preserved | `product_specifications` (8); `batch_records` |
+| 14 | `20261119000000` operational role assignments | the grid; `access_restrictions`; `app_is_company_member`; `product_specification_approver_error` (12) |
+| 15 | `20261120000000` separation of duties per batch | 14; `batch_qc_results`, `batch_stages`, `batch_dispatches` |
 
 Each is idempotent: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT
 EXISTS`, `CREATE OR REPLACE FUNCTION`, `DROP TRIGGER IF EXISTS` before
@@ -240,6 +242,8 @@ the set is safe and was done repeatedly during development.
 | `product_specifications.approval_signature_id`, `approved_by_role` (`20261117000000`) | added NULL on an empty table |
 | `batch_records.governing_specification_id`, `governing_specification_stamped_at` (`20261118000000`) | added NULL. **Existing released batches are left unstamped** — the stamp is applied at release, and back-stamping a batch released before the control existed would assert a review that never happened. `batch_governing_specification` falls back to the effective-date lookup for them. |
 | `batch_specification_reviews` | new table, empty |
+| `operational_role_assignments`, `work_role_resolution`, `batch_duty_conflicts` (`20261119000000`, `20261120000000`) | new tables. The first deploys **empty and is not back-filled** — there is nobody to back-fill from, and inventing an assignment would assert an authority nobody granted. The other two carry a config row and three derived conflict pairs. |
+| `company_members` | **nothing.** Not a column, not a constraint, not a row, and the enum is not extended. |
 
 **The one behaviour change that affects live data is the release
 gate.** After `20261113000000`, a batch cannot be released unless an
@@ -264,6 +268,8 @@ afterwards**. See *Release blockers*.
 | `20261116000000` | dropping the triggers returns the database to the state production is in today, i.e. audit entries become mutable again. Reversible, and a regression. |
 | `20261117000000` | dropping the two columns loses the recorded approver role and the signature link. The 2-arg `product_specification_approve` overload was **dropped**, so a rollback must restore it from git or approval stops working. |
 | `20261118000000` | dropping `governing_specification_id` loses the stamp on any batch released after deployment — the one rollback in this branch that **does** lose data created after it. `batch_specification_reviews` likewise. Both should be exported before any such rollback. |
+| `20261120000000` | restore the two trigger function bodies from git and drop `batch_duty_conflicts`. Reversible. Roll this back **before** 14, not after. |
+| `20261119000000` | restore five function bodies from git. Dropping `operational_role_assignments` **destroys every assignment and revocation** — the record of who held which authority and when, with no equivalent elsewhere, since the membership column cannot hold these roles. Export it first. A rollback also returns every member to holding no operational role, i.e. the inert state the live project is in today. |
 
 No migration drops a column or a table, so **no rollback loses data
 that existed before this branch**. Rolling back `20261118000000` does
@@ -326,20 +332,20 @@ with `scripts/ci/live-readiness-report.sql`.
 Re-ordered 2026-10-23 after live inspection. 1 is new and is the one
 that stops deployment being useful at all.
 
-1. **No PM-03 work role can be assigned on the live project.**
-   `company_members.role` is enum `company_role` =
-   `owner, admin, legal, marketing, viewer`. None of `procurement`,
-   `storekeeper`, `qc_analyst`, `qa_officer`, `qa_manager`,
-   `production_supervisor`, `compliance_admin`, `management` exists in
-   it, and all 21 members are `owner`. Deploy as-is and the entire
-   PM-03 layer is **inert**: every guard abstains for an untabulated
-   role, so nothing is refused and nothing is granted by it — the
-   controls would be installed and silent. The enum must be extended
-   and roles assigned before the gates mean anything. **This needs a
-   migration that does not yet exist**, because writing it requires
-   deciding what happens to the five existing values and to the 21
-   people holding `owner`; that is a question for you, not a default
-   to pick. See [`docs/live-readiness.md`](live-readiness.md) §2.
+1. **No operational role has been assigned on the live project.**
+   *Downgraded 2026-10-23: the mechanism now exists.*
+   `company_members.role` is still enum `company_role` =
+   `owner, admin, legal, marketing, viewer`, untouched and not
+   extended. `20261119000000` adds a separate, company-scoped
+   `operational_role_assignments` register for PM-03's eight roles,
+   so the enum no longer blocks anything.
+   **What remains is data, not schema**: the table deploys empty and
+   nothing is back-filled, because inventing an assignment would
+   assert an authority nobody granted. Until a workspace owner or
+   admin appoints real people, every guard still abstains and the
+   layer is still inert — including specification approval, which
+   nobody can perform until somebody holds `qa_manager`.
+   See [`docs/operational-role-model.md`](operational-role-model.md).
 2. **Audit immutability is absent on production** despite its
    migration being recorded as applied, so audit entries are mutable
    there today. `20261116000000` restores it.
@@ -364,6 +370,16 @@ that stops deployment being useful at all.
 6. **The audit chain has no external anchor**, so a database owner can
    rewrite it undetectably with enough effort. Acceptable or not is a
    decision, not a bug.
+
+7. **Separation of duties now depends on the per-batch check, not on
+   PM-03's arithmetic.** One person may hold several operational
+   roles, so "nobody holds both columns" is no longer true by
+   construction. `20261120000000` enforces it against the batch
+   instead: whoever recorded its QC results or executed it may not
+   release it, and whoever released it may not dispatch it. The three
+   pairs are derived from PM-03 and asserted to be, but **which pairs
+   are right is a quality-system question** and the table is where
+   that answer lives.
 
 ### Resolved since the last revision
 

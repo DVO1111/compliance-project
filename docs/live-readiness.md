@@ -51,6 +51,20 @@ present in the account, and neither was queried.**
 
 ## 2. The blocker: no work role can be assigned
 
+> **Resolved in schema, 2026-10-23.** The analysis below stands as the
+> finding. The answer is *not* to extend the enum:
+> `20261119000000` leaves `company_members.role` untouched and adds a
+> separate `operational_role_assignments` register, since the two
+> columns answer different questions. See
+> [`docs/operational-role-model.md`](operational-role-model.md).
+>
+> **What remains is data.** The table deploys empty and nothing is
+> back-filled, so until somebody appoints real people, every guard
+> still abstains and the enforcement layer is still inert. The three
+> questions at the foot of this section are no longer blocking —
+> questions 1 and 3 are answered by the model, and question 2 becomes
+> "who holds which operational role", which is step 7 of §7.
+
 This is the finding that matters most and it was not anticipated.
 
 `company_members.role` on the live project is **enum `company_role`**,
@@ -207,19 +221,27 @@ and no hash will be computed for them.
 
 Nothing in this list may be reordered.
 
+Revised 2026-10-23, now that the role model exists. **No enum
+migration is needed and none is proposed.**
+
 | # | Step | Why here |
 |---|---|---|
 | 0 | Re-run `scripts/ci/live-readiness-report.sql` | Every figure above is a snapshot |
-| 1 | **Decide §2** and write the enum migration | Everything after this is inert without it |
-| 2 | Apply the enum extension, alone, and commit | `ALTER TYPE … ADD VALUE` cannot be used in the same transaction |
-| 3 | Assign work roles to members | The grid needs a role to look up |
-| 4 | Apply `20261103000000` … `20261116000000` in filename order | Each asserts its own prerequisites |
-| 5 | Apply `20261117000000`, `20261118000000` | Need `product_specifications` from step 4 |
-| 6 | Verify: the readiness query again, plus `verify_audit_chain` per company | Confirms the triggers landed and the chain reads as expected |
+| 1 | **Review** [`docs/operational-role-model.md`](operational-role-model.md) — schema, authority rules, backward compatibility, rollback limits | Nothing is applied until this is reviewed |
+| 2 | Apply `20261103000000` … `20261116000000` in filename order | Each asserts its own prerequisites |
+| 3 | Apply `20261117000000`, `20261118000000` | Need `product_specifications` from step 2 |
+| 4 | Apply `20261119000000`, `20261120000000` | Need the grid, and `product_specification_approver_error` from step 3 |
+| 5 | Verify: the readiness query again, plus `verify_audit_chain` per company | Confirms the triggers landed and the chain reads as expected |
+| 6 | **Appoint operational roles.** A workspace owner or admin assigns them to named people, each with a reason | The table deploys empty; until this, every guard abstains and the layer is inert |
 | 7 | Approve specifications under the backfill plan | [`docs/specification-backfill-plan.md`](specification-backfill-plan.md) |
 | 8 | Decide whether `release` requires a signature, and set it | Data change; currently false |
-| 9 | Rotate the anon key | It is in git history |
+| 9 | Rotate the anon key — **separately**, under its own window | [`docs/key-rotation-checklist.md`](key-rotation-checklist.md). Not part of the deployment. |
 
-Steps 1–3 are the user's decisions. Steps 4–5 are mechanical. Step 7
-cannot start before step 3, because only a QA Manager can approve a
-specification and nobody holds that role today.
+Steps 1 and 6 are yours. Steps 2–4 are mechanical. Step 7 cannot start
+before step 6, because only a QA Manager can approve a specification
+and nobody holds that role today.
+
+Step 6 has a constraint worth knowing before the window: **nobody can
+assign themselves an operational role**, so a workspace with one
+active member cannot complete it. Check the member count in §2's
+output first.

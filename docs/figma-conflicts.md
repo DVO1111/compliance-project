@@ -884,3 +884,127 @@ this project**, inserting a `CHAIN_REANCHOR` entry with a back-dated
 script is withdrawn and now throws; the entry is left in place and
 documented rather than rewritten again. Full account in
 [`docs/audit-threat-model.md`](audit-threat-model.md) §4.
+
+---
+
+## 31. Two registers, because they answer two questions
+
+§29 recorded that the live project cannot hold a PM-03 role, and left
+extending the `company_role` enum as the open question. The answer is
+that the enum should not be extended at all.
+
+`company_members.role` says what somebody **is to the workspace** —
+owner, admin, legal, marketing, viewer. PM-03's eight say what they
+**may do on the floor**. Merging them would make an operational role
+as casual as an invitation, and make withdrawing one destroy the
+record that it was ever held.
+
+`20261119000000` therefore leaves that column untouched — not a value,
+not a constraint, not a row — and adds
+`operational_role_assignments`: company-scoped, several per person,
+each with a reason, an assigner and a timestamp, revoked rather than
+deleted.
+
+Four decisions worth recording, all **pending final
+quality/regulatory confirmation**:
+
+- **Access is the union across held roles.** Two roles granted on
+  purpose grant both columns; taking the lesser would mean adding a
+  role removes access, which nobody intends when they add one. An
+  individual PM-04 restriction still lowers the result, because a
+  restriction names one person and outranks any of their roles.
+- **Assignment is the workspace owner's or admin's, or a compliance
+  admin's** — PM-03's own *Change roles and permissions*. The first
+  authority exists so a first operational role can ever be granted;
+  it appoints a QA Manager without becoming one.
+- **Never yourself.** An admin who can grant themselves `qa_manager`
+  can release their own batches. The consequence is real and
+  deliberate: **a one-person workspace cannot create its first
+  operational role.** Recorded as a constraint rather than worked
+  around, because the only way around it is self-assignment.
+- **Standing down is not self-elevation.** You may always revoke your
+  own role, never grant one.
+
+What the suite found, because none of it was visible by reading:
+
+- `app_assert_section_act` still resolved a single role. The
+  migration's own assertion refused to install until it did not.
+- The first draft's write policies made the authority trigger
+  **unreachable**: RLS refused before it ran, so every refusal was
+  dead for application callers and exempted for service ones — the
+  dead-guard hazard of §10 and §25, a third time. The policies now
+  ask only the membership question and the trigger asks the authority
+  question, so a direct INSERT and the RPC meet the same refusals.
+- A service caller could **re-stamp a revocation**, moving the date
+  somebody lost an authority. The integrity checks now run ahead of
+  the service exemption. Authority is a question about a person and a
+  migration is not one; what a row means is the same question whoever
+  asks it.
+
+---
+
+## 32. The grid was being read twice, and the two readings disagreed
+
+Not a Figma conflict. A divergence between the design's rule and the
+screen's reading of it, found while wiring §31.
+
+`resolveWorkRole` in `src/lib/access/roleAccess.ts` mapped `owner`,
+`admin` and `compliance_officer` to `compliance_admin`. On the live
+project, where all 21 members hold `owner`, **every one of them was
+being shown the compliance admin's navigation and dashboards** while
+the server abstained for them and granted nothing.
+
+Nothing was exposed by it — the database refused the writes — but the
+screen and the database were telling the person different things
+about what they could do, and the screen was the one they believed.
+
+The three mappings are removed. Genuine spelling normalisations
+(`QA Manager`, `qa-manager`, `quality_manager` → `qa_manager`) stay:
+three spellings of one job is data to read, not a conversion.
+`resolveWorkRoles` now mirrors `app_work_roles`, `pageRefused` reads
+the whole set rather than a sole role that would be NULL for anyone
+holding two, and `AuthContext` loads the assignments alongside the
+profile.
+
+*Decision taken:* a failed assignments lookup is logged and read as
+"holds none" rather than thrown. A client signing in against a
+database where `20261119000000` is not yet applied still works, and
+holding no role abstains — so the failure mode is the inert state, not
+a locked-out workspace.
+
+---
+
+## 33. PM-03 separated duties by arithmetic, and that stopped being true
+
+§31 lets one person hold both `qc_analyst` and `qa_manager`. PM-03
+never contemplated it: QC testing is the Analyst's column alone and
+batch release the Manager's alone, so "nobody holds both" used to be
+true by construction rather than by any rule.
+
+`20261120000000` enforces it against the **batch** instead. Whoever
+recorded a batch's QC results or executed it may not release it;
+whoever released it may not dispatch it.
+
+The property that makes this reviewable: **the pairs are derived from
+PM-03, not chosen.** A pair is admissible only where the matrix gives
+the two sections Act to role sets that do not overlap — where the
+design had already separated them. The migration computes that from
+`section_permissions` and refuses to install if any seeded pair shares
+an Act role, so a rule the design does not contain cannot be seeded
+into existence.
+
+Three limits, asserted rather than hoped for:
+
+- It reads the recorded actor columns (`tested_by`, `started_by`,
+  `recorded_by`, `execution_closed_by`, `released_by`,
+  `dispatched_by`). **An action that records no actor is invisible to
+  it.**
+- It is separation of duties, not collusion detection. Two people
+  defeat it and nothing here claims otherwise.
+- It is batch-scoped. The material-side equivalent — QA disposition of
+  a lot against its own QC test — is **not addressed**, and is a
+  question still open.
+
+*Decision needed:* whether these three pairs are the right three. They
+are a table precisely so that a quality system which disagrees deletes
+a row rather than editing a function.

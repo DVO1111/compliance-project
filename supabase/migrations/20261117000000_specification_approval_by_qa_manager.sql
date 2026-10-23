@@ -157,6 +157,52 @@ GRANT EXECUTE ON FUNCTION public.product_specification_signature_error(uuid,uuid
   TO authenticated, service_role;
 
 
+-- ── 1b. Who may approve, as its own function ────────────────────────
+--
+-- A seam, on purpose. The authority is one rule and it is likely to
+-- move — it is the open question this decision is pending on — so it
+-- lives where it can be replaced without re-issuing the 150 lines of
+-- approval around it. 20261119000000 replaces exactly this when a
+-- person can hold several operational roles at once.
+--
+-- Returns the refusal, or NULL when the caller may approve.
+
+CREATE OR REPLACE FUNCTION public.product_specification_approver_error(
+  p_company_id uuid,
+  p_actor      uuid
+) RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+DECLARE v_role text;
+BEGIN
+  v_role := public.app_work_role(p_company_id, p_actor);
+
+  --  ── NO ABSTENTION HERE, DELIBERATELY ──
+  --
+  --  Everywhere else an untabulated role abstains, because the design
+  --  declining to rule should not lock a workspace out of its own
+  --  work. Here abstaining would mean the opposite: on the live
+  --  project every member's role is `owner`, so an abstaining check
+  --  would let all of them approve. `owner` and `admin` are refused by
+  --  this clause exactly as a storekeeper is.
+  IF v_role IS DISTINCT FROM 'qa_manager' THEN
+    RETURN
+      'PRODUCT_SPEC_FORBIDDEN: approving a finished-product specification is reserved to the QA Manager; your role is '
+      || coalesce(nullif(v_role, ''), '(none)');
+  END IF;
+
+  RETURN NULL;
+END;
+$$;
+
+COMMENT ON FUNCTION public.product_specification_approver_error(uuid, uuid) IS
+  'The reason this caller may not approve a specification, or NULL when they may. Replaced by 20261119000000 once operational roles became a set.';
+
+REVOKE ALL ON FUNCTION public.product_specification_approver_error(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.product_specification_approver_error(uuid, uuid)
+  TO authenticated, service_role;
+
+
 -- ── 2. Approval ─────────────────────────────────────────────────────
 --
 -- Replaces 20261113000000's function. Same name and return shape.
@@ -172,6 +218,7 @@ DECLARE
   v_spec     record;
   v_actor    uuid := auth.uid();
   v_role     text;
+  v_authority text;
   v_tests    bigint;
   v_required bigint;
   v_sig_err  text;
@@ -202,23 +249,19 @@ BEGIN
   END IF;
 
   IF NOT v_service THEN
-    v_role := public.app_work_role(v_spec.company_id, v_actor);
-
-    --  ── NO ABSTENTION HERE, DELIBERATELY ──
-    --
-    --  Everywhere else an untabulated role abstains, because the
-    --  design declining to rule should not lock a workspace out of its
-    --  own work. Here abstaining would mean the opposite: on the live
-    --  project every member's role is `owner`, so an abstaining check
-    --  would let all of them approve. `owner` and `admin` are refused
-    --  by this clause exactly as a storekeeper is.
-    IF v_role IS DISTINCT FROM 'qa_manager' THEN
-      RAISE EXCEPTION
-        'PRODUCT_SPEC_FORBIDDEN: approving a finished-product specification is reserved to the QA Manager; your role is %',
-        coalesce(nullif(v_role, ''), '(none)')
+    --  The authority rule itself is 1b, so that it can be replaced
+    --  without re-issuing this function.
+    v_authority := public.product_specification_approver_error(v_spec.company_id, v_actor);
+    IF v_authority IS NOT NULL THEN
+      RAISE EXCEPTION '%', v_authority
         USING ERRCODE = 'P0001',
               HINT = 'Administrative access does not carry this authority.';
     END IF;
+
+    --  Recorded against the approval. Taken after the check, so it is
+    --  the role they were approved under rather than a second lookup
+    --  that might disagree with it.
+    v_role := 'qa_manager';
 
     --  An individual restriction on batch release reaches the
     --  specification that governs it. A QA Manager who may not release

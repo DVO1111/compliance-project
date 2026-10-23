@@ -232,42 +232,109 @@ export function canOpenPage(role: WorkRole | null | undefined, pageId: string): 
  * about an unassigned one.
  */
 export function pageRefused(profile: unknown, pageId: string): boolean {
-  const role = resolveWorkRole(profile);
-  return role !== null && !canOpenPage(role, pageId);
+  //  Reads the whole set, not the sole role: somebody holding two roles
+  //  may open a page either of them opens, and resolveWorkRole returns
+  //  null for them — which would have refused nothing and shown
+  //  everything.
+  return !pageOpenableBy(resolveWorkRoles(profile), pageId);
 }
 
 /**
- * The role a profile actually holds, as a WorkRole.
+ * Spellings seen on existing rows, normalised to the design's roles.
  *
- * company_members.role is the per-workspace job and is what PM-03 is
- * about; profiles.role is the platform-wide account type and is the
- * fallback. Both are read defensively because one is an enum on the
- * live database and text in a from-scratch build, and because older
- * rows carry spellings like "QA Manager" and "qa-manager".
+ * NORMALISATIONS ONLY. "QA Manager", "qa-manager" and "quality_manager"
+ * are three ways of writing one job, so mapping them is reading the
+ * data. `owner`, `admin` and `compliance_officer` are NOT: they are
+ * membership and account types, and an earlier version of this table
+ * mapped all three to `compliance_admin`.
+ *
+ * That was a conversion, and on the live project it was a consequential
+ * one — every member there holds `owner`, so the whole workspace was
+ * shown the compliance admin's navigation and dashboards while the
+ * server abstained for them and granted nothing. The screen said one
+ * thing and the database another.
+ *
+ * Membership roles resolve to no operational role, exactly as
+ * app_work_roles does since 20261119000000.
  */
-export function resolveWorkRole(profile: unknown): WorkRole | null {
-  const p = (profile ?? {}) as Record<string, unknown>;
-  const raw = (p.company_role ?? p.work_role ?? p.role ?? '') as string;
-  const key = String(raw).trim().toLowerCase().replace(/[\s-]+/g, '_');
+const ROLE_SPELLINGS: Record<string, WorkRole> = {
+  qa: 'qa_officer',
+  quality_manager: 'qa_manager',
+  quality: 'qa_officer',
+  store_keeper: 'storekeeper',
+  stores: 'storekeeper',
+  qc: 'qc_analyst',
+  production: 'production_supervisor',
+  compliance: 'compliance_admin',
+  exec: 'management',
+  executive: 'management',
+};
+
+function asWorkRole(raw: unknown): WorkRole | null {
+  const key = String(raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!key) return null;
   if (key in GRID) return key as WorkRole;
-  //  Spellings seen on existing rows, mapped to the design's roles.
-  const ALIAS: Record<string, WorkRole> = {
-    qa: 'qa_officer',
-    quality_manager: 'qa_manager',
-    quality: 'qa_officer',
-    store_keeper: 'storekeeper',
-    stores: 'storekeeper',
-    qc: 'qc_analyst',
-    production: 'production_supervisor',
-    admin: 'compliance_admin',
-    owner: 'compliance_admin',
-    compliance: 'compliance_admin',
-    compliance_officer: 'compliance_admin',
-    exec: 'management',
-    executive: 'management',
-  };
-  return ALIAS[key] ?? null;
+  return ROLE_SPELLINGS[key] ?? null;
+}
+
+/**
+ * Every operational role a person holds, sorted — the client's reading
+ * of app_work_roles.
+ *
+ * `operational_roles` is the authoritative source and comes from
+ * operational_role_assignments. The membership column is read only as
+ * the same compatibility bridge the database keeps: it contributes a
+ * value only when that value is already one of the eight, which no
+ * company_role ever is.
+ */
+export function resolveWorkRoles(profile: unknown): WorkRole[] {
+  const p = (profile ?? {}) as Record<string, unknown>;
+  const out = new Set<WorkRole>();
+
+  const assigned = p.operational_roles;
+  if (Array.isArray(assigned)) {
+    for (const r of assigned) {
+      const role = asWorkRole(r);
+      if (role) out.add(role);
+    }
+  }
+
+  const bridged = asWorkRole(p.company_role ?? p.work_role ?? p.role);
+  if (bridged) out.add(bridged);
+
+  return [...out].sort();
+}
+
+/**
+ * The sole role a profile holds, or null when it holds none or several.
+ *
+ * Narrowed to match app_work_role, which 20261119000000 deprecated for
+ * the same reason: with several roles, answering with one of them makes
+ * the caller's behaviour depend on which. Prefer resolveWorkRoles.
+ */
+export function resolveWorkRole(profile: unknown): WorkRole | null {
+  const roles = resolveWorkRoles(profile);
+  return roles.length === 1 ? roles[0] : null;
+}
+
+/**
+ * What a set of roles holds on a section: the most permissive cell any
+ * of them has, which is how app_section_access answers it.
+ */
+export function sectionAccessFor(roles: WorkRole[], section: PmSection): Access {
+  let best: Access = 'none';
+  for (const role of roles) {
+    const held = sectionAccess(role, section);
+    if (held === 'act') return 'act';
+    if (held === 'view') best = 'view';
+  }
+  return best;
+}
+
+/** Whether any held role may open the page. */
+export function pageOpenableBy(roles: WorkRole[], pageId: string): boolean {
+  if (roles.length === 0) return true;
+  return roles.some((r) => canOpenPage(r, pageId));
 }
 
 

@@ -94,9 +94,14 @@ SET ROLE authenticated;
 DO $a$
 DECLARE v_ok boolean := false; v_msg text;
 BEGIN
-  PERFORM _dck('A','A1 the owner resolves as an untabulated role',
-    public.app_work_role(current_setting('dc.c')::uuid) = 'owner',
-    coalesce(public.app_work_role(current_setting('dc.c')::uuid),'<null>'));
+  --  CHANGED BY 20261119000000, and the change is the point. The
+  --  owner used to resolve AS the untabulated role 'owner'; now
+  --  membership and operational roles are separate registers and an
+  --  owner holds no operational role at all. Either way the grid has
+  --  nothing to say about them, which is what A2 checks.
+  PERFORM _dck('A','A1 the owner holds no operational role',
+    coalesce(array_length(public.app_work_roles(current_setting('dc.c')::uuid), 1), 0) = 0,
+    array_to_string(public.app_work_roles(current_setting('dc.c')::uuid), ', '));
 
   --  ... which means the GRID abstains for them, and that is exactly
   --  why approval does not use the grid's abstaining assertion.

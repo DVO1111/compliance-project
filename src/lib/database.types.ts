@@ -6581,6 +6581,24 @@ isOneToOne: false
 "access_restriction_lift":
 { Args: { "p_restriction_id": string,"p_reason": string }; Returns: undefined
                            },
+"operational_role_assign":
+{ Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_reason": string }; Returns: string
+                           },
+"operational_role_revoke":
+{ Args: { "p_assignment_id": string,"p_reason": string }; Returns: undefined
+                           },
+"app_work_roles":
+{ Args: { "p_company_id": string,"p_user_id"?: string }; Returns: string[]
+                           },
+"app_has_work_role":
+{ Args: { "p_company_id": string,"p_role": string,"p_user_id"?: string }; Returns: boolean
+                           },
+"batch_actor_duties":
+{ Args: { "p_batch_id": string,"p_user_id": string }; Returns: string[]
+                           },
+"batch_duty_conflict":
+{ Args: { "p_batch_id": string,"p_duty": string,"p_user_id"?: string }; Returns: string
+                           },
 "product_specification_approve":
 { Args: { "p_specification_id": string,"p_effective_date"?: string,"p_signature_id"?: string }; Returns: Json
                            },
