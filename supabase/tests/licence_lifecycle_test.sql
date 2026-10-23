@@ -43,8 +43,32 @@ DROP TABLE IF EXISTS lic_results;
 --  not here to walk into that.
 CREATE OR REPLACE FUNCTION _release_batch(p_batch uuid, p_company uuid, p_actor uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_sig uuid;
+DECLARE v_sig uuid; v_prod uuid; v_spec uuid; v_mfg date;
 BEGIN
+  --  A GOVERNING SPECIFICATION, because 20261113000000 refuses to
+  --  release a batch without one. Built the way the product does —
+  --  draft, tests, then effective — so the freeze and immutability
+  --  triggers are met rather than side-stepped. Dated the day before
+  --  manufacture so it is in force when the batch was made.
+  SELECT product_id, manufacturing_date INTO v_prod, v_mfg
+    FROM public.batch_records WHERE id = p_batch;
+
+  IF v_prod IS NOT NULL AND public.batch_governing_specification(p_batch) IS NULL THEN
+    INSERT INTO public.product_specifications
+      (company_id, product_id, version, status, created_by)
+    VALUES (p_company, v_prod, 'FIX-' || substr(md5(random()::text), 1, 8), 'draft', p_actor)
+    RETURNING id INTO v_spec;
+
+    INSERT INTO public.product_specification_tests
+      (specification_id, test_name, limit_type, min_value, max_value, unit, is_required)
+    VALUES (v_spec, 'Assay', 'range', 98, 102, '%', true);
+
+    UPDATE public.product_specifications
+       SET status = 'effective', approved_by = p_actor, approved_at = now(),
+           effective_date = v_mfg - 1
+     WHERE id = v_spec;
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM public.batch_qc_results WHERE batch_id = p_batch) THEN
     INSERT INTO public.batch_qc_results
       (batch_id, test_name, test_method, specification, result, pass, tested_by)

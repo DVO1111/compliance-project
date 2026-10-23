@@ -197,6 +197,7 @@ export const PAGE_SECTION: Record<string, PmSection> = {
 
 /** Built pages with no column in PM-03. Named, not silently omitted. */
 export const PAGES_NOT_IN_PM03 = [
+  'product-specifications',
   'instruments', 'in-process', 'master-formulas', 'change-control',
   'sop-library', 'gmp-inspection', 'products', 'license-vault',
   'access-control', 'my-tasks',

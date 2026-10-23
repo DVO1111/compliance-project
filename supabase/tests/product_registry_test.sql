@@ -36,8 +36,32 @@ DROP TABLE IF EXISTS prod_results;
 --  not here to walk into that.
 CREATE OR REPLACE FUNCTION _release_batch(p_batch uuid, p_company uuid, p_actor uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_sig uuid;
+DECLARE v_sig uuid; v_prod uuid; v_spec uuid; v_mfg date;
 BEGIN
+  --  A GOVERNING SPECIFICATION, because 20261113000000 refuses to
+  --  release a batch without one. Built the way the product does —
+  --  draft, tests, then effective — so the freeze and immutability
+  --  triggers are met rather than side-stepped. Dated the day before
+  --  manufacture so it is in force when the batch was made.
+  SELECT product_id, manufacturing_date INTO v_prod, v_mfg
+    FROM public.batch_records WHERE id = p_batch;
+
+  IF v_prod IS NOT NULL AND public.batch_governing_specification(p_batch) IS NULL THEN
+    INSERT INTO public.product_specifications
+      (company_id, product_id, version, status, created_by)
+    VALUES (p_company, v_prod, 'FIX-' || substr(md5(random()::text), 1, 8), 'draft', p_actor)
+    RETURNING id INTO v_spec;
+
+    INSERT INTO public.product_specification_tests
+      (specification_id, test_name, limit_type, min_value, max_value, unit, is_required)
+    VALUES (v_spec, 'Assay', 'range', 98, 102, '%', true);
+
+    UPDATE public.product_specifications
+       SET status = 'effective', approved_by = p_actor, approved_at = now(),
+           effective_date = v_mfg - 1
+     WHERE id = v_spec;
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM public.batch_qc_results WHERE batch_id = p_batch) THEN
     INSERT INTO public.batch_qc_results
       (batch_id, test_name, test_method, specification, result, pass, tested_by)
@@ -530,7 +554,19 @@ BEGIN
     public.product_is_release_eligible('00000000-0000-7300-c000-000000000006') = false, 'expired');
 END $h5$;
 
--- and a batch with NO product is unaffected: existing workflows preserved
+--  A BATCH WITH NO PRODUCT LINK CAN NO LONGER BE RELEASED, and that is
+--  a deliberate change rather than a regression.
+--
+--  This assertion used to read "a batch with no product link still
+--  releases as before", which was right while the only gates were
+--  about the product's registration — D05's gate has nothing to say
+--  about a batch that names no product, and that was the point.
+--
+--  20261113000000 added a different gate: a batch is released against
+--  an approved finished-product specification, and a specification
+--  belongs to a product. A batch naming no product has nothing to be
+--  judged against, so it fails closed with a sentence saying so. The
+--  path is still exercised here; what changed is the expectation.
 DO $h6$
 DECLARE v_ok boolean := false; v_msg text;
 BEGIN
@@ -541,10 +577,12 @@ BEGIN
   PERFORM prod_batch_to_qc('00000000-0000-7300-9000-000000000003');
   BEGIN
     PERFORM _release_batch('00000000-0000-7300-9000-000000000003', '00000000-0000-7300-a000-00000000000a', '00000000-0000-7300-b000-000000000001');
-    v_ok := true; v_msg := 'released';
-  EXCEPTION WHEN others THEN v_msg := SQLERRM;
+    v_msg := 'A BATCH WITH NO PRODUCT WAS RELEASED';
+  EXCEPTION WHEN others THEN
+    v_ok := SQLERRM LIKE 'BATCH_RELEASE_BLOCKED%' AND SQLERRM LIKE '%names no product%';
+    v_msg := SQLERRM;
   END;
-  PERFORM prod_assert('H7','a batch with no product link still releases as before',
+  PERFORM prod_assert('H7','a batch with no product link is refused, for want of a specification',
     v_ok, left(v_msg,100));
 END $h6$;
 

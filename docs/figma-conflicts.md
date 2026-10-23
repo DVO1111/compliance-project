@@ -262,9 +262,37 @@ system exists to prevent, and holding a batch whose product needs no
 testing costs one row. The refusal says in words that the system cannot
 tell the two apart, so nobody reads it as a bug.
 
-*Decision needed:* whether finished-product specifications are being
-built. Until they are, every product needs at least one recorded
-result before any of its batches can be released.
+**DECIDED (2026-10-23).** Finished-product specifications are being
+built, and `20261113000000` builds them: an approved, versioned
+specification with acceptance criteria and required tests is required
+before release; where none exists the gate fails closed and the
+refusal names what is missing; no criteria are invented and there is
+no bypass.
+
+The model mirrors `material_specifications` — same statuses, same
+limit vocabulary (`range`, `min`, `max`, `exact_text`, `complies`,
+`absent`) — plus `is_required`, which is what the gate counts. A
+specification is frozen on approval; the way on is a new version,
+which supersedes the old one going forward while the old one goes on
+governing the batches made under it.
+
+See `docs/release-verification.md` §2 for what is enforced and §4 for
+the deployment consequence: **in an existing workspace there are no
+specifications, so every batch awaiting release is blocked until one
+is approved per product**, back-dated for batches already made.
+
+*Still open:* who may approve one. PM-03 has no column for
+specifications and no step for approving one, so the database uses the
+designated QA authority register — the mechanism that already approves
+a master formula and releases a material lot. That is an existing
+convention rather than an invented rule, and it is one predicate to
+change if the answer differs.
+
+*Still open:* that a batch is judged against the version in force on
+its **manufacturing date** rather than at release. Chosen so a
+specification tightened later does not retrospectively fail material
+made to the older standard. This is a quality judgement with a
+regulatory flavour and it has not been confirmed.
 
 ---
 
@@ -430,8 +458,26 @@ Two things are still true and should not be overstated: a sealed chain
 is self-consistent, not proof of what happened; and none of this makes
 the system validated or establishes regulatory compliance.
 
-*Decision needed:* what to do about pre-sealing entries in existing
-workspaces, which can never become content-verifiable.
+**DECIDED (2026-10-23).** Preserve them and mark them.
+`20261115000000` sets `hash_algo = 'legacy-client-v0'` on every entry
+that carries a hash and no convention, and records in
+`audit_hash_conventions` — once, authoritatively — why their contents
+cannot be verified. `verify_audit_chain` returns that reason, so the
+screen prints the database's sentence rather than its own.
+
+No hash, sequence number or timestamp is altered, and **no hash is
+computed for them after the fact**: a hash calculated now over content
+nobody can vouch for would turn an unverifiable entry into one that
+looks verified, which is the worst available outcome.
+
+A row with **no hash at all** is deliberately not marked legacy — it
+is reported as `unhashed`, which is a finding. Conflating the two
+would hide it.
+
+See `docs/release-verification.md` §1, which also states plainly who
+can still alter an audit record: not the application, not a
+`service_role` holder, but **yes** a database superuser or anyone who
+can restore a dump. There is no external anchor.
 
 ---
 
@@ -616,3 +662,69 @@ pointless and the original failure would block the batch forever.
 The screen shows superseded results, marked, rather than hiding them:
 a list of only the standing verdicts would hide the correction, which
 is the thing worth recording.
+
+
+---
+
+## 25. Restrictions reached the sections and not the steps
+
+Found while verifying that PM-04 restrictions apply on every
+server-side mutation path, which was the right question to ask.
+
+`20261110000000` made a restriction real by having
+`app_section_access` apply it, so six guards honoured one without
+knowing restrictions existed. **Five did not.**
+`fn_batch_release_role`, `fn_material_lots_disposition_role`,
+`fn_deviation_close_role`, `fn_capa_close_role` and
+`fn_supplier_approve_role` go through `app_assert_step`, which read
+`step_permissions` and `app_work_role` and had never heard of a
+restriction.
+
+Those five are PM-03's named steps — releasing a batch, dispositioning
+material, closing a deviation, closing a CAPA, approving a supplier.
+They are the most consequential actions in the system and they were
+exactly the ones a restriction could not touch. **A compliance admin
+who restricted a QA Manager's `QA disposition` to none would have
+watched them release material anyway.**
+
+`20261114000000` gives `step_permissions` a `section` column — PM-03's
+own mapping, stored beside the roles rather than written into a CASE —
+and has `app_assert_step` consult the restriction on it.
+
+Two choices worth recording:
+
+- The restriction is checked **before** the role, and read **directly**
+  from `access_restrictions` rather than through `app_section_access`.
+  The grid returns NULL for a role PM-03 does not tabulate, and that
+  abstention is the design declining to rule; an individual
+  restriction is not a silence but a named person, a named section and
+  a reason, so it applies regardless. Asserted.
+- `roles_change` has **no** section, deliberately: changing roles and
+  permissions is administration and PM-03 gives it no column. A second
+  step appearing with no section fails the migration, because it would
+  be a step no restriction could reach, silently.
+
+---
+
+## 26. A verdict that contradicts its own specification
+
+Not a design conflict — a control that only became possible once
+specifications existed, recorded because it changes what "pass" means.
+
+`batch_qc_results.pass` is typed by a person. The limits now come from
+an approved specification. Where the two can be compared and disagree —
+a result of `97.2 %` recorded as a pass against a 99–101 range — the
+**specification wins** and the batch waits.
+
+The comparison has a limit that is asserted rather than hoped for:
+`product_test_meets_criterion` reads the first number out of a result,
+so a textual result against a numeric limit returns NULL, meaning *not
+judged*, and the recorded verdict stands alone. **Somebody can still
+pass a batch by typing words where a number belongs.** `complies` and
+`absent` limits are never machine-checked at all, because they are
+judgements.
+
+*Decision needed:* whether a result against a numeric limit should be
+refused unless it parses as a number. That would close the gap and
+would also refuse legitimate entries like `"< 0.1"`, which is why it
+has not been done unasked.

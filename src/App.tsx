@@ -11,6 +11,7 @@ import QcTestingPage from './components/Materials/QcTestingPage';
 import TraceabilityPage from './components/Materials/TraceabilityPage';
 import MyTasksPage from './components/Tasks/MyTasksPage';
 import DispatchPage from './components/Distribution/DispatchPage';
+import ProductSpecificationsPage from './components/Specifications/ProductSpecificationsPage';
 import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
@@ -1176,6 +1177,17 @@ function AppContent() {
       //  Act on Distribution and nowhere to exercise it. It is also the
       //  far end of a trace — before this, nothing connected a released
       //  batch to a customer.
+      //  No PM-03 column — the design has no specification screen — so
+      //  it is open to members and the database decides who may
+      //  APPROVE one. 20261113000000 made this screen necessary: a
+      //  batch cannot be released without an approved specification,
+      //  and a gate nobody can satisfy is an outage rather than a
+      //  control.
+      case 'product-specifications':
+        return !isLogisticsProfile
+          ? <ProductSpecificationsPage companyId={profile?.company_id} userId={user?.id} />
+          : <AccessDenied />;
+
       case 'dispatch':
         return <DispatchPage
           companyId={profile?.company_id}

@@ -82,7 +82,7 @@ DECLARE
   u_qo uuid := gen_random_uuid();   -- qa_officer: Act on the section, not the step
   u_ow uuid := gen_random_uuid();
   tag  text := substr(replace(gen_random_uuid()::text,'-',''),1,8);
-  p_a uuid; f uuid; m_api uuid;
+  p_a uuid; f uuid; m_api uuid; spec_p uuid := gen_random_uuid();
 BEGIN
   PERFORM set_config('br.c_a', c_a::text, false);
   PERFORM set_config('br.u_ps', u_ps::text, false);
@@ -136,6 +136,23 @@ BEGIN
   INSERT INTO public.master_formula_stages(formula_id,sequence_no,stage_code,name,requires_signoff)
   VALUES (f,1,'MIX','Mixing',false);
   PERFORM set_config('br.f', f::text, false);
+
+  --  A FINISHED-PRODUCT SPECIFICATION, which 20261113000000 requires
+  --  before any batch of this product can be released. One required
+  --  test, Assay, 98.0 to 102.0 % — so sections B to E are about the
+  --  RESULTS, with the specification satisfied and out of the way.
+  --  Section I tests the specification itself.
+  INSERT INTO public.product_specifications
+    (id,company_id,product_id,version,status,created_by)
+  VALUES (spec_p,c_a,p_a,'1.0','draft',u_ow);
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,test_method,limit_type,min_value,max_value,unit,is_required)
+  VALUES (spec_p,'Assay','HPLC','range',98,102,'%',true);
+  UPDATE public.product_specifications
+     SET status='effective', approved_by=u_qm, approved_at=now(),
+         effective_date=current_date - 1
+   WHERE id = spec_p;
+  PERFORM set_config('br.spec', spec_p::text, false);
 END
 $fx$;
 
@@ -296,8 +313,11 @@ DECLARE
 BEGIN
   -- ── B. no results at all ──
   b := current_setting('br.b_none')::uuid;
-  PERFORM _brk('B','B1 the block reason names the missing results',
-    public.batch_release_block_reason(b) LIKE 'no finished-product test results%',
+  --  NAMED, not counted. "no results have been recorded" told somebody
+  --  nothing about what to do; the specification knows which test is
+  --  missing and the sentence says which.
+  PERFORM _brk('B','B1 the block reason names the test the specification requires',
+    public.batch_release_block_reason(b) LIKE '%requires Assay, and no result has been recorded%',
     public.batch_release_block_reason(b));
 
   v_ok := false;
@@ -318,7 +338,7 @@ BEGIN
   --  The same answer as a row a screen can draw, from the same facts.
   PERFORM _brk('B','B4 the condition rows say the same thing',
     EXISTS (SELECT 1 FROM public.batch_release_conditions(b)
-             WHERE condition_key='qc_none' AND severity='blocked'));
+             WHERE condition_key='qc_missing' AND severity='blocked'));
 
   --  A blocked condition carries no "continue with" — there is nobody
   --  to authorise past it. floorConditions treats a blocked row with a
@@ -376,8 +396,8 @@ BEGIN
   --  So a batch sitting in qc_in_progress with nothing recorded is
   --  indistinguishable from one nobody has started testing, and is
   --  refused by B's rule rather than by a rule of its own.
-  PERFORM _brk('D','D2 so an untested batch falls to the no-results rule',
-    public.batch_release_block_reason(b) LIKE 'no finished-product test results%',
+  PERFORM _brk('D','D2 so an untested batch falls to the missing-required-test rule',
+    public.batch_release_block_reason(b) LIKE '%requires Assay%',
     public.batch_release_block_reason(b));
 
   -- ── E. the positive path ──

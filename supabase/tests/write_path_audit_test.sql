@@ -42,6 +42,8 @@ DECLARE
   u_qc uuid := gen_random_uuid();   -- qc_analyst
   u_sk uuid := gen_random_uuid();   -- storekeeper
   b uuid := gen_random_uuid();
+  p_id uuid := gen_random_uuid();
+  s_id uuid := gen_random_uuid();
   tag text := substr(replace(gen_random_uuid()::text,'-',''),1,8);
 BEGIN
   PERFORM set_config('wp.c_a', c_a::text, false);
@@ -62,9 +64,34 @@ BEGIN
     (c_a,u_qc,'qc_analyst','active'),
     (c_a,u_sk,'storekeeper','active');
 
+  --  A PRODUCT AND A SPECIFICATION, because 20261113000000 judges a
+  --  batch against the specification in force when it was made and
+  --  refuses one that names no product. Section E is about which
+  --  RESULTS the gate counts, so the specification has to be out of
+  --  the way for that question to be the one being asked.
+  INSERT INTO public.products(id,company_id,product_code,trade_name,generic_name,category,created_by)
+  VALUES (p_id,c_a,'WP-'||tag,'Tablet W','Paracetamol','drug_pharmaceutical',u_qm);
+
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,manufacturing_date,expiry_date,batch_size,unit)
-  VALUES (b,c_a,'WP-'||tag,'Tablet W',current_date,current_date+365,100,'kg');
+    (id,company_id,batch_number,product_name,product_id,manufacturing_date,expiry_date,batch_size,unit)
+  VALUES (b,c_a,'WP-'||tag,'Tablet W',p_id,current_date,current_date+365,100,'kg');
+
+  INSERT INTO public.product_specifications
+    (id,company_id,product_id,version,status,created_by)
+  VALUES (s_id,c_a,p_id,'1.0','draft',u_qm);
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,limit_type,min_value,max_value,unit,is_required)
+  VALUES (s_id,'Assay','range',98,102,'%',true);
+  --  Dissolution is declared but NOT required, so section E's second
+  --  failure is a test somebody chose to run — which still blocks,
+  --  and the assertion says why.
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,limit_type,min_value,unit,is_required)
+  VALUES (s_id,'Dissolution','min',80,'%',false);
+  UPDATE public.product_specifications
+     SET status='effective', approved_by=u_qm, approved_at=now(),
+         effective_date=current_date - 1
+   WHERE id = s_id;
 END
 $fx$;
 
@@ -343,6 +370,10 @@ BEGIN
   INSERT INTO public.batch_qc_results
     (batch_id,test_name,result,pass,tested_by)
   VALUES (b,'Dissolution','54 %',false,current_setting('wp.u_qc')::uuid);
+  --  54 is below the declared minimum of 80, so the recorded failure
+  --  and the specification agree. A fixture whose verdict contradicted
+  --  its own criterion would be caught by a different rule and this
+  --  assertion would pass for the wrong reason.
 
   PERFORM _wpk('E','E3 an uncorrected failure still blocks',
     public.batch_release_block_reason(b) LIKE '%failed%',

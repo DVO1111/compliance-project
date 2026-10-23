@@ -131,6 +131,7 @@ export type PageId =
   | 'dispatch'
   | 'batch-execution'
   | 'master-formulas'
+  | 'product-specifications'
   | 'training-simulation'
   | 'claim-extraction'
   | 'pharma-integrations'
@@ -249,6 +250,7 @@ export const PAGE_IDS = [
   'regulatory-affairs', 'son-compliance', 'ctd-dossier', 'contraband-rejection',
   'shipment-event-log', 'cn-declarations', 'compliance-alerting', 'audit-prep',
   'coa',
+  'product-specifications',
 ] as const;
 
 /**
@@ -387,6 +389,11 @@ const DB01_NAV: Record<string, { group: string; label?: string; order: number }>
   //  DB-02 draws Dispatch on the Storekeeper's rail. It is PM-03's
   //  `Distribution` column, which had no page until 20261111000000.
   'dispatch':               { group: 'Traceability', label: 'Dispatch', order: 0 },
+  //  Beyond DB-01: the design has no frame for a specification screen,
+  //  and 20261113000000 made one necessary — a batch cannot be
+  //  released without an approved specification, so there has to be
+  //  somewhere to write one.
+  'product-specifications': { group: 'Quality', label: 'Specifications', order: BEYOND_DESIGN + 3 },
   'traceability':           { group: 'Traceability', label: 'Traceability', order: 1 },
   'audit-trail':            { group: 'Traceability', label: 'Audit trail', order: 2 },
 
@@ -532,6 +539,7 @@ export default function MainLayout({
       { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'in-process', label: 'In-Process Checks', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'batch-execution', label: 'Batch Execution', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'product-specifications', label: 'Specifications', icon: ClipboardCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'master-formulas', label: 'Master Formulas', icon: BookMarked, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
 
       //  Deviations and CAPA are two registers, not one. This item
