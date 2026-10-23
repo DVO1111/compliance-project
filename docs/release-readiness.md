@@ -150,7 +150,7 @@ which is the control proving itself.
 | # | Decision | State |
 |---|---|---|
 | 1 | Receiver may not disposition | **Enforced** |
-| 2 | CoA verifier may not disposition | **Enforced**, beyond PM-03 on a named approval |
+| 2 | CoA verifier may not disposition | **Enforced**, beyond PM-03 on a named approval. Option B accepted 2026-10-23 as a **temporary** exception — PM-03 is not redrawn this release |
 | 3 | Sampler may not test | **Not enforced** — the one still open |
 | 4 | Releaser may not dispatch; no backdating | **Enforced** |
 | 5 | Signatures on QC/Production actions | **Enforced** for the finished-product verdict; two registered and held |
@@ -169,12 +169,29 @@ Detail, PM-03 impact and what each costs:
 | **Decision 3**, sampler versus tester | A PM-03 column for sampling, **and** a site procedure requiring independence. The brief forbids inventing a universal rule without one. The attribution it would read already exists and is preserved. |
 | `material_test_result` signature | The site's testing procedure: every result, or only critical parameters |
 | `batch_execution_close` signature | Procedure: whether closing is clerical, given stage completion is already signed |
-| Should `release` require a signature? | `requires_signature` is `false` on production today. A data change, not a migration. |
 | Should a role assignment need a second approver? | Currently one signature |
+| Whether to take Option A for incoming CoA verification eventually, and **which role** holds it | A quality judgement about supplier certificates. `docs/decision-note-coa-separation.md` §8 |
 
 `SELECT * FROM duty_decisions_outstanding();` returns exactly one row,
 and it is sampling. `SELECT * FROM signed_quality_actions WHERE NOT
-required;` returns the two held actions.
+required;` returns the two held actions. **One query covers all of
+them**, with which kind of open each one is:
+
+```sql
+SELECT key, state, enforced, temporary FROM public.policy_decisions_outstanding();
+```
+
+Six rows, the temporary exception first. Added by `20261131000000`;
+pass/fail criteria in
+[`docs/live-verification-checklist.md`](live-verification-checklist.md)
+§4b.
+
+### 4.2b Resolved since this report was first written
+
+| Item | Resolution |
+|---|---|
+| **Should `release` require a signature?** | **Not an open question — it already does.** `20261107000000` sets `requires_signature = true` for the one transition that reaches `released`. Production reads `false` only because that migration is **unapplied there**; deploying installs the requirement. Demonstrated locally: three routes tried (the engine with no signature, a direct write of `entity_current_state`, a direct write of `batch_records.status`), all three refused, batch unmoved. The residual risk is that `20261107000000`'s `UPDATE` matches zero rows on production if its transition row differs — checklist §11 |
+| **`material_coa_verify()` membership-only authorisation** | **Closed** by `20261130000000`. Was a release blocker: a member with no operational role could record a verification. Now reserved to PM-03's existing `qc_testing` / `qa_disposition` Act holders, with no abstention, enforced by a trigger so direct writes meet the same refusal. 15 regression assertions |
 
 ### 4.3 Subject to quality/regulatory confirmation before production
 

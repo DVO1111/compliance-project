@@ -656,6 +656,335 @@ END $h$;
 
 
 -- =====================================================================
+--  I. WHO MAY VERIFY AN INCOMING CERTIFICATE AT ALL
+--
+--  Section C proves that whoever verifies a lot's incoming
+--  certificate is then refused its disposition. This section asks the
+--  question underneath it: who was entitled to verify in the first
+--  place.
+--
+--  Before 20261130000000 the answer was "any member of the company".
+--  material_coa_verify() is SECURITY DEFINER with EXECUTE granted to
+--  `authenticated`, and its only check was app_is_company_member(). A
+--  storekeeper — a real role PM-03 gives no quality column at all —
+--  could record a verification, and the disposition gate would then
+--  read it as one.
+--
+--  The correction derives the authority from the columns PM-03
+--  already has (qc_testing Act, qa_disposition Act) rather than
+--  adding one, and does NOT abstain for somebody holding no role:
+--  abstaining is exactly how the hole stayed open.
+-- =====================================================================
+RESET ROLE;
+
+DO $i$
+DECLARE
+  c      uuid := current_setting('de.c')::uuid;
+  u_sk   uuid := current_setting('de.u_sk')::uuid;
+  u_an   uuid := current_setting('de.u_an')::uuid;
+  u_qa   uuid := current_setting('de.u_qa')::uuid;
+  u_non  uuid := gen_random_uuid();
+  v_mat  uuid := current_setting('de.mat')::uuid;
+  v_spec uuid; v_lot uuid; v_coa uuid;
+  tag    text := substr(replace(gen_random_uuid()::text,'-',''),1,8);
+BEGIN
+  --  A member of the company holding NO operational role. Everywhere
+  --  else in this system that person abstains; here they must not.
+  INSERT INTO auth.users(id,email) VALUES (u_non,'non-'||tag||'@de.test');
+  INSERT INTO public.profiles(id,email,full_name,company_id,role)
+  VALUES (u_non,'non-'||tag||'@de.test','Chidi Nobody',c,'content_creator');
+  INSERT INTO public.company_members(company_id,user_id,role,status)
+  VALUES (c,u_non,'viewer','active');
+  PERFORM set_config('de.u_non', u_non::text, false);
+
+  --  A specification with one parameter, so the RPC has arithmetic to
+  --  do and a verification to reach rather than failing earlier for an
+  --  unrelated reason.
+  INSERT INTO public.material_specifications(company_id,material_id,version,status,created_by)
+  VALUES (c,v_mat,'I-'||tag,'effective',u_qa) RETURNING id INTO v_spec;
+  INSERT INTO public.material_specification_parameters
+    (specification_id,parameter,unit,limit_type,min_value,max_value,is_critical)
+  VALUES (v_spec,'Assay','%','range',95.0,105.0,true);
+
+  INSERT INTO public.material_lots
+    (id,company_id,material_id,quantity_received,created_by,received_by)
+  VALUES (gen_random_uuid(),c,v_mat,25,u_sk,u_sk) RETURNING id INTO v_lot;
+  PERFORM set_config('de.i_lot', v_lot::text, false);
+
+  INSERT INTO public.material_certificates_of_analysis
+    (company_id,material_lot_id,supplier_results,uploaded_by)
+  VALUES (c,v_lot,'[{"parameter":"Assay","stated_value":99.0}]'::jsonb,u_sk)
+  RETURNING id INTO v_coa;
+  PERFORM set_config('de.i_coa', v_coa::text, false);
+END
+$i$;
+
+--  Impersonation, because this control is about who the caller is.
+SET ROLE authenticated;
+
+DO $i2$
+DECLARE
+  c     uuid := current_setting('de.c')::uuid;
+  v_coa uuid := current_setting('de.i_coa')::uuid;
+  v_lot uuid := current_setting('de.i_lot')::uuid;
+BEGIN
+  --  ── The storekeeper: a real role, no quality column ──────────────
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('de.u_sk'), 'role','authenticated')::text, false);
+
+  PERFORM _dek('I','I0 the impersonation is not a service context',
+    NOT public.app_is_service_context());
+
+  PERFORM _dek('I','I1 a storekeeper holds no Act on either quality column',
+    public.app_section_access(c,'qc_testing')      IS DISTINCT FROM 'act'
+    AND public.app_section_access(c,'qa_disposition') IS DISTINCT FROM 'act',
+    format('qc_testing=%s qa_disposition=%s',
+      coalesce(public.app_section_access(c,'qc_testing'),'(abstain)'),
+      coalesce(public.app_section_access(c,'qa_disposition'),'(abstain)')));
+
+  --  THE CALL THAT USED TO SUCCEED.
+  PERFORM _dek('I','I2 so the storekeeper is refused the verification',
+    _defail(format('SELECT public.material_coa_verify(%L)', v_coa))
+      = 'COA_VERIFY_FORBIDDEN',
+    _defail(format('SELECT public.material_coa_verify(%L)', v_coa)));
+
+  --  And the same fields written directly, which is the route a guard
+  --  living only inside the RPC would have missed.
+  PERFORM _dek('I','I3 and refused a direct write of the verification fields',
+    _defail(format(
+      'UPDATE public.material_certificates_of_analysis'
+      ' SET verification_status=%L, verified_by=%L, verified_at=now() WHERE id=%L',
+      'verified', current_setting('de.u_sk'), v_coa)) = 'COA_VERIFY_FORBIDDEN',
+    _defail(format(
+      'UPDATE public.material_certificates_of_analysis'
+      ' SET verification_status=%L, verified_by=%L, verified_at=now() WHERE id=%L',
+      'verified', current_setting('de.u_sk'), v_coa)));
+
+  --  BUT UPLOADING ONE IS STILL CLERICAL. A control that also stopped
+  --  the storekeeper filing the supplier's paperwork would be a
+  --  different and wrong rule.
+  PERFORM _dek('I','I4 but filing a certificate is still clerical, and allowed',
+    _defail(format(
+      'INSERT INTO public.material_certificates_of_analysis'
+      ' (company_id,material_lot_id,supplier_results,uploaded_by)'
+      ' VALUES (%L,%L,%L,%L)',
+      c, v_lot, '[{"parameter":"Assay","stated_value":98.0}]', current_setting('de.u_sk')))
+      = '(no refusal)',
+    _defail(format(
+      'INSERT INTO public.material_certificates_of_analysis'
+      ' (company_id,material_lot_id,supplier_results,uploaded_by)'
+      ' VALUES (%L,%L,%L,%L)',
+      c, v_lot, '[{"parameter":"Assay","stated_value":98.0}]', current_setting('de.u_sk'))));
+
+  --  ── Somebody holding no role at all: refused, NOT abstained ──────
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('de.u_non'), 'role','authenticated')::text, false);
+
+  PERFORM _dek('I','I5 a member holding no operational role is refused, not abstained',
+    _defail(format('SELECT public.material_coa_verify(%L)', v_coa))
+      = 'COA_VERIFY_FORBIDDEN',
+    _defail(format('SELECT public.material_coa_verify(%L)', v_coa)));
+
+  --  ── The QC Analyst: qc_testing Act. MUST still be able to ────────
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('de.u_an'), 'role','authenticated')::text, false);
+
+  PERFORM _dek('I','I6 the QC Analyst still verifies',
+    (public.material_coa_verify(v_coa) ->> 'verification_status') IS NOT NULL,
+    public.material_coa_verify(v_coa)::text);
+
+  PERFORM _dek('I','I7 and the verification is attributed to them',
+    (SELECT verified_by FROM public.material_certificates_of_analysis WHERE id = v_coa)
+      = current_setting('de.u_an')::uuid,
+    (SELECT coalesce(verified_by::text,'NULL')
+       FROM public.material_certificates_of_analysis WHERE id = v_coa));
+
+  --  ── AND DECISION 2 IS UNCHANGED. Narrowing who may verify must
+  --  not narrow what verifying costs them.
+  PERFORM _dek('I','I8 the verifier is still refused that lot''s disposition',
+    public.duty_conflict('material_lot', v_lot, 'disposition',
+      current_setting('de.u_an')::uuid) LIKE 'MATERIAL_DISPOSITION_SELF_VERIFIED%',
+    public.duty_conflict('material_lot', v_lot, 'disposition',
+      current_setting('de.u_an')::uuid));
+
+  --  ── The QA Manager: qa_disposition Act, so also entitled ─────────
+  PERFORM _dek('I','I9 a QA Manager holds Act on qa_disposition',
+    public.app_section_access(c,'qa_disposition',
+      current_setting('de.u_qa')::uuid) = 'act',
+    coalesce(public.app_section_access(c,'qa_disposition',
+      current_setting('de.u_qa')::uuid),'(abstain)'));
+
+  PERFORM _dek('I','I10 and is not refused the verification',
+    public.material_coa_verify_authority_error(c, current_setting('de.u_qa')::uuid) IS NULL,
+    coalesce(public.material_coa_verify_authority_error(
+      c, current_setting('de.u_qa')::uuid),'(allowed)'));
+
+  --  The refusal says what is missing. A bare "forbidden" sends
+  --  somebody to the wrong person.
+  PERFORM _dek('I','I11 the refusal names the roles that may',
+    public.material_coa_verify_authority_error(c, current_setting('de.u_non')::uuid)
+      LIKE '%QC testing or QA disposition%',
+    public.material_coa_verify_authority_error(c, current_setting('de.u_non')::uuid));
+END
+$i2$;
+
+RESET ROLE;
+SELECT set_config('request.jwt.claims','', false);
+
+--  The RPC's grants are part of the finding: EXECUTE to `authenticated`
+--  is what made membership-only authorisation reachable. Asserted so
+--  that a future migration widening it to anon or PUBLIC is noticed.
+DO $i3$
+BEGIN
+  PERFORM _dek('I','I12 material_coa_verify is not executable by anon or PUBLIC',
+    NOT (has_function_privilege('anon',
+          'public.material_coa_verify(uuid)', 'EXECUTE')
+         OR has_function_privilege('public',
+          'public.material_coa_verify(uuid)', 'EXECUTE')));
+
+  --  A service context is exempt, as everywhere: migrations, backfills
+  --  and edge functions are not people and hold no roles. The same
+  --  write that was refused above goes through here.
+  PERFORM _dek('I','I13 a service context is exempt from the authority check',
+    public.app_is_service_context()
+    AND _defail(format(
+      'UPDATE public.material_certificates_of_analysis'
+      ' SET verification_status=%L WHERE id=%L',
+      'rejected', current_setting('de.i_coa'))) = '(no refusal)');
+
+  --  And the authority check itself still says no about that person —
+  --  the exemption is the context, not a change of their standing.
+  PERFORM _dek('I','I14 without the check itself changing its answer',
+    public.material_coa_verify_authority_error(
+      current_setting('de.c')::uuid, current_setting('de.u_non')::uuid) IS NOT NULL);
+END
+$i3$;
+
+
+-- =====================================================================
+--  J. THE POLICY REGISTER
+--
+--  20261131000000 puts every open policy decision in one table, with
+--  WHICH KIND of open it is. A reporting register that drifts from the
+--  tables it reports on is worse than none, because it is believed —
+--  so these assertions check the register against the enforcement
+--  rather than against itself.
+-- =====================================================================
+DO $j$
+BEGIN
+  --  Option B is recorded, and recorded as TEMPORARY. The whole point
+  --  of the column is that an exception nobody revisits becomes the
+  --  design by default.
+  PERFORM _dek('J','J1 Option B is recorded as a temporary exception',
+    (SELECT temporary AND enforced AND state = 'enforced_pending_confirmation'
+       FROM public.policy_decisions
+      WHERE key = 'coa_verification_vs_disposition'),
+    (SELECT format('state=%s enforced=%s temporary=%s', state,
+             CASE WHEN enforced THEN 'y' ELSE 'n' END,
+             CASE WHEN temporary THEN 'y' ELSE 'n' END)
+       FROM public.policy_decisions
+      WHERE key = 'coa_verification_vs_disposition'));
+
+  --  AND THE CONTROL IS STILL ON. "Temporary exception" means PM-03 is
+  --  not redrawn; it does not mean the duty conflict was withdrawn.
+  PERFORM _dek('J','J2 and the duty conflict it describes is still enforced',
+    (SELECT enforced AND authority = 'approved_by_quality'
+       FROM public.duty_conflicts
+      WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'));
+
+  PERFORM _dek('J','J3 the exception is the only temporary one',
+    (SELECT count(*) FROM public.policy_decisions WHERE temporary) = 1,
+    (SELECT string_agg(key,', ') FROM public.policy_decisions WHERE temporary));
+
+  --  The four the brief named are open, by name. Deleting one must be
+  --  a failure, not a shorter report.
+  PERFORM _dek('J','J4 sampling versus testing is open, and its control is off',
+    (SELECT state = 'awaiting_decision' AND NOT enforced
+       FROM public.policy_decisions WHERE key = 'material_sampling_vs_testing'));
+
+  PERFORM _dek('J','J5 the material-test signature is held, not required',
+    (SELECT p.state = 'awaiting_procedure' AND NOT p.enforced
+       FROM public.policy_decisions p WHERE p.key = 'material_test_result_signature')
+    AND (SELECT NOT required FROM public.signed_quality_actions
+          WHERE action_key = 'material_test_result'));
+
+  PERFORM _dek('J','J6 the batch-execution-close signature is held, not required',
+    (SELECT p.state = 'awaiting_procedure' AND NOT p.enforced
+       FROM public.policy_decisions p WHERE p.key = 'batch_execution_close_signature')
+    AND (SELECT NOT required FROM public.signed_quality_actions
+          WHERE action_key = 'batch_execution_close'));
+
+  PERFORM _dek('J','J7 Decisions A and B are enforced but pending confirmation',
+    (SELECT count(*) FROM public.policy_decisions
+      WHERE key IN ('product_specification_approver',
+                    'product_specification_governing_version')
+        AND state = 'enforced_pending_confirmation' AND enforced) = 2);
+
+  --  The register must not contradict itself: nothing awaiting a
+  --  decision may claim its control is on, and nothing enforced
+  --  pending confirmation may claim it is off.
+  PERFORM _dek('J','J8 no row claims a state its enforcement contradicts',
+    NOT EXISTS (SELECT 1 FROM public.policy_decisions
+                 WHERE (state LIKE 'awaiting_%' AND enforced)
+                    OR (state = 'enforced_pending_confirmation' AND NOT enforced)),
+    (SELECT string_agg(format('%s/%s',key,state),', ') FROM public.policy_decisions
+      WHERE (state LIKE 'awaiting_%' AND enforced)
+         OR (state = 'enforced_pending_confirmation' AND NOT enforced)));
+
+  --  Temporary exceptions sort first, because they are the ones with
+  --  no written expiry.
+  PERFORM _dek('J','J9 the outstanding report puts the temporary exception first',
+    (SELECT key FROM public.policy_decisions_outstanding() LIMIT 1)
+      = 'coa_verification_vs_disposition',
+    (SELECT key FROM public.policy_decisions_outstanding() LIMIT 1));
+
+  PERFORM _dek('J','J10 and reports six open decisions, none settled',
+    (SELECT count(*) FROM public.policy_decisions_outstanding()) = 6
+    AND (SELECT count(*) FROM public.policy_decisions WHERE state = 'settled') = 0,
+    (SELECT count(*)::text FROM public.policy_decisions_outstanding()));
+
+  --  Every open row says what people are living with meanwhile, and
+  --  what would close it. A register of questions with no interim
+  --  behaviour recorded does not help an operator.
+  PERFORM _dek('J','J11 every open decision records its interim behaviour and what closes it',
+    NOT EXISTS (SELECT 1 FROM public.policy_decisions
+                 WHERE state <> 'settled'
+                   AND (length(btrim(interim)) < 20 OR length(btrim(needs)) < 20)),
+    (SELECT string_agg(key,', ') FROM public.policy_decisions
+      WHERE state <> 'settled'
+        AND (length(btrim(interim)) < 20 OR length(btrim(needs)) < 20)));
+
+  --  And a seventh rule table arriving world-writable would undo what
+  --  20261123000000 established.
+  PERFORM _dek('J','J12 the register is not writable by an app role',
+    NOT EXISTS (SELECT 1 FROM information_schema.role_table_grants
+                 WHERE table_schema='public' AND table_name='policy_decisions'
+                   AND grantee IN ('anon','authenticated')
+                   AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE')));
+
+  --  A settled decision cannot also be a temporary exception. The
+  --  CHECK is the control; this proves the CHECK is there.
+  PERFORM _dek('J','J13 a settled decision cannot be temporary',
+    _defail(
+      'INSERT INTO public.policy_decisions'
+      ' (key,area,title,state,enforced,temporary,interim,needs,reference)'
+      ' VALUES (''zz_probe'',''probe'',''probe'',''settled'',true,true,'
+      '''interim behaviour text long enough'','
+      '''what would close it, text long enough'','
+      '''a reference long enough to be one'')')
+      <> '(no refusal)',
+    _defail(
+      'INSERT INTO public.policy_decisions'
+      ' (key,area,title,state,enforced,temporary,interim,needs,reference)'
+      ' VALUES (''zz_probe2'',''probe'',''probe'',''settled'',true,true,'
+      '''interim behaviour text long enough'','
+      '''what would close it, text long enough'','
+      '''a reference long enough to be one'')'));
+END
+$j$;
+
+
+-- =====================================================================
 --  Results — COLUMN ORDER IS total, passed, failed.
 -- =====================================================================
 SELECT section, name, CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS result, detail

@@ -28,6 +28,30 @@ output recorded.**
 Record the output of each section. A section with findings is not a
 blocker by itself; it is something to explain before release.
 
+### The verdicts, on one page
+
+Each section below carries its own PASS / FAIL block. This is the
+summary, so an operator can see what the run has to produce before
+starting it.
+
+| § | Check | PASS | FAIL = do not release |
+|---|---|---|---|
+| 0 | Identity and position | it is Criateur: 8 of 8 core tables | a core table missing, or a project reference other than `ovxfflilbqaxedzovgmz` |
+| 1 | Migration position | 29 outstanding before, 29 applied after | any applied before, or any outstanding after |
+| 2 | **Role assignments** | every live grant of a GMP-critical role carries a signature **or** a recorded explanation | an unexplained `provenance = 'service'` or `rpc`-with-no-signature grant |
+| 3 | **Stranded work** | empty immediately after deployment | a row with `still_stranded` and no reassignment or explanation |
+| 4 | Outstanding duty decisions | exactly 1 duty row open (sampling); 6 enforced, 1 not | any other count, in either direction |
+| 4b | **Policy register** | 6 open decisions; exactly 1 marked `temporary` (the CoA exception) | the register disagrees with the table that enforces it |
+| 5 | **Outstanding signatures** | no **released** batch rests on an unsigned verdict | a released batch with `signature_id IS NULL` on a QC result |
+| 6 | **Audit immutability** | 3 block triggers present and enabled; findings limited to the 57 known unhashed entries and the 1 `CHAIN_REANCHOR` | a trigger absent or `DISABLED`, or a **contents** mismatch |
+| 7 | **Missing specifications** | every product with a batch awaiting release has an approved, effective specification | a batch blocked only for want of a specification nobody has approved |
+| 8 | Operational roles | at least one QA Manager appointed per active company, signed | none appointed — the enforcement layer is inert and nothing is releasable |
+| 9 | Membership untouched | `company_role` enum unchanged; `company_members` row count unchanged | either changed |
+| 10 | **Incoming CoA authorisation** | a member with no quality role is **refused** | the refusal does not fire — the release blocker is back |
+| 11 | **Unsigned release attempt** | refused on every path tried | any path moves a batch to `released` without a signature |
+
+The seven in bold are the ones the release brief named explicitly.
+
 ---
 
 ## §0 — Identity and position
@@ -62,7 +86,8 @@ WITH expected(version) AS (VALUES
   ('20261115000000'),('20261116000000'),('20261117000000'),('20261118000000'),
   ('20261119000000'),('20261120000000'),('20261121000000'),('20261122000000'),
   ('20261123000000'),('20261124000000'),('20261125000000'),('20261126000000'),
-  ('20261127000000'),('20261128000000'),('20261129000000')
+  ('20261127000000'),('20261128000000'),('20261129000000'),('20261130000000'),
+  ('20261131000000')
 )
 SELECT e.version,
        CASE WHEN m.version IS NULL THEN 'OUTSTANDING' ELSE 'applied' END AS state
@@ -71,8 +96,18 @@ SELECT e.version,
  ORDER BY e.version;
 ```
 
-**Before deployment:** all 27 OUTSTANDING.
-**After:** all 27 applied, and §§2–8 re-run.
+| | |
+|---|---|
+| **PASS, before deployment** | all **29** rows read `OUTSTANDING` |
+| **PASS, after deployment** | all **29** read `applied`, and §§2–11 re-run |
+| **FAIL** | any row `applied` in the before pass — the live position is not `20261101000000`, so `docs/live-readiness.md` and `docs/migration-verification.md` §1 are both computed from a stale boundary and must be recomputed before going further |
+| **FAIL** | any row `OUTSTANDING` in the after pass — the deployment stopped partway. `docs/migration-verification.md` §6 covers recovery; the boundary is a file, not a half-built table |
+
+Only 18 of these 29 are new on this branch. The first ten
+(`20261103000000`…`20261112000000`) are already on `main` and are
+**also** unapplied live, and most of what the branch builds on arrives
+in them — so the branch cannot be deployed without them. See
+`docs/migration-verification.md` §§1–2.
 
 ---
 
@@ -105,6 +140,32 @@ in the quality system why it stands.
 migration can appoint a QA Manager".** Skipping it removes the
 mitigation and leaves the residual.
 
+| | |
+|---|---|
+| **PASS** | the query returns **no rows**; or every row has been revoked and re-granted through the signed path; or every row has a written explanation filed in the quality system, naming the grant and why it stands |
+| **FAIL** | any row with `provenance = 'service'` or `bootstrap_self_declared` that nobody has explained. These are roles people hold that no person signed for |
+| **FAIL, and investigate before anything else** | a row with `provenance = 'rpc'` and no signature. After deployment that should be impossible — `operational_role_sign()` is required for every GMP-critical grant — so such a row means either the trigger is not firing or the grant predates it |
+
+Also confirm the requirement is still on. Membership of this table
+**is** the requirement — a role listed here cannot be granted without
+a signature, and the `basis` column says which PM-03 cell put it
+there:
+
+```sql
+SELECT role, left(basis, 70) AS basis FROM public.gmp_critical_roles
+ ORDER BY role;
+```
+
+**PASS:** exactly three rows — `compliance_admin`, `qa_manager`,
+`qa_officer` — each with a `basis` naming the PM-03 authority it
+derives from.
+
+**FAIL:** fewer than three. A role removed from this table can be
+granted unsigned, and `20261123000000` is supposed to have made the
+table unwritable by any app role, so a missing row means either a
+later migration changed it or the REVOKE did not hold. Check §2's
+first query for grants made while it was missing.
+
 *Before deployment this query does not exist — the function arrives
 with `20261121000000`. Run it in the after pass.*
 
@@ -130,8 +191,17 @@ SELECT public.stranded_work_reassign(
 
 to somebody who can act in that section, or a recorded explanation.
 
-**Expected immediately after deployment: empty**, because no role has
-been revoked yet. Rows appearing later are the mechanism working.
+| | |
+|---|---|
+| **PASS, after deployment** | **empty.** No role has been revoked yet, so nothing can be stranded |
+| **PASS, later** | every row either reassigned through `stranded_work_reassign()` — which records who authorised it and why — or carrying a written explanation. Rows appearing later are the mechanism working, not a defect |
+| **FAIL** | a row with `still_stranded` that has been sitting since before the last release, with neither a reassignment nor an explanation. That is unfinished regulated work with nobody accountable for it |
+| **FAIL** | a non-empty result in the **after-deployment** pass. The table deploys empty and no revocation has happened, so rows here mean the report is reading something other than what it is meant to |
+
+Reassignment preserves the original attribution: the first actor stays
+on the record and the reassignment is a new row, not an edit. If a row
+here was reassigned by overwriting the original actor instead, that is
+a finding in its own right.
 
 *Arrives with `20261124000000`.*
 
@@ -155,12 +225,44 @@ SELECT scope, duty_a, duty_b, enforced, decision_status, authority,
  ORDER BY scope, duty_a, duty_b;
 ```
 
-**Expected: 6 enforced, 1 not.** Five carry
-`authority = 'derived_from_pm03'`; one — CoA verification versus
-disposition — carries `approved_by_quality` with a reference.
+| | |
+|---|---|
+| **PASS** | `duty_decisions_outstanding()` returns **exactly one row**, and it is sampling versus testing. `duty_conflicts` has **6 enforced, 1 not** — five `derived_from_pm03`, one (`coa_verification`/`disposition`) `approved_by_quality` with a reference |
+| **FAIL** | more than one outstanding row — a decision was reopened, or a new pair was added without being approved |
+| **FAIL** | fewer than 6 enforced — **a control was switched off.** Check which, and against what approval |
+| **FAIL** | a row with `authority = 'derived_from_pm03'` that PM-03 does not in fact derive. `20261128000000` asserts this at migration time, so a live failure here means PM-03 was edited afterwards |
+
 See `docs/decision-note-coa-separation.md`.
 
 *Arrives with `20261125000000` / `20261128000000`.*
+
+---
+
+## §4b — The policy register
+
+One query for every policy decision that is still open, whatever kind
+of open it is. This replaces reading three tables and a document.
+
+```sql
+SELECT key, state, enforced, temporary, left(needs, 80) AS needs
+  FROM public.policy_decisions_outstanding();
+```
+
+| | |
+|---|---|
+| **PASS** | **6 rows**, and exactly **one** has `temporary = true`: `coa_verification_vs_disposition`. It sorts first |
+| **PASS** | three rows `enforced_pending_confirmation` (the CoA exception and specification Decisions A and B), one `awaiting_decision` (sampling), two `awaiting_procedure` (the material-test and batch-execution-close signatures) |
+| **FAIL** | `coa_verification_vs_disposition` absent, or `temporary = false`. Option B was accepted as a **temporary** release exception; a register that stops saying so is how an exception becomes the design |
+| **FAIL** | any row where `state LIKE 'awaiting_%'` and `enforced = true`, or `state = 'enforced_pending_confirmation'` and `enforced = false`. The register has drifted from the table that enforces it, and it is believed, so drift is worse than absence |
+| **FAIL** | more than one `temporary` row. A second temporary exception was accepted without passing through this document |
+
+**The CoA exception is not a control that is off.** The duty conflict
+is enforced and biting — §4's count of 6 includes it. What is
+temporary is that PM-03 is not redrawn to match it and no verification
+screen was built. Closing it means the Option A work in
+`docs/decision-note-coa-separation.md` §7.
+
+*Arrives with `20261131000000`.*
 
 ---
 
@@ -197,9 +299,16 @@ SELECT action_key, required, decision_status, left(basis, 70) AS basis
   FROM public.signed_quality_actions ORDER BY action_key;
 ```
 
-**Expected: `batch_qc_result` required; `material_test_result` and
-`batch_execution_close` not.** See
-`docs/separation-of-duties.md` §5.5.
+| | |
+|---|---|
+| **PASS** | **no released batch** rests on an unsigned QC verdict — the second query returns empty |
+| **PASS** | `batch_qc_result` is `required = true` / `enforced`; `material_test_result` and `batch_execution_close` are `required = false` / `awaiting_procedure`. Three rows, no more |
+| **Explain, do not block** | unsigned verdicts on batches that are **not** released. These are seeds, migrations, or results recorded before the control existed. They cannot be signed retrospectively — a signature means somebody attested at a moment, and backdating one is the forgery the control exists to prevent. Record which they are and that they predate the requirement |
+| **FAIL** | a **released** batch with `signature_id IS NULL` on any QC result. The release decision rests on a verdict nobody attested to. Do not sign it after the fact; record the finding and decide whether the release stands |
+| **FAIL** | `batch_qc_result` reads `required = false` — the finished-product verdict requirement was switched off |
+| **FAIL** | either held action reads `required = true` without an approval recorded in `policy_decisions`. Those two are pending a procedural answer the site has not given (§4b); switching one on without it is inventing the requirement |
+
+See `docs/separation-of-duties.md` §5.5.
 
 *Arrives with `20261127000000`.*
 
@@ -250,8 +359,25 @@ SELECT co.name, v.*
  ORDER BY co.name;
 ```
 
-Expect `unsealed` / `unhashed` findings corresponding to 6b. A
-**contents** mismatch would be new and is a blocker.
+Expect `unsealed` / `unhashed` findings corresponding to 6b.
+
+### Audit immutability — the verdict
+
+| | |
+|---|---|
+| **PASS, 6a** | all four triggers present and **enabled**: `trg_prevent_audit_log_deletion`, `trg_block_audit_update`, `trg_block_audit_delete`, `trg_block_audit_truncate` |
+| **PASS, 6b** | **57 unhashed** entries and **exactly 1** `CHAIN_REANCHOR` row — the documented history, left in place |
+| **PASS, 6c** | findings are `unsealed` / `unhashed` only, and their count reconciles with 6b |
+| **FAIL** | any of the three block triggers absent, or present with state `DISABLED`. A disabled immutability trigger is worse than a missing one, because the schema looks right |
+| **FAIL** | **more** unhashed entries than 6b records. New unhashed entries mean something is writing audit rows past the sealing path |
+| **FAIL** | **more than one** `CHAIN_REANCHOR` row. The chain was re-anchored again, which is a second rewrite of history and must be explained before release |
+| **FAIL, blocker** | a **contents** mismatch from `verify_audit_chain()`. That is an entry whose recorded hash does not match its own content — tampering or corruption, not a known gap |
+| **FAIL** | fewer unhashed entries than 6b records, or no `CHAIN_REANCHOR` row. **Somebody tidied the history.** Do not treat a cleaner result as an improvement: the 57 and the re-anchor are the evidence that a rewrite happened, and removing them removes the evidence |
+
+That last row is the one to read twice. The instruction throughout has
+been to preserve this history, including the parts of it that look
+untidy. Do not compute hashes for the unhashed entries and do not
+delete the re-anchor row.
 
 ---
 
@@ -310,6 +436,22 @@ SELECT count(*) AS finished_qc_results FROM public.batch_qc_results;
 **Snapshot: 0.** A specification alone will not release a batch that
 has no results against it.
 
+### Missing specifications — the verdict
+
+| | |
+|---|---|
+| **PASS** | every product in 7b with `open_batches > 0` has `approved_specifications >= 1`, and that specification's `effective_date` reaches back to `earliest_open_manufacture` |
+| **PASS** | 7c returns NULL — nothing in the gate objects — for every batch intended for release in this round |
+| **Expected, not a failure** | immediately after deployment, **zero** approved specifications and every open batch blocked. Nothing is back-filled: approving a specification is a signed quality act and a migration cannot perform one. See `docs/specification-backfill-plan.md` |
+| **FAIL** | a batch whose only block reason is a missing specification, **and** somebody intends to release it this round. Approve the specification through the signed path first; do not switch the gate off |
+| **FAIL** | a specification whose `effective_date` was set **later** than a batch it is meant to govern. Decision B stamps the version effective at manufacture, so a specification that post-dates the batch does not govern it and the gate will keep refusing — correctly |
+| **FAIL, do not work around** | a batch with 0 finished-product QC results that somebody wants released. There is nothing to judge it against. This is not a gate to be loosened |
+
+The specification gate refusing everything on day one is the control
+working, not a deployment defect. What turns it off is step 7 of
+`docs/migration-verification.md` §7: a QA Manager approving real
+specifications.
+
 ---
 
 ## §8 — Operational roles
@@ -347,6 +489,17 @@ SELECT company_id, count(*) AS active_members
 Each needs `operational_role_bootstrap(...)`, which is self-declared,
 signed, permanently marked and reported by §2.
 
+### Role assignments — the verdict
+
+| | |
+|---|---|
+| **PASS, immediately after deployment** | all four figures zero, `bridge_on` as `20261119000000` left it. The register deploys empty because inventing an assignment would assert an authority nobody granted |
+| **PASS, before go-live** | `qa_managers >= 1` for every company that intends to release anything, every live assignment carries a grant signature (§2 empty), and no assignment names the same person as both grantor and grantee outside a recorded bootstrap |
+| **FAIL** | `qa_managers = 0` while somebody expects to approve a specification or release a batch. Nothing will work, and the reason will look like a bug rather than a missing appointment |
+| **FAIL** | a live assignment of `qa_manager`, `qa_officer` or `compliance_admin` with no `grant_signature_id` and no `provenance` explaining why — that is §2's finding, restated from the other side |
+| **FAIL** | a person holding two roles whose Act cells collide on a duty pair in `duty_conflicts`. This is **allowed** by the role model — multiple roles are the point — but it means that person will be refused at the second step of a pair, so somebody else must be available for it. A single-person workspace holding every role can perform no separated duty at all. Check it now rather than discovering it at a release |
+| **Explain** | any `provenance = 'bootstrap_self_declared'` grant. Authority is declared, not independently verified; in a workspace of one there is no second party. The compensating control is the regulatory submission, not the database |
+
 ---
 
 ## §9 — Membership is untouched
@@ -369,6 +522,201 @@ SELECT format_type(a.atttypid, a.atttypmod) AS role_column_type,
 No migration on this branch alters the enum or the table — verified
 against the branch, not assumed.
 
+| | |
+|---|---|
+| **PASS** | `company_role`, exactly `owner, admin, legal, marketing, viewer`, and the member count unchanged from the before pass |
+| **FAIL** | the enum gained a value. `20261119000000` deliberately left `company_members.role` alone and added a separate register, so a new enum value came from somewhere else |
+| **FAIL** | the member count changed across the deployment. No migration on this branch writes to `company_members` |
+
+---
+
+## §10 — Incoming CoA authorisation
+
+**The release blocker found on 2026-10-23, and the check that it is
+closed.**
+
+Before `20261130000000`, `material_coa_verify()` checked company
+membership and nothing else. It is `SECURITY DEFINER` with `EXECUTE`
+granted to `authenticated`, so **any signed-in member of a company
+could record a verification of an incoming supplier certificate** — a
+storekeeper, a viewer, anyone. The material disposition gate reads
+`material_certificates_of_analysis.verified_by`, so such a
+verification both recorded a quality judgement nobody was entitled to
+make and created a duty conflict against the person who made it.
+
+This is settled read-only, which is why it is a check and not a
+drill. `material_coa_verify_authority_error()` is `STABLE` and returns
+the refusal reason without writing anything:
+
+```sql
+--  For every active member of every company: may they verify an
+--  incoming certificate, and do they hold a quality role?
+SELECT co.name AS company,
+       p.full_name,
+       --  app_work_roles returns an EMPTY ARRAY, not NULL, for
+       --  somebody holding nothing — so nullif, not coalesce alone.
+       coalesce(nullif(array_to_string(
+                  public.app_work_roles(co.id, m.user_id), ', '), ''),
+                '(no operational role)')                       AS roles_held,
+       public.app_section_access(co.id, 'qc_testing',     m.user_id) AS qc_testing,
+       public.app_section_access(co.id, 'qa_disposition', m.user_id) AS qa_disposition,
+       CASE WHEN public.material_coa_verify_authority_error(co.id, m.user_id) IS NULL
+            THEN 'MAY VERIFY' ELSE 'refused' END               AS verdict
+  FROM public.company_members m
+  JOIN public.companies co ON co.id = m.company_id
+  LEFT JOIN public.profiles p ON p.id = m.user_id
+ WHERE coalesce(m.status::text,'active') = 'active'
+ ORDER BY co.name, verdict DESC, p.full_name;
+```
+
+| | |
+|---|---|
+| **PASS** | every row reading `MAY VERIFY` has `act` in `qc_testing` **or** `qa_disposition`. Every row with `(no operational role)` reads `refused` |
+| **PASS** | the trigger is present: `trg_material_coa_verification_authority` on `material_certificates_of_analysis` |
+| **FAIL, release blocker** | any row with `(no operational role)` reading `MAY VERIFY`. The membership-only hole is back — the authority function is abstaining where it must refuse |
+| **FAIL, release blocker** | the trigger is absent or `DISABLED`. The RPC's guard lives in the trigger precisely so a direct `UPDATE` meets the same refusal; without it, writing `verification_status` and `verified_by` by hand bypasses everything |
+
+Confirm the trigger and the grants:
+
+```sql
+SELECT t.tgname,
+       CASE t.tgenabled WHEN 'D' THEN 'DISABLED' ELSE 'enabled' END AS state
+  FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+ WHERE c.relname = 'material_certificates_of_analysis' AND NOT t.tgisinternal
+ ORDER BY t.tgname;
+
+SELECT has_function_privilege('anon',
+         'public.material_coa_verify(uuid)','EXECUTE')          AS anon_may,
+       has_function_privilege('authenticated',
+         'public.material_coa_verify(uuid)','EXECUTE')          AS authenticated_may;
+```
+
+**PASS:** `anon_may` is `false`; `authenticated_may` is `true` — and
+the authority check above is what makes that safe.
+**FAIL:** `anon_may` is `true`. An unauthenticated caller could reach
+the RPC, and membership would be the only thing between them and a
+verified certificate.
+
+**Filing a certificate is deliberately still open to any member.**
+Uploading the supplier's document, correcting its path or recording
+its number are clerical. Only setting `verification_status` or
+`verified_by` is the quality judgement. If an operator reports that
+goods-in can no longer attach certificates, that is a defect, not this
+control.
+
+*Arrives with `20261130000000`.*
+
+---
+
+## §11 — Unsigned release attempt
+
+A batch must not reach `released` without an electronic signature.
+Three things make that true, and all three can be read without
+writing.
+
+```sql
+--  (a) Which transitions reach `released`, and which demand a
+--  signature. Only one transition should reach it at all.
+--
+--  The entity type is `batch_record`, not `batch`, and the transition
+--  table stores state IDs rather than keys — hence the joins.
+SELECT d.entity_type,
+       fs.state_key AS from_state,
+       ts.state_key AS to_state,
+       t.action_key,
+       t.requires_signature
+  FROM public.lifecycle_transitions t
+  JOIN public.lifecycle_definitions d ON d.id = t.definition_id
+  JOIN public.lifecycle_states fs     ON fs.id = t.from_state_id
+  JOIN public.lifecycle_states ts     ON ts.id = t.to_state_id
+ WHERE ts.state_key = 'released'
+ ORDER BY d.entity_type, fs.state_key;
+
+--  (b) Can an application role write the state table directly?
+SELECT grantee, privilege_type
+  FROM information_schema.role_table_grants
+ WHERE table_schema='public' AND table_name='entity_current_state'
+   AND grantee IN ('anon','authenticated')
+ ORDER BY grantee, privilege_type;
+
+--  (c) Is the status column still derived rather than writable?
+SELECT t.tgname,
+       CASE t.tgenabled WHEN 'D' THEN 'DISABLED' ELSE 'enabled' END AS state
+  FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+ WHERE c.relname = 'batch_records' AND NOT t.tgisinternal
+   AND t.tgname LIKE '%status%'
+ ORDER BY t.tgname;
+```
+
+| | |
+|---|---|
+| **PASS, (a)** | **exactly one** row: `batch_record`, `qc_in_progress → released`, action `release`, `requires_signature` **`true`** |
+| **PASS, (b)** | **no `INSERT`, `UPDATE` or `DELETE`** granted to `anon` or `authenticated`. Six rows are expected — `SELECT`, `REFERENCES` and `TRIGGER` for each of the two roles — and none of those three can change a row |
+| **PASS, (c)** | `trg_batch_records_guard_status` present and **enabled**, so `batch_records.status` stays derived from the lifecycle engine |
+| **FAIL, release blocker** | `requires_signature` is **`false`** on the release transition. `lifecycle_transition()` then never calls `lifecycle_consume_signature`, so `p_signature_id` is ignored entirely and **any permitted caller can release a batch without signing**. See the note below — this is the state production is in today |
+| **FAIL, release blocker** | a second transition reaches `released`, especially one with `requires_signature = false`. That is a second door into the same state, and the signature requirement is attached to transitions, not to the state |
+| **FAIL, release blocker** | `authenticated` holds `UPDATE` on `entity_current_state`. The state could then be written directly, skipping the engine and its signature check |
+
+### What `requires_signature = false` actually means, and why production reads it
+
+`20261107000000` is the migration that sets `requires_signature =
+true`, and it sets it for **one** transition only —
+`qc_in_progress → released`. That migration is **unapplied on
+production**, which is why the snapshot in `docs/live-readiness.md`
+records production as `false`.
+
+So the `false` reading on production today is **not a bypass in a
+deployed control**. It is the absence of the control, and deploying
+the migration set is what installs it. Read in the **before** pass,
+`false` is expected. Read in the **after** pass, `false` is a
+blocker.
+
+**The subtle failure to watch for.** `20261107000000` sets the flag
+with an `UPDATE` matched on `from_state = 'qc_in_progress'`,
+`to_state = 'released'`, `action = 'release'`. If production's
+transition row differs in any of those three values, **the `UPDATE`
+matches zero rows and reports success**, and the signature
+requirement is silently absent afterwards. Query (a) in the after pass
+is what catches that, and it is the single most important line in this
+section. The local schema was verified to have exactly one matching
+transition; **production's transition rows have not been compared.**
+
+### The active demonstration, if you want one
+
+Queries (a)–(c) are conclusive and read-only, and are enough. If a
+reviewer wants the refusal demonstrated rather than inferred, it can
+only be done by attempting it — which means **this document's
+read-only guarantee stops here.** Do it inside a transaction that is
+rolled back, on a batch the gate does not otherwise object to, and
+read the result before committing anything:
+
+```sql
+BEGIN;
+  --  Pick a batch the gate has no other objection to, so a refusal
+  --  can only be about the signature.
+  SELECT b.id, b.batch_number,
+         coalesce(public.batch_release_block_reason(b.id),'(none)') AS gate_objection
+    FROM public.batch_records b
+   WHERE b.status = 'qc_in_progress'
+   ORDER BY b.manufacturing_date;
+
+  --  Then, as a QA Manager, with no signature. The entity type is
+  --  `batch_record`:
+  --    SELECT public.lifecycle_transition(
+  --             'batch_record','<batch id>','release','<company id>');
+ROLLBACK;
+```
+
+**PASS:** it raises `LIFECYCLE_SIGNATURE_REQUIRED`.
+**FAIL, release blocker:** the batch moves to `released`.
+
+`ROLLBACK`, not `COMMIT`, and do not leave the transaction open — an
+idle transaction holds locks on `batch_records`. On the local schema
+all three routes were tried (the engine with no signature, a direct
+`UPDATE` on `entity_current_state`, a direct `UPDATE` on
+`batch_records.status`) and all three were refused, with the batch
+still `qc_in_progress` afterwards.
+
 ---
 
 ## Recording the result
@@ -380,13 +728,36 @@ against the branch, not assumed.
 | §2 unsigned grants | ☐ | | |
 | §3 stranded work | ☐ | | |
 | §4 duty decisions | ☐ | | |
+| §4b policy register | ☐ | | |
 | §5 unsigned verdicts | ☐ | | |
 | §6 audit chain | ☐ | | |
 | §7 specifications and batches | ☐ | | |
 | §8 operational roles | ☐ | | |
 | §9 membership untouched | ☐ | | |
+| §10 incoming CoA authorisation | ☐ | | |
+| §11 unsigned release attempt | ☐ | | |
 
 Live verification is complete when every box is ticked **against
 project `ovxfflilbqaxedzovgmz`** and every finding has an entry in the
 last column. Until then it is not complete, however much of the local
 suite passes.
+
+### The four that are release blockers if they fail
+
+Everything above is worth knowing. These four stop a release:
+
+1. **§10** — a member with no quality role reads `MAY VERIFY`, or the
+   authority trigger is missing or disabled.
+2. **§11** — `requires_signature` is `false` on the release transition
+   in the **after** pass, a second transition reaches `released`, or
+   `authenticated` holds `UPDATE` on `entity_current_state`.
+3. **§6** — a **contents** mismatch in the audit chain, a block
+   trigger absent or disabled, or the known history (57 unhashed
+   entries, 1 `CHAIN_REANCHOR`) tidied away.
+4. **§5** — a **released** batch resting on a QC verdict nobody
+   signed.
+
+The rest are findings to explain. §§7 and 8 reading "nothing is
+releasable" immediately after deployment is the expected state, not a
+failure: the controls are installed and inert until somebody with
+authority appoints roles and approves specifications.

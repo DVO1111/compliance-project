@@ -7,9 +7,18 @@ cost, and what happens if nothing changes.
 
 **No permission has been changed.** PM-03 is exactly as it was.
 
-Status: **open, awaiting your decision.** The control is enforced
-either way; what is open is whether the matrix should be redrawn to
-match it.
+Status: **Option B accepted, 2026-10-23, as a temporary and documented
+release exception.** PM-03 is not redrawn for this release and no
+verification screen is built. The divergence between the gate and the
+matrix stands and is on the record.
+
+Recorded in the database as
+`policy_decisions.key = 'coa_verification_vs_disposition'` with
+`temporary = true`, so it appears first in
+`policy_decisions_outstanding()` rather than quietly becoming the
+design. §4 below — the membership-only gap — **was closed separately
+and is no longer part of this decision**; see §4 for what was done
+instead.
 
 Last reviewed: 2026-10-23.
 
@@ -146,20 +155,100 @@ every option in this note.
 
 ---
 
-## 4. A gap found while writing this, recorded not closed
+## 4. The gap found while writing this — now closed
 
-`material_coa_verify()` checks **company membership and nothing
-else**. Any active member of the company can verify an incoming
-certificate today — a storekeeper, a viewer, anyone.
+### What it was
 
-That is not a regression; it predates this branch. It is listed here
-because the PM-03 change in §2 is also the fix: whichever role gets
-the column, the RPC should assert it.
+`material_coa_verify()` checked **company membership and nothing
+else**. Any active member of the company could verify an incoming
+certificate — a storekeeper, a viewer, anyone.
 
-**Not closed here**, because closing it means choosing the role, which
-is the decision this note is asking for. Closing it without the
-decision would be granting the authority to whoever happened to be
-convenient.
+Not inferred from reading the code. Demonstrated: a member of a
+company holding **no operational role at all**, in a confirmed
+non-service context, called the RPC and got back
+
+```
+verification_status = 'verified', verified_by = <their own id>
+```
+
+The function is `SECURITY DEFINER`, owned by `postgres`, with
+`EXECUTE` granted to `authenticated` and `service_role` (not `anon`,
+not `PUBLIC`). So membership was the only check between any signed-in
+member and a verified certificate.
+
+That mattered twice over: the disposition gate reads
+`material_certificates_of_analysis.verified_by`, so an unauthorised
+verification **both** recorded a quality judgement nobody was entitled
+to make **and** created a duty conflict against the person who made
+it.
+
+This predates the branch. It was a release blocker regardless.
+
+### What was done — `20261130000000`
+
+The authority is derived from the columns **PM-03 already has**, so
+Option B's "do not redesign PM-03" is respected:
+
+```sql
+app_section_access(company, 'qc_testing')     = 'act'
+OR app_section_access(company, 'qa_disposition') = 'act'
+```
+
+That admits `qc_analyst`, `qa_officer` and `qa_manager` — every one of
+which already holds Act on a quality column today. **No column is
+added, no cell is changed, no role gains an authority it did not
+have**, and no screen is needed. The check reads the grid at run time
+rather than naming roles, so it follows PM-03 if PM-03 ever changes.
+
+`= 'act'` rather than `<> 'none'`, so a PM-04 restriction lowering
+somebody to view also refuses them here.
+
+### No abstention, deliberately
+
+Everywhere else, somebody holding no tabulated role **abstains**, so
+that the design declining to rule never locks a workspace out of its
+own work. Abstaining here would leave exactly the hole that was
+demonstrated — the people with no role are the ones who could verify.
+So this is the second place that does not abstain, for the same reason
+`20261117000000` gave for specification approval.
+
+### Where the guard lives, and why not inside the RPC
+
+In a `BEFORE INSERT OR UPDATE` trigger on
+`material_certificates_of_analysis`, not in the function body. Two
+reasons:
+
+1. A direct `UPDATE` setting `verification_status` and `verified_by`
+   meets the **same** refusal as the RPC. A guard living only inside
+   `material_coa_verify()` would have been bypassable by anyone who
+   could write the table.
+2. `material_coa_verify()` is ~170 lines of verification arithmetic
+   with its own tests. Re-issuing it to add four lines is how an
+   unrelated regression gets in.
+
+**Filing a certificate stays clerical.** Uploading the supplier's
+document, correcting its path or recording its number remain open to
+any member, as before — only setting `verification_status` or
+`verified_by` is gated.
+
+### And Decision 2 is unchanged
+
+Narrowing who may verify does not narrow what verifying costs them. A
+QA Manager who verifies a lot's certificate is still refused that
+lot's disposition; somebody else must make it.
+
+### Tests
+
+`supabase/tests/decision_enforcement_test.sql` section I, 15
+assertions: the storekeeper refused (the exact call that succeeded
+before), the direct write refused, a role-less member refused rather
+than abstained, filing still allowed, the QC Analyst still able and
+still attributed, the QA Manager not refused, Decision 2 still biting
+on the verifier, `anon` still without `EXECUTE`, and a service context
+still exempt without the check changing its answer about that person.
+
+Plus migration-time assertions in `20261130000000` itself, which
+attempt the original exploit and fail the migration if it succeeds.
 
 ---
 
@@ -219,25 +308,55 @@ claims PM-03 falsely, and the outgoing register is untouched.
 | PM-03 | new `incoming_coa_verification` column; qc_analyst gains Act, both QA roles reduced to view | unchanged | unchanged |
 | Gate | unchanged in behaviour; authority drops to `derived_from_pm03` | unchanged | the pair is unenforced |
 | Screen | a verification screen would have to be built | none | none |
-| `material_coa_verify` | gains a section guard — closes §4 | stays membership-only | stays membership-only |
+| `material_coa_verify` | gains a section guard on the new column | **reserved to the quality roles PM-03 already names — §4, done** | would still need §4's fix |
 | Divergence | **resolved** | **stands, documented** | n/a |
 | Work | a migration, an RPC guard, a screen | none | one `UPDATE` |
 
-**Recommendation: Option B for this release.** The control is enforced
-and correct either way; Option A grants a role a new authority and
-requires a screen that does not exist, which is more than a release
-candidate should absorb. Option C removes a control the brief asked
-for.
+**Option B was taken, 2026-10-23**, as a temporary release exception.
+The control is enforced and correct either way; Option A grants a role
+a new authority and requires a screen that does not exist, which is
+more than a release candidate should absorb. Option C removes a
+control the brief asked for.
 
-If you take Option B, the divergence stands and is recorded in the
-conflict register §40 for the design to resolve in its own time.
+The divergence stands, recorded in the conflict register §40 and in
+`policy_decisions` with `temporary = true`, for the design to resolve
+in its own time.
 
 ---
 
-## 8. What I need from you
+## 8. What is settled, and what is still open
 
-1. **A, B or C.**
-2. If A: **which role** gets Act on incoming CoA verification. I will
-   not choose it.
-3. Either way: whether `material_coa_verify()`'s membership-only guard
-   (§4) should be closed in this release or listed as a known gap.
+### Settled
+
+| | |
+|---|---|
+| **Option B** | accepted 2026-10-23 as a **temporary** exception. PM-03 is not redrawn; no verification screen is built |
+| **§4, the membership-only gap** | **closed** by `20261130000000`, without choosing a new role and without touching PM-03. See §4 |
+
+Closing §4 did not require the decision this note was asking for,
+which is why it was closed separately. The authority came from the
+grid's existing quality columns rather than from a new one, so no
+role gained anything and nothing had to be chosen on the site's
+behalf.
+
+### Still open — and it needs a quality judgement, not a migration
+
+**Whether to take Option A eventually, and if so which role holds
+Act on incoming CoA verification.** This note will not choose it. The
+case for `qc_analyst`: the act is comparing stated results against
+specification limits, which is analytical work. The case against: a
+certificate is a supplier-quality document and some sites treat it as
+QA's.
+
+Until that is answered:
+
+- the gate stays stricter than the matrix, on a recorded approval;
+- `duty_pair_is_derived()` keeps returning false for the pair, so the
+  explicit approval keeps being required;
+- `20261129000000` asserts that nobody turns
+  `incoming_coa_verification` into a PM-03 column without noticing,
+  because the moment it becomes one the pair silently looks derivable
+  and the approval stops being demanded.
+
+Reviewing it is tracked by `policy_decisions_outstanding()`, where the
+temporary exception sorts first.

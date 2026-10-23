@@ -1401,3 +1401,68 @@ means granting a role a new authority.
 [`docs/decision-note-coa-separation.md`](decision-note-coa-separation.md)
 sets out the exact seed, the affected roles and screens, and three
 options. *For the design to resolve.*
+
+---
+
+## 44. Membership is not a quality role
+
+Two things resolved on 2026-10-23, both from §43.
+
+### The divergence stands, temporarily and on the record
+
+**Option B was accepted**: PM-03 is not redrawn for this release and
+no verification screen is built. The gate stays stricter than the
+matrix, on the recorded approval §40 describes.
+
+What is new is that the acceptance is marked **temporary**.
+`20261131000000` adds a `policy_decisions` register where this pair
+carries `temporary = true` and sorts first in
+`policy_decisions_outstanding()`. The reason for the column is the
+failure mode: an exception nobody revisits becomes the design by
+default, and the permission screen goes on showing a QA Officer able
+to do both acts for as long as nobody looks.
+
+*Still for the design to resolve:* whether to take Option A, and if so
+which role holds Act on incoming CoA verification. That is a judgement
+about supplier certificates, and the software will not make it.
+
+### The membership-only gap was closed, without making that choice
+
+§43 recorded `material_coa_verify()` as guarded by company membership
+and nothing else, and left it because closing it looked like it
+required choosing the role.
+
+**It did not, and it was a release blocker.** Demonstrated rather than
+inferred: a member of a company holding **no operational role**, in a
+confirmed non-service context, called the RPC and the certificate came
+back `verified` with their own id as `verified_by`. The function is
+`SECURITY DEFINER` with `EXECUTE` to `authenticated`, so membership
+was the only check. That no screen calls the RPC did not matter — the
+RPC is reachable, and the disposition gate reads what it writes.
+
+`20261130000000` closes it from the columns **PM-03 already has**:
+
+```sql
+app_section_access(company,'qc_testing')     = 'act'
+OR app_section_access(company,'qa_disposition') = 'act'
+```
+
+No column added, no cell changed, no role given anything new — every
+role this admits already holds Act on a quality column. The check
+reads the grid at run time rather than naming roles, so it follows
+PM-03 if PM-03 changes.
+
+Three details worth recording for the design:
+
+- **It does not abstain.** Everywhere else, a role PM-03 does not
+  tabulate abstains so that the design declining to rule never locks a
+  workspace out of its own work. Abstaining here would leave precisely
+  the hole that was demonstrated. Second place in the system that
+  refuses rather than abstains, after specification approval.
+- **The guard is a trigger, not a line in the function.** So a direct
+  `UPDATE` of `verification_status` / `verified_by` meets the same
+  refusal as the RPC.
+- **Filing a certificate is still clerical.** Uploading the supplier's
+  document, fixing its path, recording its number — all still open to
+  any member. Only the verification is gated. A screen that lets
+  goods-in attach a certificate is correct and must not be changed.
