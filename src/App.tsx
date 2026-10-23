@@ -28,6 +28,7 @@ import ContactPage from './pages/ContactPage';
 import type { MarketingPage } from './pages/landing/shell';
 import LoginPage from './components/Auth/LoginPage';
 import ResetPasswordPage from './components/Auth/ResetPasswordPage';
+import AuthCallbackPage from './components/Auth/AuthCallbackPage';
 import AccessRequestsPage from './components/Auth/AccessRequestsPage';
 import SignupPage from './components/Auth/SignupPage';
 import SetupHubGate from './components/Onboarding/navy/SetupHubGate';
@@ -563,6 +564,11 @@ function AppContent() {
       The hub above is served first because it needs no database. */
   if (!isSupabaseConfigured) {
     return <ConfigurationNeeded />;
+  }
+
+  // Verify invitation and password-recovery links.
+  if (appPath() === '/auth/callback') {
+    return <AuthCallbackPage />;
   }
 
   if (passwordPreview) {
