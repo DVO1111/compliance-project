@@ -4,6 +4,16 @@ import { appPath, appUrl, SIGN_IN_PATHS, WORKSPACE_PATH } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
+import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
+import QaDispositionPage from './components/Materials/QaDispositionPage';
+import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
+import QcTestingPage from './components/Materials/QcTestingPage';
+import TraceabilityPage from './components/Materials/TraceabilityPage';
+import MyTasksPage from './components/Tasks/MyTasksPage';
+import DispatchPage from './components/Distribution/DispatchPage';
+import QaManagerDashboard from './components/Dashboard/QaManagerDashboard';
+import StorekeeperDashboard from './components/Dashboard/StorekeeperDashboard';
+import DerivedRoleDashboard from './components/Dashboard/DerivedRoleDashboard';
 import { useEffect, useRef, useState, lazy, Suspense, type ComponentType } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase } from './lib/supabase';
@@ -27,6 +37,7 @@ import ConfigurationNeeded from './components/ConfigurationNeeded';
 import WorkspaceSetupNeeded from './components/WorkspaceSetupNeeded';
 import { isSupabaseConfigured } from './lib/supabase';
 import MainLayout from './components/Layout/MainLayout';
+import { isPageId } from './components/Layout/MainLayout';
 import type { PageId } from './components/Layout/MainLayout';
 import { useCalendarReminders } from './hooks/useCalendarReminders';
 import { useRoutePersistence } from './hooks/useRoutePersistence';
@@ -237,108 +248,24 @@ const FINISH_ROW_PAGES: Record<'invitations' | 'licence-details' | 'starter-reco
   'starter-records': 'obligations',
 };
 
-function isValidPageId(value: any): value is PageId {
-  return (
-    value === 'dashboard' ||
-    value === 'products' ||
-    value === 'upload' ||
-    value === 'archive' ||
-    value === 'regulations' ||
-    value === 'legal-review' ||
-    value === 'training-log' ||
-    value === 'company-settings' ||
-    value === 'company-members' ||
-    value === 'company-invites' ||
-    value === 'company-departments' ||
-    value === 'correction-editor' ||
-    value === 'profile' ||
-    value === 'license-vault' ||
-    value === 'integrations' ||
-    value === 'audit-trail' ||
-    value === 'role-management' ||
-    value === 'content-calendar' ||
-    value === 'team-chat' ||
-    value === 'drift-monitor' ||
-    value === 'consent-management' ||
-    value === 'content-blocks' ||
-    value === 'agency-portal' ||
-    value === 'compliance-reporting' ||
-    value === 'horizon-scanning' ||
-    value === 'channel-rules' ||
-    value === 'regulatory-library' ||
-    value === 'translation-compliance' ||
-    value === 'crisis-response' ||
-    value === 'programmatic-ad' ||
-    value === 'whistleblower' ||
-    value === 'predictive-risk' ||
-    value === 'social-listening' ||
-    value === 'website-monitoring' ||
-    value === 'vendor-scorecard' ||
-    value === 'capa-management' ||
-    value === 'training-simulation' ||
-    value === 'claim-extraction' ||
-    value === 'secret-vault' ||
-    value === 'legal-marketplace' ||
-    value === 'legal-partner-dashboard' ||
-    value === 'partner-verification' ||
-    value === 'policy-assistant' ||
-    value === 'grc-frameworks' ||
-    value === 'grc-controls' ||
-    value === 'grc-automation' ||
-    value === 'grc-dashboard' ||
-    value === 'policies' ||
-    value === 'policy-detail' ||
-    value === 'my-policies' ||
-    value === 'vendors' ||
-    value === 'vendor-detail' ||
-    value === 'audit-sessions' ||
-    value === 'audit-session-detail' ||
-    value === 'risk-register' ||
-    value === 'risk-detail' ||
-    value === 'command-center' ||
-    value === 'obligations' ||
-    value === 'obligation-detail' ||
-    value === 'identity-providers' ||
-    value === 'platform-jobs' ||
-    value === 'retention-policies' ||
-    value === 'legal-holds' ||
-    value === 'governance-timeline' ||
-    value === 'ai-reviews' ||
-    value === 'ai-prompts' ||
-    value === 'platform-webhooks' ||
-    value === 'platform-evidence-ingestions' ||
-    value === 'platform-ecosystem' ||
-    value === 'billing' ||
-    value === 'notifications' ||
-    value === 'batch-release' ||
-    value === 'change-control' ||
-    value === 'sop-library' ||
-    value === 'supplier-qualification' ||
-    value === 'gmp-inspection' ||
-    value === 'ai-insights' ||
-    value === 'framework-library' ||
-    value === 'control-monitoring' ||
-    value === 'regulatory-affairs' ||
-    value === 'son-compliance' ||
-    value === 'ctd-dossier' ||
-    value === 'contraband-rejection' ||
-    value === 'shipment-event-log' ||
-    value === 'cn-declarations' ||
-    value === 'compliance-alerting' ||
-    value === 'audit-prep' ||
-    value === 'coa' ||
-    // Previously missing, so a reload or deep link while on any of these
-    // silently dropped the user back to the dashboard.
-    value === 'ai-dashboard' ||
-    value === 'ai-assets' ||
-    value === 'ai-asset-detail' ||
-    value === 'ai-usage' ||
-    value === 'ai-incidents' ||
-    value === 'org-management' ||
-    value === 'enterprise-dashboard' ||
-    value === 'pharma-integrations'
-  );
-}
+/**
+ * Whether a stored or deep-linked value names a page that exists.
+ *
+ * DELEGATED TO MainLayout's PAGE_IDS, which a compile-time
+ * exhaustiveness check keeps in step with the PageId union. What stood
+ * here was a hand-written `a || b || c` chain, and its own comment
+ * recorded the last time it fell behind — "Previously missing, so a
+ * reload or deep link while on any of these silently dropped the user
+ * back to the dashboard".
+ *
+ * It had fallen behind again. Every page built during this repair was
+ * absent from it — my tasks, goods receipt, QC testing, QA
+ * disposition, traceability, batch execution, materials, instruments,
+ * in-process, master formulas, access control, deviations, CAPA — so
+ * reloading on any of them returned the person to the dashboard. A
+ * list that has to be remembered is a list that will be forgotten.
+ */
+const isValidPageId = isPageId;
 
 /**
  * What is shown while a page's chunk is in flight.
@@ -944,7 +871,49 @@ function AppContent() {
   //  DECLARED ONCE AND USED TWICE, because the switch below ends in
   //  `default: dashboard`, so an unmatched PageId lands on the same
   //  screen rather than somewhere else.
-  const dashboard = () => (
+  /**
+   * WHICH DASHBOARD THIS PERSON GETS.
+   *
+   * DB-01 and DB-02 are different screens, not one screen with the role
+   * printed on it: six tiles against seven, not a single metric shared,
+   * Release readiness where the other has "Sections you can't open",
+   * and a different sentence about what the role may not do. So the
+   * role chooses the body.
+   *
+   * A role the design draws no dashboard for keeps FirstRunDashboard.
+   * Handing a QC Analyst the QA Manager's screen because it is the
+   * closest one would be exactly the defect this repair is undoing —
+   * and the dashboards for the other six roles are not in the file.
+   */
+  const dashboard = () => {
+    const role = resolveWorkRole(profile);
+    const common = {
+      companyId: profile?.company_id,
+      personName: (profile as any)?.full_name as string | undefined,
+      siteName: (profile as any)?.site_name as string | undefined,
+      onNavigate: (page: string) => setCurrentPage(page as PageId),
+    };
+    if (role === 'qa_manager') {
+      return <QaManagerDashboard {...common} role={role} />;
+    }
+    if (role === 'storekeeper') {
+      return <StorekeeperDashboard {...common} role={role} userId={user?.id} />;
+    }
+    //  The other six PM-03 roles have no frame in the file. They get a
+    //  dashboard derived from the permissions matrix rather than the
+    //  first-run screen, which is the "every role lands on the same
+    //  page" defect with an extra step. The derivation is stated on
+    //  the screen itself — see DerivedRoleDashboard.
+    if (role) {
+      return <DerivedRoleDashboard {...common} role={role} userId={user?.id} />;
+    }
+    //  No work role at all: onboarding, or an account created before
+    //  company_role was being set. The first-run dashboard is the
+    //  right screen for somebody who has not been given a job yet.
+    return firstRunDashboard();
+  };
+
+  const firstRunDashboard = () => (
     <FirstRunDashboard
       companyId={profile?.company_id}
       userId={user?.id}
@@ -961,6 +930,25 @@ function AppContent() {
   );
 
   const renderPage = () => {
+    //  PM-03 ENFORCED ON THE ROUTE, NOT ONLY IN THE RAIL.
+    //
+    //  Hiding a sidebar item is a courtesy, not a control: the page id
+    //  is reachable by a saved link, a KPI tile, a notification or the
+    //  navigate-to event, and until now every one of those paths
+    //  rendered the page regardless of who was asking. A Storekeeper
+    //  could open QA disposition by any route except the one that was
+    //  hidden from them.
+    //
+    //  This refuses the page itself. It is still not the last line —
+    //  row-level security in the database is — but it closes the gap
+    //  between what the rail offers and what the application serves.
+    //
+    //  Only pages PM-03 governs are checked; canOpenPage returns true
+    //  for the rest, which keeps their existing gating in charge.
+    if (pageRefused(profile, currentPage)) {
+      return <AccessDenied />;
+    }
+
     switch (currentPage) {
       case 'dashboard':
         return dashboard();
@@ -1140,32 +1128,60 @@ function AppContent() {
       //  them at the nearest existing page — looks finished, which is
       //  how a gap gets demonstrated, filed against, and discovered
       //  only after somebody has built on it.
+      //  Built, as a DERIVATION. There is no task register in the
+      //  schema, so a task is a record sitting in a state only this
+      //  role can move it out of — which is what DB-01's own example
+      //  rows are. The screen says so on itself, and there are no
+      //  invented due dates.
       case 'my-tasks':
-        return <ScreenNotBuilt
-          name="My tasks" designRef="DB-01"
-          whatItWillDo={'Everything waiting on you — signatures, investigations, '
-            + 'calibrations due and lots to disposition — in one list, ordered by what '
-            + 'blocks other people first.'} />;
+        return <MyTasksPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+          onOpen={(page) => setCurrentPage(page as PageId)}
+        />;
+      //  Built. The upstream gate: a suspended or disqualified
+      //  supplier is refused by a BEFORE INSERT trigger, not by the
+      //  form, so the refusal holds for any caller.
       case 'goods-receipt':
-        return <ScreenNotBuilt
-          name="Goods receipt" designRef="DB-01"
-          whatItWillDo={'Booking a delivery in against its purchase order and supplier, '
-            + 'raising the lot and putting it straight into quarantine.'} />;
+        return <GoodsReceiptPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+        />;
+      //  Built. The middle link: received -> tested -> dispositioned.
+      //  The pass/fail verdict belongs to material_test_record_result,
+      //  which compares against the specification; this page reads it.
       case 'qc-testing':
-        return <ScreenNotBuilt
-          name="QC testing" designRef="DB-01"
-          whatItWillDo={'The testing queue and results per lot and per batch, against the '
-            + 'specification each one was sampled under.'} />;
+        return <QcTestingPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+        />;
+      //  Built. The gate that makes "a material does not become
+      //  available because somebody changed a status" true: the
+      //  conditions come from the same function the release gate
+      //  calls, the decision is signed, and the role is enforced by a
+      //  trigger rather than by this route.
       case 'qa-disposition':
-        return <ScreenNotBuilt
-          name="QA disposition" designRef="DB-01"
-          whatItWillDo={'The QA decision on a tested lot — release, reject or hold — with '
-            + 'the signature that makes it a record.'} />;
+        return <QaDispositionPage
+          companyId={profile?.company_id}
+          role={resolveWorkRole(profile)}
+        />;
+      //  Built from the relationships that exist — dispensing records
+      //  link a lot to a stage and a stage to its batch — because
+      //  W5·13's genealogy function was never written. The screen says
+      //  what it cannot see.
       case 'traceability':
-        return <ScreenNotBuilt
-          name="Traceability" designRef="DB-01"
-          whatItWillDo={'Forward and backward genealogy: which batches a lot went into, '
-            + 'and every material that went into a batch.'} />;
+        return <TraceabilityPage companyId={profile?.company_id} />;
+
+      //  PM-03's eleventh column, which had no page: a Storekeeper held
+      //  Act on Distribution and nowhere to exercise it. It is also the
+      //  far end of a trace — before this, nothing connected a released
+      //  batch to a customer.
+      case 'dispatch':
+        return <DispatchPage
+          companyId={profile?.company_id}
+          userId={user?.id}
+          role={resolveWorkRole(profile)}
+        />;
 
       //  W4·15. Lots, and why a lot may or may not be released.
       case 'materials':
@@ -1177,7 +1193,11 @@ function AppContent() {
       //  screens, and a logistics workspace has no batches to run.
       case 'batch-execution':
         return !isLogisticsProfile
-          ? <BatchExecutionPage companyId={profile?.company_id} userId={user?.id} />
+          ? <BatchExecutionPage
+              companyId={profile?.company_id}
+              userId={user?.id}
+              role={resolveWorkRole(profile)}
+            />
           : <AccessDenied />;
 
       //  W4·16. Comparing two versions is the question somebody

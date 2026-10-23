@@ -1,5 +1,6 @@
 import { getPermissions } from '../../lib/permissions';
 import { getIndustryCategory } from '../../lib/regulatoryProfile';
+import { resolveWorkRole, canOpenPage, PAGE_SECTION } from '../../lib/access/roleAccess';
 import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
@@ -127,6 +128,7 @@ export type PageId =
   | 'qc-testing'
   | 'qa-disposition'
   | 'traceability'
+  | 'dispatch'
   | 'batch-execution'
   | 'master-formulas'
   | 'training-simulation'
@@ -197,6 +199,74 @@ export type PageId =
   | 'audit-prep'
   // Certificate of Analysis register
   | 'coa';
+
+/**
+ * Every PageId, as a value the runtime can check against.
+ *
+ * ── WHY THIS IS NOT A HAND-WRITTEN LIST ──
+ *
+ * App.tsx had one: isValidPageId, an `a || b || c` chain used by
+ * useRoutePersistence to decide whether a stored page is real. Its own
+ * comment records the last time it fell behind — "Previously missing,
+ * so a reload or deep link while on any of these silently dropped the
+ * user back to the dashboard" — and it had fallen behind again. Every
+ * page built during this repair was absent from it: my tasks, goods
+ * receipt, QC testing, QA disposition, traceability, batch execution,
+ * materials, instruments, in-process, master formulas, access control,
+ * deviations, CAPA. Reloading on any of them returned the person to
+ * the dashboard.
+ *
+ * A list that has to be remembered is a list that will be forgotten.
+ * The EXHAUSTIVENESS CHECK below turns the next omission into a
+ * typecheck failure rather than a bug somebody hits on a refresh.
+ */
+export const PAGE_IDS = [
+  'dashboard', 'upload', 'archive', 'regulations',
+  'legal-review', 'training-log', 'company-members', 'company-invites',
+  'company-departments', 'company-settings', 'correction-editor', 'profile',
+  'license-vault', 'integrations', 'audit-trail', 'role-management',
+  'enterprise-dashboard', 'org-management', 'ai-insights', 'content-calendar',
+  'team-chat', 'drift-monitor', 'consent-management', 'content-blocks',
+  'agency-portal', 'compliance-reporting', 'horizon-scanning', 'channel-rules',
+  'regulatory-library', 'translation-compliance', 'crisis-response', 'programmatic-ad',
+  'whistleblower', 'predictive-risk', 'social-listening', 'website-monitoring',
+  'vendor-scorecard', 'capa-management', 'deviations', 'access-control',
+  'materials', 'in-process', 'instruments', 'my-tasks',
+  'goods-receipt', 'qc-testing', 'qa-disposition', 'traceability',
+  'dispatch', 'batch-execution', 'master-formulas', 'training-simulation',
+  'claim-extraction', 'pharma-integrations', 'secret-vault', 'legal-marketplace',
+  'legal-partner-dashboard', 'partner-verification', 'policy-assistant', 'grc-frameworks',
+  'grc-controls', 'grc-automation', 'grc-dashboard', 'policies',
+  'policy-detail', 'my-policies', 'vendors', 'vendor-detail',
+  'audit-sessions', 'audit-session-detail', 'risk-register', 'risk-detail',
+  'command-center', 'obligations', 'obligation-detail', 'identity-providers',
+  'platform-jobs', 'retention-policies', 'legal-holds', 'governance-timeline',
+  'ai-assets', 'ai-asset-detail', 'ai-usage', 'ai-incidents',
+  'ai-reviews', 'ai-prompts', 'ai-dashboard', 'platform-webhooks',
+  'platform-evidence-ingestions', 'platform-ecosystem', 'notifications', 'billing',
+  'batch-release', 'change-control', 'sop-library', 'supplier-qualification',
+  'gmp-inspection', 'framework-library', 'control-monitoring', 'products',
+  'regulatory-affairs', 'son-compliance', 'ctd-dossier', 'contraband-rejection',
+  'shipment-event-log', 'cn-declarations', 'compliance-alerting', 'audit-prep',
+  'coa',
+] as const;
+
+/**
+ * Fails to compile if a PageId is missing from PAGE_IDS above.
+ *
+ * The error names the missing members, because `Exclude<...>` resolves
+ * to them: "Type '\"new-page\"' is not assignable to type 'true'".
+ */
+type MissingPageIds = Exclude<PageId, typeof PAGE_IDS[number]>;
+const _pageIdsAreExhaustive: MissingPageIds extends never ? true : MissingPageIds = true;
+void _pageIdsAreExhaustive;
+
+const PAGE_ID_SET: ReadonlySet<string> = new Set(PAGE_IDS);
+
+/** Whether a stored or deep-linked value names a page that exists. */
+export function isPageId(value: unknown): value is PageId {
+  return typeof value === 'string' && PAGE_ID_SET.has(value);
+}
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -314,6 +384,9 @@ const DB01_NAV: Record<string, { group: string; label?: string; order: number }>
   'products':               { group: 'Regulatory', order: 1 },
   'license-vault':          { group: 'Regulatory', label: 'Licence Vault', order: 2 },
 
+  //  DB-02 draws Dispatch on the Storekeeper's rail. It is PM-03's
+  //  `Distribution` column, which had no page until 20261111000000.
+  'dispatch':               { group: 'Traceability', label: 'Dispatch', order: 0 },
   'traceability':           { group: 'Traceability', label: 'Traceability', order: 1 },
   'audit-trail':            { group: 'Traceability', label: 'Audit trail', order: 2 },
 
@@ -453,6 +526,7 @@ export default function MainLayout({
       { id: 'qc-testing', label: 'QC testing', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'qa-disposition', label: 'QA disposition', icon: ClipboardCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'traceability', label: 'Traceability', icon: Network, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'dispatch', label: 'Dispatch', icon: Truck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
 
       { id: 'materials', label: 'Materials', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
@@ -593,7 +667,49 @@ export default function MainLayout({
       : { ...item, category: item.category === 'Hidden' ? 'Hidden' : 'More', order: 99 };
   });
 
-  const visibleNavItems = regrouped.filter((item) => !item.hidden && item.category !== 'Hidden');
+  //  PM-03 APPLIED TO THE RAIL. Until now nothing in this file consulted
+  //  the role a person actually holds: canonicalRole() in permissions.ts
+  //  folds every job into six legacy buckets and knows none of the eight
+  //  roles the design tabulates, so a Storekeeper and a QA Manager saw
+  //  the same sidebar. This is where that stops.
+  //
+  //  Applied ONLY when a work role resolves. The design says what each
+  //  of its eight roles may open; it does not say what somebody with no
+  //  job assigned in this workspace sees, and withholding every
+  //  tabulated section from them on that silence would empty the rail
+  //  for every account created before company_role was being set. That
+  //  gap is recorded rather than decided here — see roleAccess.ts.
+  //  WHERE PM-03 GOVERNS A PAGE, PM-03 DECIDES — AND THE LEGACY MODEL
+  //  DOES NOT GET A SECOND VOTE.
+  //
+  //  This was not a theoretical conflict. Rendering the shell as each of
+  //  the eight roles showed Deviation / CAPA missing from ALL of them,
+  //  including QA Manager, who the design gives Act on it. The cause is
+  //  `!perms.canViewCapaManagement`: permissions.ts resolves a job title
+  //  through canonicalRole(), which knows none of PM-03's roles, so a
+  //  qa_manager falls through to the empty permission set and the item
+  //  is hidden by a model that has never heard of the role asking.
+  //
+  //  AND-ing the two models together can only ever subtract, so the
+  //  design could never grant anything the legacy model had not already
+  //  allowed. For a governed page the grid is therefore the sole
+  //  authority on ROLE.
+  //
+  //  The INDUSTRY gate is kept, because it answers a different question
+  //  — whether this workspace does manufacturing at all — and PM-03 says
+  //  nothing about it. A logistics or finance workspace still has no
+  //  batch to release, whoever is asking.
+  const workRole = resolveWorkRole(profile);
+  const industryAllowsQuality = usesManufacturingQuality && !isLogisticsProfile;
+  const visibleNavItems = regrouped.filter((item) => {
+    if (item.category === 'Hidden') return false;
+    if (workRole && PAGE_SECTION[item.id]) {
+      return industryAllowsQuality && canOpenPage(workRole, item.id);
+    }
+    if (item.hidden) return false;
+    if (workRole && !canOpenPage(workRole, item.id)) return false;
+    return true;
+  });
 
   //  "Head of Quality", from ONB-01. An underscored permission role is
   //  the fallback and is tidied on the way out, so `content_creator`

@@ -51,6 +51,18 @@ export interface StripStage {
    */
   waitingFor: string | null;
   requiresVerifier: boolean;
+  /**
+   * Who signed, as ids rather than only as booleans.
+   *
+   * batch_stage_strip has returned both since W4·17 and the service has
+   * always mapped them; the interface omitted them, so the fields were
+   * dropped from the type and nothing could read them. A verifier
+   * control has to know whether the viewer is the operator — the
+   * database refuses a self-verification and the screen should not draw
+   * a button that walks into that refusal.
+   */
+  operatorId: string | null;
+  verifierId: string | null;
   signedByOperator: boolean;
   signedByVerifier: boolean;
   readingsTotal: number;

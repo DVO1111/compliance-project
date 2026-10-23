@@ -222,6 +222,30 @@ isOneToOne: false
       referencedColumns: ["key"]
     }
                   ]
+                },"access_restrictions": {
+                  Row: {
+                    "company_id": string,"id": string,"lift_reason": string | null,"lifted_at": string | null,"lifted_by": string | null,"reason": string,"section_key": string,"set_at": string,"set_by": string | null,"to_level": string,"until": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "company_id": string,"id"?: string,"lift_reason"?: string | null,"lifted_at"?: string | null,"lifted_by"?: string | null,"reason": string,"section_key": string,"set_at"?: string,"set_by"?: string | null,"to_level": string,"until"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "company_id"?: string,"id"?: string,"lift_reason"?: string | null,"lifted_at"?: string | null,"lifted_by"?: string | null,"reason"?: string,"section_key"?: string,"set_at"?: string,"set_by"?: string | null,"to_level"?: string,"until"?: string | null,"user_id"?: string
+                  }
+                  Relationships: []
+                },"batch_dispatches": {
+                  Row: {
+                    "batch_id": string,"company_id": string,"created_at": string,"destination": string,"dispatched_at": string,"dispatched_by": string | null,"id": string,"notes": string | null,"quantity": number,"reference": string | null,"unit": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "batch_id": string,"company_id": string,"created_at"?: string,"destination": string,"dispatched_at"?: string,"dispatched_by"?: string | null,"id"?: string,"notes"?: string | null,"quantity": number,"reference"?: string | null,"unit": string
+                  }
+                  Update: {
+                    "batch_id"?: string,"company_id"?: string,"created_at"?: string,"destination"?: string,"dispatched_at"?: string,"dispatched_by"?: string | null,"id"?: string,"notes"?: string | null,"quantity"?: number,"reference"?: string | null,"unit"?: string
+                  }
+                  Relationships: []
                 },"access_grants": {
                   Row: {
                     "company_id": string,"granted_at": string,"granted_by": string,"id": string,"level": string,"request_id": string | null,"revoke_reason": string | null,"revoked_at": string | null,"revoked_by": string | null,"scope": string,"section_key": string,"user_id": string,"valid_until": string | null
@@ -6526,6 +6550,20 @@ isOneToOne: false
                            },
 "backfill_product_registry":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"access_restrict":
+{ Args: { "p_company_id": string,"p_user_id": string,"p_section": string,"p_to_level": string,"p_reason": string,"p_until"?: string }; Returns: string
+                           },
+"access_restriction_lift":
+{ Args: { "p_restriction_id": string,"p_reason": string }; Returns: undefined
+                           },
+"batch_release_block_reason":
+{ Args: { "p_batch_id": string }; Returns: string
+                           },
+"batch_release_conditions":
+{ Args: { "p_batch_id": string }; Returns: {
+              "condition_key": string,"continue_with": string,"detail": string,"severity": string,"sort_order": number,"title": string
+            }[]
                            },
 "batch_record_assign_line":
 { Args: { "p_batch_id": string,"p_line_id": string }; Returns: Json

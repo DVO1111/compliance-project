@@ -333,3 +333,156 @@ export async function signAndReject(params: {
     return { ok: true, data };
   } catch (e) { return fail('signAndReject', e); }
 }
+
+/**
+ * Receiving a delivery — the Storekeeper's "Create GRN" on DB-02.
+ *
+ * AN INSERT, NOT AN RPC, AND THAT IS THE DESIGN OF THE SCHEMA RATHER
+ * THAN A SHORTCUT. Three BEFORE triggers do the work that a function
+ * would otherwise have to:
+ *
+ *   fn_material_lots_defaults        issues the lot number from the
+ *                                    company's numbering format and
+ *                                    derives the retest date from the
+ *                                    material's retest period
+ *   fn_material_lots_supplier_gate   refuses a supplier that is
+ *                                    disqualified, suspended, absent,
+ *                                    or belongs to another company
+ *   fn_material_lots_initialize_...  puts the lot into quarantine
+ *
+ * So a received lot arrives numbered, dated and quarantined, and no
+ * caller can skip any of it. lot_number is deliberately NOT sent: the
+ * format belongs to the company, and a client that invented one would
+ * be the thing that breaks the sequence.
+ *
+ * The refusals come back as Postgres exceptions and are passed through
+ * rather than reworded — MATERIAL_RECEIPT_SUPPLIER_NOT_QUALIFIED names
+ * the supplier and the reason, which is what the person needs.
+ */
+export async function receiveLot(params: {
+  companyId: string;
+  materialId: string;
+  supplierId?: string | null;
+  quantity: number;
+  unitOfMeasure?: string | null;
+  supplierBatchNumber?: string | null;
+  receivedDate?: string | null;
+}): Promise<LotResult<MaterialLotRow>> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('material_lots')
+      .insert({
+        company_id: params.companyId,
+        material_id: params.materialId,
+        supplier_id: params.supplierId ?? null,
+        quantity_received: params.quantity,
+        quantity_available: params.quantity,
+        unit_of_measure: params.unitOfMeasure ?? null,
+        supplier_batch_number: params.supplierBatchNumber ?? null,
+        received_date: params.receivedDate ?? new Date().toISOString().slice(0, 10),
+      } as never)
+      .select()
+      .single();
+    if (error) return fail('receiveLot', error);
+    return { ok: true, data: data as MaterialLotRow };
+  } catch (e) { return fail('receiveLot', e); }
+}
+
+/** The materials a receipt can be booked against. */
+export async function listMaterials(companyId: string): Promise<
+  { id: string; code: string | null; name: string | null; unit_of_measure: string | null }[]
+> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('materials')
+      .select('id, code, name, unit_of_measure')
+      .eq('company_id', companyId)
+      .order('code');
+    if (error) { logger.error('materialLotService.listMaterials', error); return []; }
+    return (data ?? []) as never;
+  } catch { return []; }
+}
+
+/**
+ * The suppliers a receipt can name.
+ *
+ * ALL of them, including suspended and disqualified ones, and that is
+ * on purpose. The gate refuses the receipt and says why; a picker that
+ * silently omitted the supplier would leave somebody hunting for a
+ * name they can see on the delivery note in front of them.
+ */
+export async function listSuppliers(companyId: string): Promise<
+  { id: string; name: string | null; qualification_status: string | null }[]
+> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('id, name, qualification_status')
+      .eq('company_id', companyId)
+      .order('name');
+    if (error) { logger.error('materialLotService.listSuppliers', error); return []; }
+    return (data ?? []) as never;
+  } catch { return []; }
+}
+
+/* ── QC testing ────────────────────────────────────────────────────── */
+
+export interface TestDefinitionRow {
+  id: string;
+  code: string | null;
+  name: string | null;
+  method: string | null;
+  is_required: boolean | null;
+}
+
+export interface TestResultRow {
+  id: string;
+  test_definition_id: string | null;
+  parameter: string | null;
+  specification_limit: string | null;
+  actual_value: number | null;
+  actual_text: string | null;
+  /** The database's verdict, not the analyst's. */
+  result: string | null;
+  analyst_name: string | null;
+  test_date: string | null;
+}
+
+/**
+ * The tests a lot has to satisfy.
+ *
+ * Read from the company's definitions rather than from whatever has
+ * already been recorded, so a test nobody has run yet is still listed
+ * as outstanding. A list built from results would show a lot with no
+ * tests done as having nothing to do.
+ */
+export async function listTestDefinitions(companyId: string): Promise<TestDefinitionRow[]> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('material_test_definitions')
+      .select('id, code, name, method, is_required')
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .order('sort_order');
+    if (error) { logger.error('materialLotService.listTestDefinitions', error); return []; }
+    return (data ?? []) as TestDefinitionRow[];
+  } catch { return []; }
+}
+
+/** What has actually been recorded against a lot. */
+export async function listTestResults(lotId: string): Promise<TestResultRow[]> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('material_test_results')
+      .select('id, test_definition_id, parameter, specification_limit, actual_value, actual_text, result, analyst_name, test_date')
+      .eq('material_lot_id', lotId)
+      .order('test_date', { ascending: false });
+    if (error) { logger.error('materialLotService.listTestResults', error); return []; }
+    return (data ?? []) as TestResultRow[];
+  } catch { return []; }
+}

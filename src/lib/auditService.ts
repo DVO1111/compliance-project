@@ -49,6 +49,24 @@ export interface ChainVerificationResult {
   valid: boolean;
   totalChecked: number;
   brokenAt: string | null;
+  /** What was wrong with that entry, in words. Null when nothing was. */
+  brokenReason?: string | null;
+  /** Entries sealed by the server, whose contents were recomputed. */
+  sealed?: number;
+  /**
+   * Entries carrying a client-computed hash from before sealing. Their
+   * LINKAGE is checked; their contents cannot be, because nothing
+   * records which convention produced the hash.
+   */
+  unsealed?: number;
+  /** Entries with no hash at all. Each one is a finding. */
+  unhashed?: number;
+  /**
+   * False when the RPC was unreachable and the browser's own fallback
+   * produced this verdict — which checks LINKAGE ONLY and is therefore
+   * the weaker answer. A screen should say which it is showing.
+   */
+  serverVerified?: boolean;
   verifiedAt: string;
 }
 
@@ -269,11 +287,38 @@ export async function recordAuditEvent(params: AuditEventParams): Promise<void> 
 /**
  * Verify the integrity of the audit chain for a company.
  *
- * Re-computes every hash in the chain and confirms each entry's
- * `previous_hash` matches the prior entry's `integrity_hash`.
+ * ── WHAT THIS COMMENT USED TO SAY, AND WHY IT MATTERED ──
  *
- * Can be run client-side for transparency, or server-side via the
- * `verify_audit_chain` RPC for trusted verification.
+ * It said this "re-computes every hash in the chain". It did not, and
+ * neither did the RPC: both compared each entry's `previous_hash` to
+ * the prior entry's `integrity_hash` and recomputed nothing, so an
+ * entry whose hash never matched its own contents passed. An
+ * overstatement about an integrity control is the kind that gets
+ * repeated into a document somebody signs.
+ *
+ * ── WHAT IS TRUE NOW ──
+ *
+ * Since 20261108000000 the SERVER seals each entry on insert — it
+ * assigns the sequence number, links the previous hash, and computes
+ * the integrity hash from the row's contents, discarding whatever the
+ * client sent. `verify_audit_chain` recomputes the hash of every
+ * sealed entry from its contents, checks the linkage of every entry,
+ * and treats an entry with no hash as a finding rather than filtering
+ * it out of the query — which is how an unhashed entry used to become
+ * invisible to verification.
+ *
+ * THE CLIENT-SIDE FALLBACK BELOW STILL ONLY CHECKS LINKAGE. It cannot
+ * do more: the payload convention lives in the database. It runs only
+ * when the RPC is unreachable, and a caller should treat its verdict
+ * as the weaker one — which is why `serverVerified` is reported.
+ *
+ * Entries written before sealing keep their client-computed hashes and
+ * are reported separately as `unsealed`. They are not retro-hashed:
+ * recomputing a hash over content nobody can vouch for turns an
+ * unverifiable entry into one that looks verified.
+ *
+ * None of this establishes regulatory compliance and must not be
+ * described as doing so.
  */
 export async function verifyChainIntegrity(
   companyId: string
@@ -289,6 +334,11 @@ export async function verifyChainIntegrity(
         valid: data.valid,
         totalChecked: data.total_checked,
         brokenAt: data.broken_at,
+        brokenReason: data.broken_reason ?? null,
+        sealed: data.sealed ?? 0,
+        unsealed: data.unsealed ?? 0,
+        unhashed: data.unhashed ?? 0,
+        serverVerified: true,
         verifiedAt: new Date().toISOString(),
       };
     }
@@ -296,7 +346,10 @@ export async function verifyChainIntegrity(
     // Fall through to client-side verification
   }
 
-  // Client-side fallback verification
+  //  Client-side fallback: LINKAGE ONLY. The payload convention lives
+  //  in the database, so the browser cannot recompute a content hash.
+  //  Marked serverVerified: false so a caller does not present it as
+  //  the same answer.
   const { data: logs, error } = await (supabase as any)
     .from('audit_logs')
     .select('id, integrity_hash, previous_hash, sequence_number')
@@ -305,10 +358,15 @@ export async function verifyChainIntegrity(
     .order('sequence_number', { ascending: true });
 
   if (error || !logs) {
+    //  Could not read the chain at all. NOT valid, because "we could
+    //  not check" and "it is intact" are different answers and only one
+    //  of them is safe to repeat.
     return {
       valid: false,
       totalChecked: 0,
       brokenAt: null,
+      brokenReason: 'the audit chain could not be read',
+      serverVerified: false,
       verifiedAt: new Date().toISOString(),
     };
   }
@@ -320,6 +378,8 @@ export async function verifyChainIntegrity(
         valid: false,
         totalChecked: logs.indexOf(log) + 1,
         brokenAt: log.id,
+        brokenReason: 'previous hash does not match the entry before it',
+        serverVerified: false,
         verifiedAt: new Date().toISOString(),
       };
     }
@@ -330,6 +390,8 @@ export async function verifyChainIntegrity(
     valid: true,
     totalChecked: logs.length,
     brokenAt: null,
+    brokenReason: null,
+    serverVerified: false,
     verifiedAt: new Date().toISOString(),
   };
 }

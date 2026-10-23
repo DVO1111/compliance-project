@@ -98,6 +98,70 @@ export async function listStageReadings(stageId: string, companyId: string): Pro
   return data ?? [];
 }
 
+/**
+ * The parameters a stage is supposed to have readings for.
+ *
+ * READ FROM THE FORMULA, not from the readings already taken. A stage
+ * with nothing recorded has no reading rows, so a screen built from
+ * those would show an operator an empty list and no indication that
+ * three numbers are expected — the same mistake qcRules was written to
+ * avoid on the material side.
+ *
+ * Reached through batch_stages.formula_stage_id rather than through the
+ * batch's formula, because a reopened or amended batch can be running
+ * stages from a version the formula has since moved past, and the
+ * parameters belong to the stage that was instantiated.
+ */
+export interface StageParameter {
+  id: string;
+  parameter: string;
+  parameterType: string;
+  unit: string | null;
+  targetValue: number | null;
+  targetText: string | null;
+  minValue: number | null;
+  maxValue: number | null;
+  isCritical: boolean;
+}
+
+export async function stageParameters(stageId: string): Promise<StageParameter[]> {
+  //  The plain client rather than this file's (supabase as any): these
+  //  two reads do not need the cast, and adding one would add a lint
+  //  error to a file that already carries seventeen.
+  const { data: stage, error: stageError } = await supabase
+    .from('batch_stages')
+    .select('formula_stage_id')
+    .eq('id', stageId)
+    .maybeSingle();
+  const formulaStageId = (stage as { formula_stage_id?: string } | null)?.formula_stage_id;
+  if (stageError || !formulaStageId) {
+    if (stageError) logger.error('stageParameters: stage lookup failed', stageError);
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('master_formula_stage_parameters')
+    .select('id, parameter, parameter_type, unit, target_value, target_text, min_value, max_value, is_critical')
+    .eq('stage_id', formulaStageId)
+    .order('sort_order', { ascending: true });
+  if (error) { logger.error('stageParameters:', error); return []; }
+
+  return ((data as unknown[]) ?? []).map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      id: String(row.id),
+      parameter: String(row.parameter),
+      parameterType: String(row.parameter_type),
+      unit: (row.unit as string | null) ?? null,
+      targetValue: row.target_value === null ? null : Number(row.target_value),
+      targetText: (row.target_text as string | null) ?? null,
+      minValue: row.min_value === null ? null : Number(row.min_value),
+      maxValue: row.max_value === null ? null : Number(row.max_value),
+      isCritical: row.is_critical === true,
+    };
+  });
+}
+
 /** The append-only log of reopenings and corrections for a stage. */
 export async function listStageCorrections(stageId: string, companyId: string): Promise<BatchStageCorrection[]> {
   const { data, error } = await (supabase as any)

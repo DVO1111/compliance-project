@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { recordAuditEvent } from '../auditService';
 import { logger } from '../logger';
+import { toFloorConditions, type FloorCondition } from '../floor/floorConditions';
 import { assertBatchAllowed } from '../licenceService';
 import { transition as lifecycleTransition } from '../lifecycleService';
 import { BATCH_TRANSITIONS } from './batchTransitions';
@@ -69,6 +70,9 @@ export interface BatchQcResult {
   pass: boolean;
   tested_by: string | null;
   tested_at: string;
+  /** The result this one replaces, when it is a correction. */
+  corrected_from_id?: string | null;
+  correction_reason?: string | null;
 }
 
 export async function listBatchRecords(companyId: string, status?: BatchStatus): Promise<BatchRecord[]> {
@@ -153,7 +157,11 @@ export async function updateBatchStatus(
   companyId: string,
   userId: string,
   newStatus: BatchStatus,
-  extra?: { holdReason?: string; releaseNotes?: string; comment?: string }
+  //  signatureId: PM-03 requires an electronic signature to release a
+  //  batch, and since 20261107000000 the lifecycle transition enforces
+  //  it. Without one the engine returns LIFECYCLE_SIGNATURE_REQUIRED,
+  //  so a caller releasing a batch has to collect it first.
+  extra?: { holdReason?: string; releaseNotes?: string; comment?: string; signatureId?: string }
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -192,6 +200,7 @@ export async function updateBatchStatus(
     companyId,
     comment,
     metadata: { requested_status: newStatus },
+    signatureId: extra?.signatureId,
   });
 
   if (!result.ok) throw new Error(result.message);
@@ -234,15 +243,49 @@ export async function updateBatchStatus(
 export async function addQcResult(
   batchId: string,
   userId: string,
-  result: Omit<BatchQcResult, 'id' | 'batch_id' | 'tested_by' | 'tested_at'>
+  result: Omit<BatchQcResult, 'id' | 'batch_id' | 'tested_by' | 'tested_at'>,
+  /**
+   * The result this one replaces, when it is a correction.
+   *
+   * THERE IS NO EDIT, and 20261112000000 refuses one: a finished QC
+   * verdict feeds the release gate, and a verdict that can be edited
+   * makes that gate worth nothing. A correction is a new row pointing
+   * at the old one; both survive, the gate reads the one that stands,
+   * and the superseded row keeps the failure on the record.
+   *
+   * The reason is not optional — the database refuses a correction
+   * without one, because the log entry is the point.
+   */
+  correction?: { correctedFromId: string; reason: string },
 ): Promise<BatchQcResult> {
   const { data, error } = await (supabase as any)
     .from('batch_qc_results')
-    .insert({ ...result, batch_id: batchId, tested_by: userId })
+    .insert({
+      ...result,
+      batch_id: batchId,
+      tested_by: userId,
+      corrected_from_id: correction?.correctedFromId ?? null,
+      correction_reason: correction?.reason ?? null,
+    })
     .select()
     .single();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Which of a batch's results still stand — the ones the release gate
+ * reads.
+ *
+ * A superseded result is history. It stays in listQcResults, because a
+ * screen showing only the current verdicts would hide the correction
+ * that is the whole point of recording one.
+ */
+export function standingResults(all: BatchQcResult[]): BatchQcResult[] {
+  const superseded = new Set(
+    all.map((r) => r.corrected_from_id).filter((id): id is string => !!id),
+  );
+  return all.filter((r) => !superseded.has(r.id));
 }
 
 export async function listQcResults(batchId: string): Promise<BatchQcResult[]> {
@@ -270,6 +313,9 @@ export interface BatchInProcessQc {
   pass: boolean;
   tested_by: string | null;
   tested_at: string;
+  /** The result this one replaces, when it is a correction. */
+  corrected_from_id?: string | null;
+  correction_reason?: string | null;
 }
 
 export async function listInProcessQc(batchId: string): Promise<BatchInProcessQc[]> {
@@ -413,3 +459,30 @@ export const STATUS_COLORS: Record<BatchStatus, string> = {
   rejected: 'text-red-600 bg-red-50 border-red-200',
   archived: 'text-gray-500 bg-gray-50 border-gray-200',
 };
+
+/**
+ * Why this batch may not be released — the same facts the gate refuses
+ * on, as rows a screen can draw.
+ *
+ * ONE SOURCE, TWO CALLERS. batch_release_conditions and
+ * batch_release_block_reason read the same query in the database, so
+ * the notice somebody reads on the screen and the refusal they would
+ * hit cannot drift apart. The same arrangement as
+ * material_lot_release_block_reason and dispensing_conditions.
+ *
+ * An empty list means nothing objects. A FAILED READ IS ALSO AN EMPTY
+ * LIST, which is the one place the two are indistinguishable — so the
+ * screen must not read "no conditions" as "safe to release" on its
+ * own. It does not: the button still calls the transition, and the
+ * database is what decides.
+ */
+export async function batchReleaseConditions(batchId: string): Promise<FloorCondition[]> {
+  const { data, error } = await supabase.rpc('batch_release_conditions', {
+    p_batch_id: batchId,
+  });
+  if (error) {
+    logger.error('[batchRelease] conditions failed', { batchId, error });
+    return [];
+  }
+  return toFloorConditions(data);
+}

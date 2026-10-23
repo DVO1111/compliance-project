@@ -25,16 +25,38 @@ import {
   type AccessSection, type WorkRole,
 } from '../lib/access/permissionRequests';
 
-const MIGRATION = resolve(__dirname, '../../supabase/migrations/20261026000000_access_requests.sql');
-const sql = readFileSync(MIGRATION, 'utf8');
+//  BOTH MIGRATIONS THAT SEED SECTIONS, not just the first.
+//
+//  20261026000000 seeded fifteen. 20261103000000 adds the five PM-03
+//  columns that were missing — suppliers, goods receipt, CoA register,
+//  traceability and distribution — and reading only the first file made
+//  this test fail on sections that ARE seeded, which is the test being
+//  wrong rather than the schema. Any later migration that seeds more
+//  must be added here too, or the agreement this file asserts quietly
+//  stops covering them.
+const MIGRATIONS = [
+  '20261026000000_access_requests.sql',
+  '20261103000000_access_sections_from_pm03.sql',
+].map((f) => resolve(__dirname, '../../supabase/migrations/', f));
+const sql = MIGRATIONS.map((f) => readFileSync(f, 'utf8')).join('\n');
 
 /** The INSERT ... VALUES body for one table, as raw text. */
 function valuesBlockFor(table: string): string {
-  const start = sql.indexOf(`INSERT INTO public.${table}`);
-  expect(start, `no INSERT into ${table}`).toBeGreaterThan(-1);
-  const end = sql.indexOf('ON CONFLICT', start);
-  expect(end, `no ON CONFLICT after the ${table} INSERT`).toBeGreaterThan(start);
-  return sql.slice(start, end);
+  //  Every INSERT into the table across the concatenated migrations,
+  //  joined. With more than one seeding migration, returning only the
+  //  first block would silently drop the rows the later one adds.
+  const blocks: string[] = [];
+  let from = 0;
+  for (;;) {
+    const start = sql.indexOf(`INSERT INTO public.${table}`, from);
+    if (start === -1) break;
+    const end = sql.indexOf('ON CONFLICT', start);
+    expect(end, `no ON CONFLICT after an ${table} INSERT`).toBeGreaterThan(start);
+    blocks.push(sql.slice(start, end));
+    from = end;
+  }
+  expect(blocks.length, `no INSERT into ${table}`).toBeGreaterThan(0);
+  return blocks.join('\n');
 }
 
 describe('the section list', () => {

@@ -33,4 +33,15 @@ export const SECTION_ICON: Record<AccessSection, IconName> = {
   risk_register:          'quality/risk',
   policies:               'nav/policies',
   audit_trail:            'quality/audit-trail',
+  //  PM-03's remaining five. Each takes the icon the design's own rails
+  //  use for that section on DB-01 and DB-02, so the glyph beside
+  //  "Goods receipt" in a request dialog is the glyph beside it in the
+  //  sidebar. Distribution has no section glyph of its own in the file;
+  //  DB-02 draws its Dispatch rail item with the send mark, which is
+  //  the nearest thing the toolkit actually contains.
+  suppliers:              'nav/supplier-qual',
+  goods_receipt:          'quality/material-receipt',
+  coa_register:           'quality/coa',
+  traceability:           'quality/genealogy',
+  distribution:           'action/send',
 };
