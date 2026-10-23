@@ -36,7 +36,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   listProductSpecifications, listSpecificationTests, createDraftSpecification,
-  addSpecificationTest, approveSpecification, removeSpecificationTest,
+  addSpecificationTest, approveSpecification, removeSpecificationTest, signSpecification,
   LIMIT_TYPES, limitSummary,
   type ProductSpecification, type SpecificationTest, type LimitType,
 } from '../../lib/pharma/productSpecificationService';
@@ -63,6 +63,10 @@ export default function ProductSpecificationsPage(
   const [notice, setNotice] = useState<string | null>(null);
 
   const [version, setVersion] = useState('');
+  //  The password is typed here rather than into a prompt(), which
+  //  shows what is typed. Held only for the moment between signing and
+  //  approving and cleared either way.
+  const [password, setPassword] = useState('');
   const [draftTest, setDraftTest] = useState({
     test_name: '', test_method: '', unit: '',
     limit_type: 'range' as LimitType,
@@ -147,13 +151,25 @@ export default function ProductSpecificationsPage(
       {notice && <p style={good} role="status">{notice}</p>}
       {failure && <p style={bad} role="status">{failure}</p>}
 
-      <label style={labelStyle}>
-        Product
-        <select style={input} value={productId} onChange={(e) => setProductId(e.target.value)}>
-          <option value="">Choose a product…</option>
-          {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
-      </label>
+      {/*  AN EMPTY SELECT SAYS NOTHING. On a workspace with no products
+          the screen was a dropdown with one disabled line in it and no
+          explanation of why, which reads as a broken page rather than
+          an empty one. */}
+      {products.length === 0 ? (
+        <p style={note}>
+          No products are registered yet. A specification belongs to a product, so one has
+          to exist first — register it under <strong>Regulatory → Products</strong>, then
+          come back here to write what its batches are released against.
+        </p>
+      ) : (
+        <label style={labelStyle}>
+          Product
+          <select style={input} value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <option value="">Choose a product…</option>
+            {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </label>
+      )}
 
       {productId && !open && (
         <>
@@ -345,9 +361,11 @@ export default function ProductSpecificationsPage(
                   governing every batch made while it was in force.
                 </p>
                 <p style={note}>
-                  Approving requires a designated QA authority. PM-03 names no role for
-                  approving a specification, so the database uses the register that already
-                  approves a master formula; if you are refused, that is why.
+                  Approving is reserved to the QA Manager and is enforced by the database.
+                  Administrative access does not carry it — an owner or an admin is refused
+                  by the same rule as anyone else. PM-03 names no role for approving a
+                  specification, so this is a decision taken for the product and is pending
+                  final quality and regulatory confirmation.
                 </p>
                 <label style={labelStyle}>
                   In force from
@@ -355,14 +373,36 @@ export default function ProductSpecificationsPage(
                     value={open.effective_date ?? new Date().toISOString().slice(0, 10)}
                     onChange={(e) => setOpen({ ...open, effective_date: e.target.value })} />
                 </label>
-                <button type="button" style={{ ...primary, opacity: requiredCount > 0 && !busy ? 1 : 0.5 }}
-                  disabled={requiredCount === 0 || busy}
+                {/*  SIGNED, THEN APPROVED. The signature is taken over
+                    this version's content, so one taken before an edit
+                    stops matching — the database refuses it as stale
+                    rather than approving something nobody signed. */}
+                <label style={labelStyle}>
+                  Your password, to sign
+                  <input style={input} type="password" value={password}
+                    autoComplete="current-password"
+                    onChange={(e) => setPassword(e.target.value)} />
+                </label>
+
+                <button type="button"
+                  style={{ ...primary, opacity: requiredCount > 0 && password && !busy ? 1 : 0.5 }}
+                  disabled={requiredCount === 0 || !password || busy}
                   onClick={() => void (async () => {
-                    const ok = await run(`Version ${open.version} is approved and in force.`,
-                      () => approveSpecification(open.id, open.effective_date ?? null));
-                    if (ok) { setOpen(null); await loadSpecs(); }
+                    setBusy(true); setFailure(null); setNotice(null);
+                    const signed = await signSpecification(open.id, password);
+                    if (!signed.ok) {
+                      setBusy(false); setPassword('');
+                      setFailure(`${signed.message} (${signed.code})`);
+                      return;
+                    }
+                    const r = await approveSpecification(
+                      open.id, open.effective_date ?? null, signed.signatureId);
+                    setBusy(false); setPassword('');
+                    if (!r.ok) { setFailure(`${r.message} (${r.code})`); return; }
+                    setNotice(`Version ${open.version} is approved and in force.`);
+                    setOpen(null); await loadSpecs();
                   })()}>
-                  Approve this version
+                  Sign and approve this version
                 </button>
                 {requiredCount === 0 && (
                   <p style={note}>

@@ -6582,7 +6582,13 @@ isOneToOne: false
 { Args: { "p_restriction_id": string,"p_reason": string }; Returns: undefined
                            },
 "product_specification_approve":
-{ Args: { "p_specification_id": string,"p_effective_date"?: string }; Returns: Json
+{ Args: { "p_specification_id": string,"p_effective_date"?: string,"p_signature_id"?: string }; Returns: Json
+                           },
+"product_specification_sign":
+{ Args: { "p_specification_id": string,"p_password": string,"p_reason"?: string }; Returns: Json
+                           },
+"product_specification_record_hash":
+{ Args: { "p_specification_id": string }; Returns: string
                            },
 "batch_governing_specification":
 { Args: { "p_batch_id": string }; Returns: string

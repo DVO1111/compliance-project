@@ -158,19 +158,50 @@ export async function removeSpecificationTest(testId: string): Promise<SpecResul
 }
 
 /**
+ * Sign a specification, which is the step before approving it.
+ *
+ * NOT sign_electronic_record(): that looks the record up in
+ * entity_current_state and refuses anything the lifecycle engine does
+ * not hold, and a specification is not one of those. The password
+ * check, the attempt log and the binding are the same; the record hash
+ * is taken over the specification's own content, so a signature stops
+ * matching if the draft is edited after it is taken.
+ */
+export async function signSpecification(
+  specificationId: string, password: string, reason?: string,
+): Promise<{ ok: true; signatureId: string } | { ok: false; code: string; message: string }> {
+  const { data, error } = await supabase.rpc('product_specification_sign', {
+    p_specification_id: specificationId,
+    p_password: password,
+    p_reason: reason ?? undefined,
+  });
+  if (error) return toFailure(error, 'The specification could not be signed.') as never;
+  const r = (data ?? {}) as { ok?: boolean; code?: string; message?: string; signature_id?: string };
+  if (!r.ok) {
+    return { ok: false, code: r.code ?? 'E_SIGNATURE', message: r.message ?? 'The signature was refused.' };
+  }
+  return { ok: true, signatureId: String(r.signature_id) };
+}
+
+/**
  * Approve a draft, fixing it.
  *
  * Refusals worth reading as written:
- *   PRODUCT_SPEC_FORBIDDEN          not a designated QA authority
- *   PRODUCT_SPEC_NO_TESTS           it states no criteria
- *   PRODUCT_SPEC_NOTHING_REQUIRED   it requires nothing, so nothing could be judged
+ *   PRODUCT_SPEC_FORBIDDEN             not the QA Manager — and
+ *                                      administrative access does not
+ *                                      carry this authority
+ *   PRODUCT_SPEC_SIGNATURE_REQUIRED    no signature was supplied
+ *   PRODUCT_SPEC_SIGNATURE_STALE       the draft changed after signing
+ *   PRODUCT_SPEC_NO_TESTS              it states no criteria
+ *   PRODUCT_SPEC_NOTHING_REQUIRED      it requires nothing, so nothing could be judged
  */
 export async function approveSpecification(
-  specificationId: string, effectiveDate: string | null,
+  specificationId: string, effectiveDate: string | null, signatureId: string,
 ): Promise<SpecResult> {
   const { error } = await supabase.rpc('product_specification_approve', {
     p_specification_id: specificationId,
     p_effective_date: effectiveDate ?? undefined,
+    p_signature_id: signatureId,
   });
   if (error) {
     logger.warn('[spec] approval refused', { specificationId, error });

@@ -441,7 +441,7 @@ BEGIN
   VALUES (s_id,'Assay','range',98,102,'%',true);
   UPDATE public.product_specifications
      SET status='effective', approved_by=current_setting('ar.u_qm')::uuid,
-         approved_at=now(), effective_date=current_date - 1
+         approved_at=now(), approved_by_role='service', effective_date=current_date - 1
    WHERE id = s_id;
 
   --  And the product registered, because D05's gate refuses a release

@@ -90,7 +90,7 @@ BEGIN
   VALUES (s_id,'Dissolution','min',80,'%',false);
   UPDATE public.product_specifications
      SET status='effective', approved_by=u_qm, approved_at=now(),
-         effective_date=current_date - 1
+         approved_by_role='service', effective_date=current_date - 1
    WHERE id = s_id;
 END
 $fx$;

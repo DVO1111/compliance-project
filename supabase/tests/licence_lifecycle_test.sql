@@ -65,6 +65,10 @@ BEGIN
 
     UPDATE public.product_specifications
        SET status = 'effective', approved_by = p_actor, approved_at = now(),
+           --  No signer: this is a service-context fixture, and
+           --  20261117000000 demands either a signature or an explicit
+           --  statement that there was nobody to take one from.
+           approved_by_role = 'service',
            effective_date = v_mfg - 1
      WHERE id = v_spec;
   END IF;

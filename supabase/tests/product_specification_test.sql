@@ -157,25 +157,69 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     v_ok := SQLERRM LIKE 'PRODUCT_SPEC_FORBIDDEN%'; v_msg := SQLERRM;
   END;
-  PERFORM _psk('B','B1 a member who is not a QA authority cannot approve one',
+  --  The refusal is now about the ROLE, not a register: u_no is a
+  --  qc_analyst. An owner or admin is refused by the same clause,
+  --  which is the whole of "administrative access does not carry this
+  --  authority" — asserted in section I.
+  PERFORM _psk('B','B1 a member who is not the QA manager cannot approve one',
     v_ok, left(v_msg,140));
 END
 $b$;
 RESET ROLE;
 
+--  AN ELECTRONIC SIGNATURE, which 20261117000000 requires of a human
+--  approver. Minted here, as a service context, because
+--  electronic_signatures is not writable by an authenticated session —
+--  signing goes through sign_electronic_record(), which needs a
+--  password fixture that belongs to the electronic signature suite
+--  rather than this one. What matters here is that approval CONSUMES a
+--  signature bound to this signer, this specification and the approve
+--  action, which it does either way.
+DO $mint$
+DECLARE v_sig uuid;
+BEGIN
+  INSERT INTO public.electronic_signatures (
+    company_id, signer_id, signer_name, signer_email,
+    entity_type, entity_id, action, meaning, record_hash, signed_state
+  ) VALUES (
+    current_setting('ps.c_a')::uuid, current_setting('ps.u_qa')::uuid,
+    'Ngozi Quality', 'qa@ps.test',
+    'product_specification', current_setting('ps.spec1')::uuid, 'approve', 'approved',
+    --  The specification's OWN content hash. electronic_signature_record_hash
+    --  reads entity_current_state and returns NULL for a specification,
+    --  which would make every signature stale — see 20261117000000.
+    public.product_specification_record_hash(current_setting('ps.spec1')::uuid),
+    'draft'
+  ) RETURNING id INTO v_sig;
+  PERFORM set_config('ps.sig1', v_sig::text, false);
+END
+$mint$;
+
 SELECT set_config('request.jwt.claims',
   json_build_object('sub', current_setting('ps.u_qa'), 'role','authenticated')::text, false);
 SET ROLE authenticated;
 DO $b2$
-DECLARE r jsonb; v_ok boolean := false; v_msg text;
+DECLARE r jsonb; v_ok boolean := false; v_msg text; v_sig uuid;
 BEGIN
+  v_sig := current_setting('ps.sig1')::uuid;
+
   BEGIN
     r := public.product_specification_approve(current_setting('ps.spec1')::uuid,
-                                              current_date - 30);
+                                              current_date - 30, v_sig);
     v_ok := (r->>'ok')::boolean; v_msg := r::text;
   EXCEPTION WHEN OTHERS THEN v_msg := SQLERRM;
   END;
-  PERFORM _psk('B','B2 the designated QA authority can', v_ok, left(v_msg,160));
+  PERFORM _psk('B','B2 the QA manager can, with a signature', v_ok, left(v_msg,160));
+
+  PERFORM _psk('B','B2b and the role they held is recorded with it',
+    (SELECT approved_by_role FROM public.product_specifications
+      WHERE id = current_setting('ps.spec1')::uuid) = 'qa_manager',
+    (SELECT coalesce(approved_by_role,'<null>') FROM public.product_specifications
+      WHERE id = current_setting('ps.spec1')::uuid));
+
+  PERFORM _psk('B','B2c and the signature is recorded against the version',
+    (SELECT approval_signature_id FROM public.product_specifications
+      WHERE id = current_setting('ps.spec1')::uuid) = v_sig);
 
   PERFORM _psk('B','B3 and it counts the required tests, not all of them',
     (r->>'required_tests')::int = 2, r::text);

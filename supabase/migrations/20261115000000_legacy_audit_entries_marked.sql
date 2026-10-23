@@ -92,7 +92,7 @@ ON CONFLICT (algo) DO UPDATE
 -- immutability trigger would refuse anything more.
 
 DO $mark$
-DECLARE v_marked bigint;
+DECLARE v_marked bigint; v_had_guard boolean;
 BEGIN
   --  trg_block_audit_update refuses every UPDATE on audit_logs,
   --  including this one. It is disabled for the length of this
@@ -100,7 +100,23 @@ BEGIN
   --  arrangement the suite uses to simulate a tamper — the difference
   --  being that this writes a column the chain does not cover and
   --  leaves every hash, sequence number and timestamp alone.
-  ALTER TABLE public.audit_logs DISABLE TRIGGER trg_block_audit_update;
+  --
+  --  CONDITIONAL, BECAUSE THE TRIGGER IS NOT EVERYWHERE. The Criateur
+  --  project records 20260225000000 (immutable_audit_trail) as
+  --  applied and has neither trg_block_audit_update nor
+  --  fn_block_audit_mutation: only the deletion guard survives there.
+  --  An unconditional ALTER ... DISABLE TRIGGER raises on a trigger
+  --  that does not exist, so this migration would have failed on the
+  --  one database it most needed to run against. Found by inspecting
+  --  the live schema, not by reading.
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+     WHERE c.relname = 'audit_logs' AND t.tgname = 'trg_block_audit_update'
+       AND NOT t.tgisinternal) INTO v_had_guard;
+
+  IF v_had_guard THEN
+    ALTER TABLE public.audit_logs DISABLE TRIGGER trg_block_audit_update;
+  END IF;
 
   UPDATE public.audit_logs
      SET hash_algo = 'legacy-client-v0'
@@ -108,7 +124,9 @@ BEGIN
      AND integrity_hash IS NOT NULL;
   GET DIAGNOSTICS v_marked = ROW_COUNT;
 
-  ALTER TABLE public.audit_logs ENABLE TRIGGER trg_block_audit_update;
+  IF v_had_guard THEN
+    ALTER TABLE public.audit_logs ENABLE TRIGGER trg_block_audit_update;
+  END IF;
 
   RAISE NOTICE 'Marked % pre-sealing audit entries as legacy-client-v0', v_marked;
 END;
@@ -249,9 +267,12 @@ BEGIN
       'AUDIT_LEGACY_NO_REASON: the legacy convention has no recorded reason, so nothing explains why those entries cannot be verified';
   END IF;
 
-  --  The immutability trigger must be back on. It is disabled for one
-  --  statement above and a migration that left it off would remove the
-  --  control this whole area rests on.
+  --  If the immutability trigger exists it must be back ON: it is
+  --  disabled for one statement above and a migration that left it off
+  --  would remove the control this whole area rests on. Where it does
+  --  not exist at all — as on the Criateur project — that is a
+  --  separate finding, restored by 20261116000000 rather than papered
+  --  over here.
   IF EXISTS (SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
               WHERE c.relname = 'audit_logs' AND t.tgname = 'trg_block_audit_update'
                 AND t.tgenabled = 'D') THEN

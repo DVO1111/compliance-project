@@ -150,7 +150,7 @@ BEGIN
   VALUES (spec_p,'Assay','HPLC','range',98,102,'%',true);
   UPDATE public.product_specifications
      SET status='effective', approved_by=u_qm, approved_at=now(),
-         effective_date=current_date - 1
+         approved_by_role='service', effective_date=current_date - 1
    WHERE id = spec_p;
   PERFORM set_config('br.spec', spec_p::text, false);
 END
