@@ -1352,3 +1352,52 @@ no verdict in it, answers the wrong question — four assertions about
 authority began failing on a missing signature instead. BEFORE
 triggers run alphabetically, so the trigger is named to sort last and
 says why.
+
+---
+
+## 43. Two certificates, one column name
+
+§40 recorded decision 2 — the CoA verifier may not make the
+disposition — as diverging from PM-03 because `coa_register` and
+`qa_disposition` both give Act to `qa_manager` and `qa_officer`.
+
+The conclusion was right and the reason was wrong, which matters
+because the reason is what a reviewer reads and what
+`duty_pair_is_derived()` consults.
+
+There are **two** certificate acts in this system:
+
+| Act | Table | PM-03 column | Screen |
+|---|---|---|---|
+| **Outgoing** — issued from a released batch | `certificate_of_analysis` | `coa_register` | CoA register |
+| **Incoming** — the supplier's, checked against the material specification | `material_certificates_of_analysis` | **none** | none |
+
+Decision 2 is about the incoming one. So the pair is not derivable for
+a stronger reason than the one recorded: **PM-03 does not tabulate the
+act at all.** Not a role overlap — an absent column.
+
+`20261129000000` corrects the label to `incoming_coa_verification`, a
+marker that is deliberately not a grid column, and asserts that it
+does not quietly become one — if it ever did, the pair would turn
+"derivable" and stop demanding its explicit approval.
+
+Two things found while establishing this, both recorded rather than
+acted on:
+
+- **`material_coa_verify()` is guarded by company membership and
+  nothing else.** Any active member can verify an incoming
+  certificate. It predates this branch, no screen calls the RPC, and
+  closing it means choosing which role owns the act — which is the
+  decision itself.
+- **The obvious PM-03 fix does not work.** Splitting the two QA roles
+  across `coa_register` and `qa_disposition` would leave one of them
+  holding the `material_disposition` step whose section they may not
+  act in. `fn_material_lots_disposition_role` asserts the step, so the
+  inconsistency would not surface as a refusal — it would surface as a
+  screen hiding a control the database still allows.
+
+The real change is a twelfth PM-03 column, and granting it to somebody
+means granting a role a new authority.
+[`docs/decision-note-coa-separation.md`](decision-note-coa-separation.md)
+sets out the exact seed, the affected roles and screens, and three
+options. *For the design to resolve.*

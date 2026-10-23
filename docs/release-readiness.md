@@ -21,8 +21,9 @@ compliance or validation.
 
 | | |
 |---|---|
-| SQL assertions | **2626, 0 failed** |
+| SQL assertions | **2629, 0 failed** |
 | Suites | 52 |
+| Branch migrations applying cleanly on a bare build | **17 of 17**, in filename order |
 | Database | dropped and rebuilt from the migration files, every run |
 | Frontend unit tests | **1057, 0 failed** |
 | TypeScript | clean |
@@ -273,6 +274,64 @@ project.
 
 ---
 
+### 5.6 The operator checklist
+
+Everything in §§5.1–5.5 is collected, with expected values and a
+sign-off table, in
+[`docs/live-verification-checklist.md`](live-verification-checklist.md).
+That is the document to hand to whoever has database access. It is
+read-only throughout.
+
+## 5b. Migration sequence — verified against this branch
+
+Checked empirically, not asserted.
+
+| Claim | How it was checked | Result |
+|---|---|---|
+| All branch migrations apply in filename order | A database created from nothing, bootstrap applied, then every migration in `supabase/migrations` in order | **17 of 17 applied.** The 15 that fail are dated Feb–Jul 2026 and predate this branch — the runner's pinned baseline |
+| The suite runs from that schema | `scripts/ci/run-sql-tests.sh` drops and rebuilds every run | 2629 assertions, 0 failed |
+| `company_role` enum untouched | `grep` for `ALTER TYPE` and `company_role` across the branch's migrations | Four mention it; **all four are comments or read-only predicates**. No `ALTER TYPE` anywhere |
+| `company_members` untouched | `grep` for `ALTER TABLE public.company_members` | **None** |
+| Audit immutability restored | Count the three triggers on a migrations-only build | **3 present** |
+| Role assignments deploy empty | Count on a migrations-only build | **0** — nothing back-filled |
+| Specifications deploy empty | Same | **0** — no seeded criteria |
+| Enforced duty pairs | Same | **6**, one of them on an explicit approval |
+| Outstanding decisions | Same | **1** — sampling |
+| Signed actions enforced | Same | **1** — `batch_qc_result` |
+
+The counts above come from a database built from **migrations only**,
+not from the post-suite database — the test suites create roles and
+specifications of their own, and reading those would have reported
+seeded data that does not exist.
+
+### Ordering constraints that matter
+
+| Pair | Why the order is fixed |
+|---|---|
+| `20261115000000` → `20261116000000` | 15 disables the audit update trigger for one statement; 16 creates it. Reversed, 16's self-test would run against a disabled trigger |
+| `20261117000000` → `20261119000000` | 19 replaces `product_specification_approver_error`, which 17 creates as a seam |
+| `20261119000000` → `20261121000000` | 21 extends `fn_operational_role_authority` and drops the 4-argument `operational_role_assign` |
+| `20261120000000` → `20261122000000` | 22 **renames** `batch_duty_conflicts` to `duty_conflicts` |
+| `20261122000000` → `20261125000000` → `20261128000000` → `20261129000000` | each narrows or relabels rows the previous one created |
+| `20261126000000` after `20261122000000` | the attribution it writes is what the duty guards read; applied earlier it would have nothing to attach to |
+
+### Rollback limitations, restated
+
+| Migration | What a rollback destroys |
+|---|---|
+| `20261119000000` | **every assignment and revocation** — the record of who held which authority and when. No equivalent elsewhere, since the membership column cannot hold these roles |
+| `20261121000000` | the link between an appointment and the signature that authorised it. The signatures survive in `electronic_signatures`; which one authorised which grant does not |
+| `20261124000000` | every reassignment of stranded work |
+| `20261126000000` | nothing stored — but dropping it makes decision 1 unreachable again, silently |
+| `20261127000000` | the link between a verdict and its signature |
+| `20261118000000` | governing-specification stamps and controlled reviews created after deployment |
+
+**Export those tables before contemplating any rollback.** Everything
+else on this branch is additive and reversible by restoring function
+bodies from git.
+
+---
+
 ## 6. Deployment order
 
 Not to be started until you approve this plan.
@@ -282,7 +341,7 @@ Not to be started until you approve this plan.
 | 0 | Re-run `scripts/ci/live-readiness-report.sql` | engineer |
 | 1 | Review and approve: the role model, the six decisions, the deployment plan | **you** |
 | 2 | Apply `20261103000000` … `20261118000000` in filename order | engineer |
-| 3 | Apply `20261119000000` … `20261128000000` | engineer |
+| 3 | Apply `20261119000000` … `20261129000000` | engineer |
 | 4 | Verify: §5.1, §5.2, §5.3, plus `verify_audit_chain` per company | engineer |
 | 5 | **Appoint operational roles** — a workspace owner or admin assigns them to named people, with a reason and, for a GMP-critical role, a signature | **you / QA** |
 | 6 | Approve specifications under the backfill plan | **QA Manager** |
@@ -320,7 +379,9 @@ optional.
 | Document | What it answers |
 |---|---|
 | [`operational-role-model.md`](operational-role-model.md) | The role schema, authority, signatures, bootstrap, revocation, backward compatibility, rollback limits |
-| [`separation-of-duties.md`](separation-of-duties.md) | Both chains, what is enforced and on whose authority, **the six decisions** |
+| [`separation-of-duties.md`](separation-of-duties.md) | Both chains, what is enforced and on whose authority, the six decisions, and §§5.4–5.5 — what is **explicitly unresolved** and what would close it |
+| [`decision-note-coa-separation.md`](decision-note-coa-separation.md) | **The one divergence from PM-03**: the exact column change, affected roles and screens, enforcement, tests, and three options |
+| [`live-verification-checklist.md`](live-verification-checklist.md) | **Operator-ready, read-only.** Every live check with expected values and a sign-off table |
 | [`screen-audit.md`](screen-audit.md) | Placeholders, empty and failure states, role-specific actions, Figma coverage |
 | [`audit-threat-model.md`](audit-threat-model.md) | Who can alter an audit record, and the absence of an external anchor |
 | [`live-readiness.md`](live-readiness.md) | What the Criateur project actually contains |

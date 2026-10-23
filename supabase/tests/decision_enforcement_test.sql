@@ -223,9 +223,34 @@ BEGIN
        FROM public.duty_conflicts
       WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'));
 
+  --  THE LABEL NAMES THE RIGHT ACT. `coa_register` is the OUTGOING
+  --  finished-product register (certificate_of_analysis); decision 2
+  --  is about the INCOMING supplier certificate
+  --  (material_certificates_of_analysis), which PM-03 does not
+  --  tabulate at all. 20261129000000 corrected the label, and this
+  --  keeps it corrected.
+  PERFORM _dek('C','C5b the pair names the incoming act, not the outgoing register',
+    (SELECT section_a = 'incoming_coa_verification'
+       FROM public.duty_conflicts
+      WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'),
+    (SELECT section_a FROM public.duty_conflicts
+      WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'));
+
+  --  And that marker is NOT a PM-03 column — if it ever becomes one,
+  --  the pair silently turns derivable and stops needing the approval.
+  PERFORM _dek('C','C5c and that marker is not a PM-03 column',
+    NOT EXISTS (SELECT 1 FROM public.section_permissions
+                 WHERE section = 'incoming_coa_verification'));
+
+  --  The outgoing register is untouched: both QA roles still hold Act.
+  PERFORM _dek('C','C5d the outgoing CoA register column is unchanged',
+    (SELECT count(*) FROM public.section_permissions
+      WHERE section='coa_register' AND access='act'
+        AND role IN ('qa_manager','qa_officer')) = 2);
+
   PERFORM _dek('C','C6 and the approval says where it is recorded',
     (SELECT approved_reference LIKE '%Decision 2%'
-            AND approved_reference LIKE '%separation-of-duties%'
+            AND approved_reference LIKE '%decision-note-coa-separation%'
        FROM public.duty_conflicts
       WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'));
 

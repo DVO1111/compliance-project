@@ -225,16 +225,106 @@ Single-use by unique index, bound to the signer, and the Part 11
 | 5 | Every QC Analyst recording a finished-product result — one password prompt per verdict |
 | 6 | Only a multi-role holder |
 
-### 5.4 Still open
+### 5.4 Decision 3 — sampling versus testing: EXPLICITLY UNRESOLVED
 
-**Decision 3 only.** `duty_decisions_outstanding()` returns exactly
-one row, and it is sampling. Enforcing it needs a PM-03 column for
-sampling and a site procedure requiring independence; the brief is
-explicit that a universal rule must not be invented without one.
+**Not enforced, and not to be enforced until two things are
+confirmed.** This section says what the system does in the meantime
+and exactly what would close it.
 
-The attribution it would read already exists and is preserved:
-`material_lot_sampling.sampled_by` / `sampled_on` and
-`material_test_results.analyst_id` / `test_date`.
+#### Safe interim behaviour
+
+| | |
+|---|---|
+| Does anything refuse the sampler from testing? | **No.** `duty_conflict('material_lot', lot, 'qc_testing', sampler)` returns NULL |
+| Is the pair in the database? | **Yes** — `duty_conflicts`, `scope='material_lot'`, `duty_a='qc_testing'`, `duty_b='sampling'`, `enforced = false`, `decision_status = 'awaiting_decision'` |
+| Is the attribution being captured? | **Yes, and preserved.** `material_lot_sampling.sampled_by` / `sampled_on` and `material_test_results.analyst_id` / `test_date` |
+| Can it be turned on later for past lots? | **Yes.** The check reads recorded actions, so lots sampled and tested before the rule is enabled become visible to it immediately |
+| What is reported? | `duty_decisions_outstanding()` returns it, and it is the **only** row that query returns |
+
+**The interim position is deliberate, not an oversight.** The brief is
+explicit: *"Require different actors only where the approved quality
+procedure requires independence. Do not invent a universal mandatory
+separation rule without evidence from the site's procedure."* Sampling
+and testing by one analyst is normal practice at many sites; a
+universal rule would refuse legitimate work on no authority.
+
+#### Exactly what is needed to close it
+
+Two pieces of evidence, both external to this repository:
+
+1. **A PM-03 column for sampling.** The matrix has none, so there is
+   nothing to derive a separation from. Adding it means deciding which
+   role performs sampling and whether that role is disjoint from
+   `qc_testing`'s Act role (`qc_analyst`). If sampling is also the QC
+   Analyst's, the pair can never be derived and would need the same
+   explicit-approval route as decision 2.
+2. **The site's written procedure**, stating that the person who draws
+   a sample may not perform the analysis on it — or stating that they
+   may, in which case the pair should be set to `declined` rather than
+   left open.
+
+#### How to close it, once both exist
+
+```sql
+UPDATE public.duty_conflicts
+   SET enforced = true,
+       decision_status = 'mandatory',
+       authority = 'approved_by_quality',   -- or 'derived_from_pm03' if PM-03 now derives it
+       approved_reference = '<SOP number, revision and date>'
+ WHERE scope = 'material_lot' AND duty_a = 'qc_testing' AND duty_b = 'sampling';
+```
+
+The CHECK added by `20261128000000` refuses this without a reference,
+so the SOP number is not optional. If the procedure says the opposite,
+set `decision_status = 'declined'` instead and leave `enforced` false
+— the row then records that it was considered and ruled out, which is
+worth more than deleting it.
+
+Regression tests already cover the unenforced state:
+`decision_enforcement_test.sql` D1–D4 assert the activities are
+distinct and attributed, that the pair is on the record, and that
+**nobody is refused**. Enabling it will make D3 fail, which is the
+right failure and the signal to update the test alongside the policy.
+
+---
+
+### 5.5 Decision 5 — two signature requirements PENDING POLICY
+
+Enforced: `batch_qc_result`. **Held, pending policy:** two more. They
+are rows in `signed_quality_actions` with `required = false`, so the
+mechanism exists, the action is registered, and nothing is silently
+enabled or quietly dropped.
+
+| Action | Performed by | Why it is held | What would close it |
+|---|---|---|---|
+| `material_test_result` | QC Analyst | The disposition gate reads this verdict the same way the release gate reads the finished-product one, so the case for signing is the same. What is undecided is **scope**: every test result, or only critical parameters? Signing every result on a multi-parameter specification is a password prompt per row | The site's testing procedure stating which results carry a signature |
+| `batch_execution_close` | Production Supervisor | Stage completion is **already signed** by `batch_stage_complete`. Closing execution may be clerical once every stage is signed, in which case a second signature adds ceremony and no evidence | The site's batch-record procedure stating whether closure is a distinct attestation |
+
+#### Safe interim behaviour
+
+Neither action is refused and neither is silently signed. A
+`material_test_result` or an execution close recorded today carries
+`signature_id IS NULL` where the column exists, which is the honest
+record of an act nobody attested to — and is findable:
+
+```sql
+SELECT * FROM public.signed_quality_actions WHERE NOT required;
+```
+
+#### How to enable one
+
+```sql
+UPDATE public.signed_quality_actions
+   SET required = true, decision_status = 'enforced',
+       basis = basis || ' ENABLED: <SOP number, revision and date>'
+ WHERE action_key = 'material_test_result';
+```
+
+A CHECK keeps `required` and `decision_status` in step, so one cannot
+be set without the other. **Enabling `material_test_result` also needs
+its enforcement trigger**, which is not written: only
+`batch_qc_results` has one today. That is deliberate — writing a
+trigger for a rule nobody has asked for is how dead guards appear.
 
 ---
 
