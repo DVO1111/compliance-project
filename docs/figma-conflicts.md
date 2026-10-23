@@ -1122,3 +1122,119 @@ it reads its rule from.** Moving a rule out of a function body and
 into a table — which §31 and §33 both did, for good reasons — moves
 the thing that has to be protected, and that move was not noticed
 until somebody went looking.
+
+---
+
+## 37. Work that nobody is left to finish
+
+§31 decided what happens to work in progress when its owner loses a
+role: nothing is auto-completed and nothing is auto-cancelled. The
+work stands, still attributed to whoever did it, and somebody who
+holds the authority finishes it.
+
+The gap that left, and §34 recorded it as a gap: **nobody is told.** A
+half-finished batch whose supervisor left sits in `in_progress` and
+the only way to find it is to go looking.
+
+`20261124000000` closes it with three parts, in this order:
+
+- **a report** — `operational_role_stranded_work(company)` reads the
+  lifecycle history that already exists. Stranded means all three: the
+  record is unfinished, its last actor has lost an operational role
+  *in this company*, and what they have left does not let them carry
+  on. That middle condition is what keeps it from listing every record
+  ever touched by somebody without a role;
+- **a notice** — one per person who could act on it, emitted when the
+  revocation happens. Not one per stranded record: a revocation that
+  strands forty batches should produce a sentence, not forty. Not to
+  the person who lost the role, who by definition cannot act on it;
+- **a reassignment** — authorised, auditable, and **additive**.
+
+The third is where the care went. A reassignment never touches the
+record's own attribution: who did the work is a fact, and who carries
+it on from here is a second fact recorded beside it. It is refused
+unless the caller administers roles or can act in the section, refused
+if the target cannot act in that section — reassigning to somebody
+equally unable moves the problem and closes the report entry, which is
+worse than leaving it open — and refused for anything that is not
+actually stranded, so it cannot become a general transfer-of-ownership
+tool beside the lifecycle guards.
+
+*Not built:* this is not a task register. §8 records that the design
+has none, and inventing one here would be inventing a workflow.
+
+---
+
+## 38. The six duty decisions, answered conservatively
+
+§33 left six questions. Each now has a **conservative default** — the
+reading that refuses more — except where refusing more would have
+meant inventing a rule PM-03 does not contain.
+
+`20261125000000` adds a third `decision_status`, because "enforced"
+was carrying two different meanings:
+
+| | |
+|---|---|
+| `mandatory` | an existing product decision requires it |
+| `conservative_default` | enforced as the safe reading, **pending confirmation** |
+| `awaiting_decision` | not enforced; needs an answer, and in two cases PM-03 changed first |
+
+Three pairs are now enforced as conservative defaults: the receiver
+may not disposition a lot, the releaser may not dispatch a batch, and
+"executed it" keeps its broad reading. Three are not enforced, and
+**two of those cannot be** without changing PM-03 first — the CoA pair
+because the matrix gives both columns to the same roles, sampling
+because it has no column at all.
+
+Two things worth recording about the shape of this:
+
+- **Every conservative default costs nothing except to somebody
+  holding two roles at once.** Not a coincidence: that is the case
+  PM-03's arithmetic used to make impossible, and the only case this
+  layer exists for.
+- `duty_decisions_outstanding()` lists everything still open, so a
+  default cannot become permanent by being forgotten. A reclassified
+  row is a visible row.
+
+`20261125000000` also adds `duty_definitions`, which says in words
+which recorded actions count as having performed each duty. That lived
+only inside two PL/pgSQL function bodies, where a reviewer would have
+had to read code to find out whether one in-process reading counts as
+executing a batch. It does, and that is a judgement, so it belongs
+beside the rule it feeds.
+
+---
+
+## 39. A search box that discarded what people typed
+
+HS-01 row 2 of the design's own dead-end register, still live in the
+code: the top-bar field *"Search batches, lots, records…"* had no
+`value`, no `onChange` and no handler. It took typing and threw it
+away, in the old product and in this one.
+
+The register's instruction is conditional — build a number lookup, *"or
+if it isn't ready by Thursday, remove the field"* — and it is not
+ready: a lookup across lots, batches, deviations, certificates and
+licences with its own not-found state is a piece of work, not a patch.
+
+**Removed.** A search box that silently discards what somebody types
+is worse than no search box, because they believe they have searched,
+and on a compliance system that belief can end an investigation early.
+Restoring it means building the lookup, not re-adding the input.
+
+Two related findings from the same audit:
+
+- The **notifications bell**, which row 3 says to remove because there
+  was nothing to put in it, is wired and now carries §37's notice. The
+  register entry is out of date and the bell stays — a disagreement
+  with the design file, recorded rather than silently taken.
+- **Traceability** drew a dropdown holding one disabled line and a
+  Trace button that could never be pressed, on a workspace with no
+  lots. Identical to the defect found on the specifications screen in
+  an earlier round, in a different file — which suggests the pattern
+  rather than the page was the problem. Both now say which register is
+  empty and where the first record comes from.
+
+`docs/screen-audit.md` has the full pass, including the three pages
+that had no branch at all for a load that fails.

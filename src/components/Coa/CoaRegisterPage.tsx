@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPermissions } from '../../lib/permissions';
-import { canAct, resolveWorkRole } from '../../lib/access/roleAccess';
+import { resolveWorkRoles, sectionAccessFor } from '../../lib/access/roleAccess';
 import { logger } from '../../lib/logger';
 import {
     listCoasForCompany,
@@ -72,9 +72,12 @@ export default function CoaRegisterPage() {
     //  permission is kept as a floor for a member whose work role does
     //  not resolve, because AND-ing two models can only subtract and
     //  that is how Deviation / CAPA went missing for every role.
-    const workRole = resolveWorkRole(profile);
-    const canApprove = workRole
-        ? canAct(workRole, 'coa_register')
+    //  The SET of operational roles, not the sole one: somebody holding
+    //  two was answering NULL here and falling through to the legacy
+    //  floor, which is the opposite of what holding two roles should do.
+    const workRoles = resolveWorkRoles(profile);
+    const canApprove = workRoles.length > 0
+        ? sectionAccessFor(workRoles, 'coa_register') === 'act'
         : (perms.canManageGrcControls || perms.canManageAuditWorkspace);
 
     const load = useCallback(async () => {

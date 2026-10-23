@@ -21,7 +21,7 @@ import {
   exportCoaPdf,
 } from '../../lib/pharma/coaService';
 import { isQaAuthority } from '../../lib/pharma/qaAuthority';
-import { canAct, resolveWorkRole } from '../../lib/access/roleAccess';
+import { resolveWorkRoles, sectionAccessFor } from '../../lib/access/roleAccess';
 
 interface Props {
   batch: BatchRecord;
@@ -42,7 +42,7 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
   //  alone. The database enforces the same cell on this table
   //  (20261107000000), so the control is drawn to match the refusal
   //  rather than instead of it.
-  const mayRecordQc = canAct(resolveWorkRole(profile), 'qc_testing');
+  const mayRecordQc = sectionAccessFor(resolveWorkRoles(profile), 'qc_testing') === 'act';
   const [tab, setTab] = useState<'inprocess' | 'final' | 'coa'>('inprocess');
   const [inProcess, setInProcess] = useState<BatchInProcessQc[]>([]);
   const [finalQc, setFinalQc] = useState<BatchQcResult[]>([]);

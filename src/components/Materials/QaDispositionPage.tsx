@@ -56,6 +56,7 @@ import {
 import { readinessHeadline, type Readiness } from '../../lib/materials/releaseReadiness';
 import type { WorkRole } from '../../lib/access/permissionRequests';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
 export interface QaDispositionPageProps {
   companyId?: string | null;
@@ -82,16 +83,27 @@ export default function QaDispositionPage({ companyId, role }: QaDispositionPage
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
-    const { error } = await supabase.from('material_lots').select('id').limit(1);
-    setReady(!error);
-    if (!error) {
-      //  Awaiting a decision is quarantine: received, sampled, not yet
-      //  dispositioned. Approved and rejected lots have been decided
-      //  and belong on the lot list, not in this queue.
-      const all = await listLots(companyId, { limit: 100 });
-      setLots(all.filter((l) => l.status === 'quarantine'));
+    try {
+      const { error } = await supabase.from('material_lots').select('id').limit(1);
+      setReady(!error);
+      if (!error) {
+        //  Awaiting a decision is quarantine: received, sampled, not yet
+        //  dispositioned. Approved and rejected lots have been decided
+        //  and belong on the lot list, not in this queue.
+        const all = await listLots(companyId, { limit: 100 });
+        setLots(all.filter((l) => l.status === 'quarantine'));
+      }
+    } catch (err) {
+      //  HS-07. A load that fails for any reason other than the table
+      //  being absent — a refused policy, a dropped connection — used
+      //  to leave the page on its spinner with nothing said. Plain
+      //  words, nothing lost, and the list stays as it was.
+      logger.error('[qa-disposition] load failed', err);
+      setNotice({ tone: 'bad', text:
+        'Could not load this page just now. Nothing has been lost — try again in a moment.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [companyId]);
 
   useEffect(() => { void load(); }, [load]);

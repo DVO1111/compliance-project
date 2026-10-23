@@ -655,18 +655,40 @@ BEGIN
   PERFORM _rsk('G','G4 but the QA Manager may',
     public.duty_conflict('material_lot', v_lot, 'disposition', v_qm) IS NULL);
 
-  --  NOT ENFORCED: the receipt pair is recorded and awaiting a decision,
-  --  so it must NOT refuse anybody yet.
-  PERFORM _rsk('G','G5 the receiver is not yet refused — that pair awaits a decision',
+  --  ENFORCED SINCE 20261125000000, as a conservative default. It
+  --  bites only somebody holding both storekeeper and a QA role,
+  --  because a storekeeper has no Act on qa_disposition to begin with.
+  PERFORM _rsk('G','G5 the receiver is refused too, as a conservative default',
     public.duty_conflict('material_lot', v_lot, 'disposition',
-      current_setting('rs.u_sk')::uuid) IS NULL,
+      current_setting('rs.u_sk')::uuid) LIKE 'MATERIAL_DISPOSITION_SELF_RECEIVED%',
     coalesce(public.duty_conflict('material_lot', v_lot, 'disposition',
       current_setting('rs.u_sk')::uuid), '(no conflict)'));
 
-  PERFORM _rsk('G','G6 and it is on the record as awaiting one',
-    (SELECT decision_status = 'awaiting_decision' AND NOT enforced
+  --  …and it says so, rather than passing for a settled rule. The
+  --  distinction is the point: 'mandatory' means an existing product
+  --  decision requires it, 'conservative_default' means it is the safe
+  --  reading until somebody rules.
+  PERFORM _rsk('G','G6 and it is on the record as pending confirmation',
+    (SELECT decision_status = 'conservative_default' AND enforced
        FROM public.duty_conflicts
+      WHERE scope='material_lot' AND duty_a='disposition' AND duty_b='receipt'),
+    (SELECT decision_status FROM public.duty_conflicts
       WHERE scope='material_lot' AND duty_a='disposition' AND duty_b='receipt'));
+
+  --  The pairs that are NOT enforced must still refuse nobody. A
+  --  recorded proposal is not a rule.
+  PERFORM _rsk('G','G6b an unenforced pair refuses nobody',
+    public.duty_conflict('material_lot', v_lot, 'qc_testing',
+      current_setting('rs.u_sk')::uuid) IS NULL,
+    coalesce(public.duty_conflict('material_lot', v_lot, 'qc_testing',
+      current_setting('rs.u_sk')::uuid), '(no conflict)'));
+
+  --  And every outstanding decision is findable in one query, which is
+  --  what stops a conservative default becoming a permanent one by
+  --  being forgotten.
+  PERFORM _rsk('G','G6c the outstanding decisions are listed in one place',
+    (SELECT count(*) FROM public.duty_decisions_outstanding()) >= 4,
+    (SELECT count(*)::text FROM public.duty_decisions_outstanding()));
 
   --  NOT DERIVABLE: PM-03 gives both columns to the same roles, so the
   --  coa pair cannot be enforced without contradicting the matrix.

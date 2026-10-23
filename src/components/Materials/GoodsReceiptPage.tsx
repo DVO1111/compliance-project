@@ -51,6 +51,7 @@ import {
 } from '../../lib/materials/receiptRules';
 import type { WorkRole } from '../../lib/access/permissionRequests';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
 export interface GoodsReceiptPageProps {
   companyId?: string | null;
@@ -79,17 +80,28 @@ export default function GoodsReceiptPage({ companyId, role }: GoodsReceiptPagePr
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
-    const { error } = await supabase.from('material_lots').select('id').limit(1);
-    setReady(!error);
-    if (!error) {
-      const [lots, mats, sups] = await Promise.all([
-        listLots(companyId, { limit: 15 }),
-        listMaterials(companyId),
-        listSuppliers(companyId),
-      ]);
-      setRecent(lots); setMaterials(mats); setSuppliers(sups);
+    try {
+      const { error } = await supabase.from('material_lots').select('id').limit(1);
+      setReady(!error);
+      if (!error) {
+        const [lots, mats, sups] = await Promise.all([
+          listLots(companyId, { limit: 15 }),
+          listMaterials(companyId),
+          listSuppliers(companyId),
+        ]);
+        setRecent(lots); setMaterials(mats); setSuppliers(sups);
+      }
+    } catch (err) {
+      //  HS-07. A load that fails for any reason other than the table
+      //  being absent — a refused policy, a dropped connection — used
+      //  to leave the page on its spinner with nothing said. Plain
+      //  words, nothing lost, and the list stays as it was.
+      logger.error('[goods-receipt] load failed', err);
+      setNotice({ tone: 'bad', text:
+        'Could not load this page just now. Nothing has been lost — try again in a moment.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [companyId]);
 
   useEffect(() => { void load(); }, [load]);

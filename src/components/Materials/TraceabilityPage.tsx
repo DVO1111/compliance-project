@@ -120,20 +120,35 @@ export default function TraceabilityPage({ companyId }: TraceabilityPageProps) {
           ))}
         </div>
 
-        <label style={labelStyle}>
-          {direction === 'forward' ? 'Material lot' : 'Batch'}
-          <select style={input} value={subject} onChange={(e) => setSubject(e.target.value)}>
-            <option value="">Choose one…</option>
+        {/*  AN EMPTY SELECT SAYS NOTHING. On a workspace with no lots or
+            no batches this was a dropdown holding one disabled line and
+            a Trace button that could never be pressed, which reads as a
+            broken page rather than an empty one. Same fix as the
+            specifications screen. */}
+        {(direction === 'forward' ? lots.length : batches.length) === 0 ? (
+          <p style={noteStyle}>
             {direction === 'forward'
-              ? lots.map((l) => <option key={l.id} value={l.id}>{l.lot_number}</option>)
-              : batches.map((b) => <option key={b.id} value={b.id}>{b.batch_number ?? b.id}</option>)}
-          </select>
-        </label>
+              ? 'No material lots have been received yet. A forward trace starts from a lot, so book a delivery in under Goods receipt first.'
+              : 'No batch records exist yet. A backward trace starts from a batch, so one has to be initiated under Batch execution first.'}
+          </p>
+        ) : (
+          <>
+            <label style={labelStyle}>
+              {direction === 'forward' ? 'Material lot' : 'Batch'}
+              <select style={input} value={subject} onChange={(e) => setSubject(e.target.value)}>
+                <option value="">Choose one…</option>
+                {direction === 'forward'
+                  ? lots.map((l) => <option key={l.id} value={l.id}>{l.lot_number}</option>)
+                  : batches.map((b) => <option key={b.id} value={b.id}>{b.batch_number ?? b.id}</option>)}
+              </select>
+            </label>
 
-        <button type="button" style={{ ...primary, opacity: subject && !busy ? 1 : 0.5 }}
-          disabled={!subject || busy} onClick={() => void run()}>
-          {busy ? 'Tracing…' : 'Trace'}
-        </button>
+            <button type="button" style={{ ...primary, opacity: subject && !busy ? 1 : 0.5 }}
+              disabled={!subject || busy} onClick={() => void run()}>
+              {busy ? 'Tracing…' : 'Trace'}
+            </button>
+          </>
+        )}
       </section>
 
       {failed && (

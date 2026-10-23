@@ -42,6 +42,7 @@ import {
 } from '../../lib/materials/qcRules';
 import type { WorkRole } from '../../lib/access/permissionRequests';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
 export interface QcTestingPageProps {
   companyId?: string | null;
@@ -68,19 +69,30 @@ export default function QcTestingPage({ companyId, role }: QcTestingPageProps) {
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
-    const { error } = await supabase.from('material_lots').select('id').limit(1);
-    setReady(!error);
-    if (!error) {
-      const [all, defs] = await Promise.all([
-        listLots(companyId, { limit: 100 }),
-        listTestDefinitions(companyId),
-      ]);
-      //  Quarantine is the testing window: received, not yet
-      //  dispositioned. A released or rejected lot has been decided.
-      setLots(all.filter((l) => l.status === 'quarantine'));
-      setDefinitions(defs);
+    try {
+      const { error } = await supabase.from('material_lots').select('id').limit(1);
+      setReady(!error);
+      if (!error) {
+        const [all, defs] = await Promise.all([
+          listLots(companyId, { limit: 100 }),
+          listTestDefinitions(companyId),
+        ]);
+        //  Quarantine is the testing window: received, not yet
+        //  dispositioned. A released or rejected lot has been decided.
+        setLots(all.filter((l) => l.status === 'quarantine'));
+        setDefinitions(defs);
+      }
+    } catch (err) {
+      //  HS-07. A load that fails for any reason other than the table
+      //  being absent — a refused policy, a dropped connection — used
+      //  to leave the page on its spinner with nothing said. Plain
+      //  words, nothing lost, and the list stays as it was.
+      logger.error('[qc-testing] load failed', err);
+      setNotice({ tone: 'bad', text:
+        'Could not load this page just now. Nothing has been lost — try again in a moment.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [companyId]);
 
   useEffect(() => { void load(); }, [load]);

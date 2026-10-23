@@ -31,6 +31,10 @@ const TYPE_LABEL: Record<string, string> = {
   calendar_legal_date_set: "⚖️ Legal Review Scheduled",
   calendar_24h: "⏰ 24h Reminder",
   calendar_5h: "🚨 5h Urgent Reminder",
+  //  20261124000000. Sent to whoever administers roles when a
+  //  revocation leaves unfinished work behind, so the stranded record
+  //  is found rather than discovered.
+  role_revocation_stranded_work: "Work left by a withdrawn role",
 };
 
 export default function NotificationBell() {

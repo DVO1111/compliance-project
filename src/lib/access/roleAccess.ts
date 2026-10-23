@@ -270,6 +270,12 @@ const ROLE_SPELLINGS: Record<string, WorkRole> = {
   executive: 'management',
 };
 
+/** One spelling of one role, normalised, or null. Exported for screens
+ *  that read a role name straight out of a row. */
+export function asWorkRoleOrNull(raw: unknown): WorkRole | null {
+  return asWorkRole(raw);
+}
+
 function asWorkRole(raw: unknown): WorkRole | null {
   const key = String(raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!key) return null;
