@@ -4,14 +4,62 @@ For an operator with database access to the Criateur project. Every
 statement is a `SELECT`. Nothing here creates, changes or deletes
 anything.
 
-**Status: NOT RUN.** No query in this document has been executed
-against the Criateur project. The Supabase connector has been failing
-(`ERR_PROXY_TUNNEL`) since 2026-10-23, and the figures in
-`docs/live-readiness.md` are a snapshot from that date, not current.
+## Status
 
-**Do not report live verification as complete until every section
-below has been run against project `ovxfflilbqaxedzovgmz` and its
-output recorded.**
+This checklist has two passes. **They have different statuses and the
+distinction is the whole point.**
+
+| Pass | Status | |
+|---|---|---|
+| **Before deployment** | **PARTIALLY RUN** — 2026-10-23 21:06 UTC | §§0, 1, 6a, 6b, 7a, 7d, 9, 10 (grants), 11(a)(b) read live against `ovxfflilbqaxedzovgmz`. Evidence recorded below |
+| **After deployment** | **NOT RUN** | Nothing has been deployed. Every section must be re-run and recorded |
+
+**The after pass is what "live verification" means, and it has not
+happened.** Most sections cannot even be attempted yet: they call
+functions that arrive with the migrations
+(`operational_role_unsigned_grants`, `operational_role_stranded_work`,
+`duty_decisions_outstanding`, `policy_decisions_outstanding`,
+`material_coa_verify_authority_error`,
+`batch_release_signature_postcondition`), and none of those exists on
+production today.
+
+**Do not report live verification as complete** until the after pass
+has been run in full against project `ovxfflilbqaxedzovgmz`, every
+criterion has a recorded verdict, and the sign-off at the foot of this
+document is filled in. A passing local test suite is not a substitute
+for any line of it: the local harness runs **Postgres 16** and
+production runs **Postgres 17.6**, on different data, with different
+history.
+
+### Dated evidence — before pass, 2026-10-23 21:06 UTC
+
+Read-only. Every statement was a `SELECT`; nothing was written. Source:
+Supabase MCP against `ovxfflilbqaxedzovgmz`, timestamp taken from the
+database's own `now()`.
+
+| Reading | Value | Verdict |
+|---|---|---|
+| Migrations applied / latest | **133** / **`20261101000000`** | PASS — matches the expected boundary |
+| Applied with version `> 20261101000000` | **0** | PASS — all 30 outstanding |
+| Public tables | **258** | PASS |
+| Companies / members / batches | **30** / **21** / **18** | PASS |
+| `company_role` enum | `owner, admin, legal, marketing, viewer` | PASS — unchanged |
+| Membership roles held | **21 × `owner`**, nothing else | Expected; the reason two guards refuse rather than abstain |
+| Batch statuses | 7 released, 4 rejected, 3 `qc_pending`, 2 `hold`, 2 `qc_in_progress` | PASS |
+| Finished-product QC results | **0** | Expected — no batch is releasable on data alone |
+| Audit entries / unhashed / `CHAIN_REANCHOR` | **194** / **57** / **1** | PASS — the documented history, intact |
+| `audit_logs` triggers | only `trg_prevent_audit_log_deletion` | **Expected before deployment**; the three block triggers arrive with `20261116000000` |
+| `entity_current_state` write grants to app roles | **0** | PASS |
+| Transition into `released` | one row: `batch_record`, `qc_in_progress → released`, `release`, **`requires_signature = false`** | **Expected before deployment.** All four of `20261107000000`'s match conditions hold, so its `UPDATE` will match exactly one row |
+| `material_certificates_of_analysis` | **0 rows, 0 verified** | The membership-only CoA hole has **never been exercised**; no data remediation needed |
+| `material_coa_verify` EXECUTE to `anon` | **false** | PASS |
+| `operational_role_assignments`, `product_specifications` | absent | Expected — they arrive with the deployment |
+| Organization plan | **`free`** (`tier_free`) | **FAIL — see §12.** No PITR, no downloadable backup |
+| Production Postgres | **17.6** | Local verification was PG16. Recorded as unverified risk |
+
+Two of those readings change the deployment plan rather than just
+confirming it: the **free plan** (§12) and the **Postgres version
+gap**.
 
 ---
 
@@ -37,7 +85,7 @@ starting it.
 | § | Check | PASS | FAIL = do not release |
 |---|---|---|---|
 | 0 | Identity and position | it is Criateur: 8 of 8 core tables | a core table missing, or a project reference other than `ovxfflilbqaxedzovgmz` |
-| 1 | Migration position | 29 outstanding before, 29 applied after | any applied before, or any outstanding after |
+| 1 | Migration position | 30 outstanding before, 30 applied after | any applied before, or any outstanding after |
 | 2 | **Role assignments** | every live grant of a GMP-critical role carries a signature **or** a recorded explanation | an unexplained `provenance = 'service'` or `rpc`-with-no-signature grant |
 | 3 | **Stranded work** | empty immediately after deployment | a row with `still_stranded` and no reassignment or explanation |
 | 4 | Outstanding duty decisions | exactly 1 duty row open (sampling); 6 enforced, 1 not | any other count, in either direction |
@@ -87,7 +135,7 @@ WITH expected(version) AS (VALUES
   ('20261119000000'),('20261120000000'),('20261121000000'),('20261122000000'),
   ('20261123000000'),('20261124000000'),('20261125000000'),('20261126000000'),
   ('20261127000000'),('20261128000000'),('20261129000000'),('20261130000000'),
-  ('20261131000000')
+  ('20261131000000'),('20261201000000')
 )
 SELECT e.version,
        CASE WHEN m.version IS NULL THEN 'OUTSTANDING' ELSE 'applied' END AS state
@@ -98,12 +146,12 @@ SELECT e.version,
 
 | | |
 |---|---|
-| **PASS, before deployment** | all **29** rows read `OUTSTANDING` |
-| **PASS, after deployment** | all **29** read `applied`, and §§2–11 re-run |
+| **PASS, before deployment** | all **30** rows read `OUTSTANDING`. **Verified live 2026-10-23 21:06 UTC:** 0 migrations applied above the boundary |
+| **PASS, after deployment** | all **30** read `applied`, and §§2–12 re-run |
 | **FAIL** | any row `applied` in the before pass — the live position is not `20261101000000`, so `docs/live-readiness.md` and `docs/migration-verification.md` §1 are both computed from a stale boundary and must be recomputed before going further |
 | **FAIL** | any row `OUTSTANDING` in the after pass — the deployment stopped partway. `docs/migration-verification.md` §6 covers recovery; the boundary is a file, not a half-built table |
 
-Only 18 of these 29 are new on this branch. The first ten
+Only 20 of these 30 are new on this branch. The first ten
 (`20261103000000`…`20261112000000`) are already on `main` and are
 **also** unapplied live, and most of what the branch builds on arrives
 in them — so the branch cannot be deployed without them. See
@@ -611,8 +659,37 @@ control.
 ## §11 — Unsigned release attempt
 
 A batch must not reach `released` without an electronic signature.
-Three things make that true, and all three can be read without
-writing.
+
+### The one query to run
+
+```sql
+SELECT coalesce(public.batch_release_signature_postcondition(), 'PASS') AS verdict;
+```
+
+| | |
+|---|---|
+| **PASS** | the word `PASS` |
+| **FAIL, release blocker** | anything else. The return value *is* the finding, in words: `MISSING`, `AMBIGUOUS`, `MISMATCHED`, `UNSIGNED` or `BYPASSABLE` |
+
+**Why a function and not the obvious query.** The natural check —
+"select the transitions into `released`" — returns **zero rows** when
+the transition is missing or misnamed, and an operator reading
+`(0 rows)` ticks the box. That is precisely the failure this section
+exists to catch, so it is reported as the word `MISSING` instead,
+which cannot be misread as a pass. The function is `STABLE` and
+read-only.
+
+`20261201000000` also asserts the same condition at deployment time
+and **refuses to apply** if it does not hold, so a deployment that
+completes has already proven this once. Run it anyway: the deployment
+proves it at one instant, and this proves it now.
+
+*Arrives with `20261201000000`. Before deployment, use the three
+queries below.*
+
+### The underlying readings
+
+Use these before deployment, or to diagnose a non-`PASS` verdict.
 
 ```sql
 --  (a) Which transitions reach `released`, and which demand a
@@ -662,8 +739,25 @@ SELECT t.tgname,
 `20261107000000` is the migration that sets `requires_signature =
 true`, and it sets it for **one** transition only —
 `qc_in_progress → released`. That migration is **unapplied on
-production**, which is why the snapshot in `docs/live-readiness.md`
-records production as `false`.
+production**, which is why production reads `false`.
+
+**Confirmed live, 2026-10-23 21:06 UTC**, and this resolves the risk
+the rest of this section was written about:
+
+| entity_type | from_state | to_state | action_key | requires_signature |
+|---|---|---|---|---|
+| `batch_record` | `qc_in_progress` | `released` | `release` | **false** |
+
+One row, and **all four of the migration's match conditions are
+satisfied**, so its `UPDATE` will match exactly one row. The
+silent-zero-rows hazard described below is ruled out by measurement
+for this deployment. Re-check after deploying anyway — that is what
+the function above is for.
+
+It also means something plainer: **production permits an unsigned
+batch release today.** Seven batches are already released under that
+condition. The deployment is what installs the requirement; it cannot
+retroactively attest to releases made before it.
 
 So the `false` reading on production today is **not a bypass in a
 deployed control**. It is the absence of the control, and deploying
@@ -719,6 +813,52 @@ still `qc_in_progress` afterwards.
 
 ---
 
+## §12 — Backup and recovery, before anything is applied
+
+**Run this before the deployment, not as part of verifying it.** It is
+the one check whose failure stops the deployment from starting rather
+than from finishing.
+
+Not a SQL query — a plan and billing question:
+
+| | |
+|---|---|
+| Organization | `lgcbbmkiywvcpuffkszy` ("Compliance") |
+| Checked | **2026-10-23**, Supabase Management API |
+| Plan | **`free`** (`tier_free`) |
+
+| | |
+|---|---|
+| **PASS** | either (a) the plan is Pro or above **and** the PITR add-on is enabled with a window covering the deployment; or (b) a `supabase db dump` has been taken, held off-site, **and test-restored into a scratch database** |
+| **FAIL — as read on 2026-10-23** | the project is on the free plan. Supabase's documentation is explicit: daily backups cover "Pro, Team, and Enterprise Plan projects", "database backups are **not available for download for Free Plan projects**", and PITR is a paid per-project add-on. **There is no automated backup, no downloadable backup and no PITR for this project.** |
+
+Combined with the fact that **no migration in this repository has a
+down-migration**, the position is:
+
+> A 30-migration deployment to this project currently has **no
+> rollback path of any kind.**
+
+Resolve it one of two ways before applying anything — see
+[`migration-verification.md`](migration-verification.md) §6, which
+sets out both options and their costs. A dump is the minimum; it is
+not equivalent to PITR, and **an untested dump is a hope, not a
+backup.**
+
+### A separate observation from the same pass
+
+Production holds **7 released batches** and **0 finished-product QC
+results**. Those releases were made before the gate in
+`20261107000000` and the signature requirement existed, and
+`requires_signature` is `false` live today.
+
+**Nothing in this deployment can retroactively attest to them**, and
+nothing should try: a signature means somebody attested at a moment,
+and creating one afterwards is the forgery the control exists to
+prevent. Record the seven as predating the control. Whether they need
+anything further is a quality decision, not a software one.
+
+---
+
 ## Recording the result
 
 | Section | Run? | Findings | Explained / actioned |
@@ -736,11 +876,50 @@ still `qc_in_progress` afterwards.
 | §9 membership untouched | ☐ | | |
 | §10 incoming CoA authorisation | ☐ | | |
 | §11 unsigned release attempt | ☐ | | |
+| §12 backup / PITR (**before** applying) | ☐ | | |
 
 Live verification is complete when every box is ticked **against
 project `ovxfflilbqaxedzovgmz`** and every finding has an entry in the
 last column. Until then it is not complete, however much of the local
 suite passes.
+
+### Operator sign-off
+
+Fill this in on the **after** pass. Keep the before-pass evidence
+above; do not overwrite it — the two readings together are what show
+what the deployment changed.
+
+| | |
+|---|---|
+| Project ref confirmed | `ovxfflilbqaxedzovgmz` ☐ |
+| Backup taken (§12), method | …………………………………………… |
+| Backup **test-restored** | ☐ yes ☐ no — if no, do not proceed |
+| Deployment started (UTC) | …………………………………………… |
+| Deployment finished (UTC) | …………………………………………… |
+| Migrations applied, before → after | ……… → ……… (expect 133 → 163) |
+| `20261201000000` applied without raising | ☐ |
+| All 12 sections run and recorded | ☐ |
+| Release blockers outstanding | …………………………………………… |
+| Name / role | …………………………………………… |
+| Date | …………………………………………… |
+
+**Signed by a person, not by a pipeline.** This document records that
+somebody with authority looked at a live regulated database and said
+what they found. A green CI run is not that, and nothing in this
+repository should be read as claiming otherwise.
+
+### What this checklist does not establish
+
+Stated so the sign-off is not read as more than it is:
+
+- It does not make Criateur validated, or compliant with 21 CFR
+  Part 11 or any other regulation. It records what a database
+  contains.
+- It does not confirm the migrations run on **Postgres 17.6**.
+  Production is 17.6; every local result is from **Postgres 16**.
+- It does not resolve the open quality decisions. Six remain, one of
+  them a temporary exception — §4b, and
+  `docs/decision-note-coa-separation.md` §8.
 
 ### The four that are release blockers if they fail
 

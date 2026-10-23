@@ -10,31 +10,54 @@ because conflating them is how a deployment goes wrong:**
 | | |
 |---|---|
 | **Installed** | the migration ran to completion on a database built from the repository's own migration history. Verified here, repeatedly, by the test harness. |
-| **Compatible** | the migration will run to completion on the live database as it actually stands. **Not verified.** Argued below from a schema snapshot, which is not the same thing. |
+| **Compatible** | the migration will run to completion on the live database as it actually stands. **Partly verified — see below.** |
 
-The Supabase MCP connection dropped out of this session
-(`ERR_PROXY_TUNNEL`) and has not recovered, so **nothing in this
-document has been confirmed against project `ovxfflilbqaxedzovgmz`
-since the snapshot in [`live-readiness.md`](live-readiness.md) was
-taken earlier on 2026-10-23.** Every "compatible" claim below is a
-prediction. The pass/fail checks in
+### What changed on 2026-10-23, 21:06 UTC
+
+The Supabase connector, which had been failing with
+`ERR_PROXY_TUNNEL`, recovered. The live **preconditions** in §3 have
+since been read directly from `ovxfflilbqaxedzovgmz` and are now
+measurements rather than predictions; the readings and their timestamp
+are in [`deployment-manifest.md`](deployment-manifest.md). Nothing was
+written — every statement was a `SELECT`.
+
+**That verifies the preconditions, not compatibility.** Three things
+remain unverified and no amount of reading can settle them:
+
+1. **The migrations have never been executed against this database.**
+   Reading that a table exists is not the same as a `CREATE` landing
+   on it.
+2. **Production runs Postgres 17.6; the local harness runs Postgres
+   16.** Every "installed" result in this repository is a PG16 result.
+3. **Live data could still refuse a constraint** — §5 covers where,
+   and concludes the risk is low for the three it adds.
+
+Every remaining "compatible" claim below is still a prediction. The
+pass/fail checks in
 [`live-verification-checklist.md`](live-verification-checklist.md) are
-how it gets confirmed.
+how the rest gets confirmed, and the **after**-deployment pass has not
+been run.
 
 ---
 
 ## 1. What is actually being deployed
 
-**Not 18 migrations. 28.**
+**Not 18 migrations, and not 28. Thirty.**
 
-The branch adds 18 files. The live database is at `20261101000000`, so
-ten migrations that are already on `main` are *also* unapplied:
+Both earlier figures in this document were wrong: the count rose as
+work continued and this section was written before the last two files
+existed. Corrected, and cross-checked against the live ledger in
+[`deployment-manifest.md`](deployment-manifest.md):
 
 | | Files | Range | On `main`? |
 |---|---|---|---|
 | Already on `main`, not yet live | **10** | `20261103000000` … `20261112000000` | yes |
-| New on this branch | **18** | `20261113000000` … `20261130000000` | no |
-| **Total to apply** | **28** | `20261103000000` … `20261130000000` | — |
+| New on this branch | **20** | `20261113000000` … `20261201000000` | no |
+| **Total to apply** | **30** | `20261103000000` … `20261201000000` | — |
+
+The per-migration manifest, with each one's live applied status, is in
+[`deployment-manifest.md`](deployment-manifest.md). That document
+supersedes this section's counts if the two ever disagree again.
 
 This is the single most important fact in this document. The branch's
 migrations **cannot** be deployed on their own: §2 shows that most of
@@ -92,7 +115,7 @@ exist under that name until the first has run.
 
 ### Installation, verified
 
-All 28 apply in filename order on a database built from the
+All 30 apply in filename order on a database built from the
 repository's migration history. Verified by
 `scripts/ci/run-sql-tests.sh`, which drops and rebuilds the database
 from scratch on every run and refuses to run the suites if the result
@@ -108,7 +131,10 @@ listed in `scripts/ci/expected-migration-failures.txt` with reasons.
 
 ## 3. Preconditions against the live schema
 
-What has to be true of `ovxfflilbqaxedzovgmz` for the 28 to apply.
+What has to be true of `ovxfflilbqaxedzovgmz` for the 30 to apply.
+Every row was **predicted** here and has since been **measured** live —
+see [`deployment-manifest.md`](deployment-manifest.md), which carries
+the readings and the timestamp.
 Each row says how it was established.
 
 | Precondition | Status | How |
@@ -215,17 +241,69 @@ state and whether any is mid-release is check 7 of the checklist.
 
 ## 6. Rollback, realistically
 
-**There is no down-migration, for any of the 28.** The repository has
+**There is no down-migration, for any of the 30.** The repository has
 never had them and this branch did not add them. Saying so plainly
 matters more than a plan that would not survive contact.
 
-What rollback actually means, in descending order of preference:
+### The prerequisite is not met, and cannot be met on this plan
 
-1. **Point-in-time restore.** The only genuine rollback. Supabase PITR
-   on the project's plan is the real safety net, and **confirming it
-   is available and its window covers the deployment is a
-   prerequisite, not a formality.** Cost: everything written after the
-   restore point is lost.
+This was checked rather than assumed, and the answer is worse than
+this section originally claimed.
+
+| | |
+|---|---|
+| Organization | `lgcbbmkiywvcpuffkszy` ("Compliance") |
+| Plan | **`free`** (`tier_free`) — read from the Supabase Management API, 2026-10-23 |
+| Project | `ovxfflilbqaxedzovgmz`, region `eu-west-1`, Postgres 17.6, `ACTIVE_HEALTHY` |
+
+From Supabase's own current documentation:
+
+> "We automatically back up all **Pro, Team, and Enterprise Plan**
+> projects on a daily basis. […] We recommend that **free tier plan
+> projects regularly export their data using the Supabase CLI
+> `db dump` command** and maintain off-site backups."
+
+> "Database backups are **not available for download for Free Plan
+> projects**."
+
+And PITR is a **paid add-on configured per project** and billed on top
+of a Pro subscription — not something a free-plan project can enable.
+
+So, stated without hedging:
+
+> **There is no automated backup, no downloadable backup, and no
+> point-in-time recovery for this project as it stands. Combined with
+> the absence of down-migrations, a 30-migration deployment would have
+> no rollback path of any kind.**
+
+This earlier read "Point-in-time restore — the only genuine rollback
+… confirming it is available is a prerequisite". It is not available.
+That correction is the most consequential finding of the
+deployment-readiness review.
+
+### What has to happen before deployment
+
+One of these two, and it is a decision for the project owner:
+
+| Option | What it gives | Cost |
+|---|---|---|
+| **A — take a manual dump first** | `supabase db dump --db-url … -f pre-deploy-YYYYMMDD.sql`, held off-site. A logical snapshot to rebuild from. Restoring means creating a database and replaying it: **hours, not minutes**, and anything written after the dump is lost | free; needs doing by hand, and verifying the dump restores |
+| **B — upgrade to Pro and enable PITR** | daily backups, 7-day retention, and PITR to second-level granularity | a paid plan plus a per-project add-on |
+
+**Option A is the minimum.** Deploying 30 migrations to a regulated
+system with no recoverable snapshot is not a risk this review can
+sign off, and it is not a software problem — it is a plan decision.
+
+A dump is not equivalent to PITR and this document will not pretend it
+is: it has no granularity, it is only as good as the moment it was
+taken, and **a dump that has never been test-restored is a hope, not a
+backup.**
+
+### Then, in descending order of preference
+
+1. **Restore from whichever snapshot exists** (Option A's dump, or
+   PITR under Option B). Cost: everything written after the restore
+   point is lost. Under Option A, also hours of downtime.
 
 2. **Forward-fix.** Write a new migration that undoes what needs
    undoing. Workable for the rule tables — an `UPDATE` setting
@@ -258,7 +336,7 @@ What rollback actually means, in descending order of preference:
 ### Partial application
 
 The migrations run in one psql session per file, not one transaction
-across all 28. If number *n* fails, numbers 1…*n*−1 are applied and
+across all 30. If number *n* fails, numbers 1…*n*−1 are applied and
 committed. Most of this branch's migrations are individually
 transactional (each is a single file psql runs top to bottom, with
 `DO` blocks that raise on their own assertions), so a failure leaves a
@@ -276,19 +354,29 @@ signal that the file already ran.
 
 ## 7. The order to deploy in
 
-1. Confirm the live applied position is still `20261101000000`. If it
-   is not, recompute §1 before going further.
-2. Confirm PITR is available and its window covers the work.
+1. Confirm the live applied position is still `20261101000000` (it was
+   at 21:06 UTC on 2026-10-23). If it has moved, recompute §1 and the
+   manifest before going further.
+2. **Resolve the backup question — this is the blocking step.** §6:
+   there is no PITR and no downloadable backup on the free plan, so
+   either take a verified `supabase db dump` and hold it off-site, or
+   upgrade the plan and enable PITR. **A dump that has not been
+   test-restored does not count.**
 3. Take the pre-deployment snapshot
-   (`scripts/ci/live-readiness-report.sql`, read-only).
-4. Apply `20261103000000` … `20261130000000` **in filename order**, in
-   one pass, stopping at the first failure.
-5. Re-run the snapshot and compare against the checklist's pass/fail
-   criteria.
+   (`scripts/ci/live-readiness-report.sql`, read-only) and record it
+   with a date.
+4. Apply `20261103000000` … `20261201000000` **in filename order**, in
+   one pass, stopping at the first failure. `20261201000000` is last
+   deliberately: it refuses to complete unless `20261107000000`'s
+   signature `UPDATE` actually landed.
+5. Re-run the snapshot and work the checklist's **after** pass,
+   recording a verdict against every pass/fail criterion.
 6. Appoint operational roles — **signed**, and not by self-assignment.
    Until this happens the enforcement layer is inert.
 7. Approve product specifications. Until this happens no batch is
    releasable.
 
-Steps 6 and 7 are the ones that make the deployment mean anything, and
-both need a person with authority, not a migration.
+Step 2 is the one that is not currently satisfiable without a decision
+from the project owner. Steps 6 and 7 are the ones that make the
+deployment mean anything, and both need a person with authority, not a
+migration.
