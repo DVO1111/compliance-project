@@ -18,6 +18,20 @@ Last reviewed: 2026-10-23.
 
 ## 1. Audit-chain integrity: guarantees and limits
 
+> **Correction, 2026-10-23.** This section originally described the
+> controls below as holding. They hold *in this branch*. Read-only
+> inspection of the Criateur project found that
+> `trg_block_audit_update`, `trg_block_audit_delete` and
+> `trg_block_audit_truncate` are **absent from production**, together
+> with `fn_block_audit_mutation`, although migration
+> `20260225000000_immutable_audit_trail` is recorded as applied. Only
+> `trg_prevent_audit_log_deletion` is on the table there. Audit
+> entries on production are therefore UPDATE-able today.
+> `20261116000000_restore_audit_immutability.sql` recreates them.
+> The full picture, including an entry that was back-dated by a
+> script that ran against production, is in
+> [`docs/audit-threat-model.md`](audit-threat-model.md).
+
 ### What holds
 
 | Control | Mechanism |
@@ -119,8 +133,26 @@ Evidence: `batch_release_gate_test.sql` (34), `product_specification_test.sql`
 - **`complies` and `absent` limits are never machine-checked.** They are
   judgements, and the recorded verdict is the only evidence.
 - **Which version governs** — the one in force on the manufacturing
-  date — is a quality judgement with a regulatory flavour. It is
-  flagged in the conflict register, not settled here.
+  date — is now a **proposed decision**, implemented in
+  `20261118000000`: the governing specification is stamped onto the
+  batch at release and locked, and any later reassessment must go
+  through `batch_specification_review` with a reason and a signature,
+  which records a controlled review rather than silently swapping the
+  criteria. It remains **pending final quality/regulatory
+  confirmation** — whether "effective at manufacture" is the right
+  rule is a regulatory question, not one this branch settles. The
+  lookup reads `status IN ('effective', 'superseded')` deliberately,
+  so approving version 2.0 does not orphan a batch made under 1.0.
+- **A specification is approved by the QA Manager and nobody else.**
+  `20261117000000` refuses the approval with `PRODUCT_SPEC_FORBIDDEN`
+  for any other role, **including `owner` and `admin`**, and requires
+  an electronic signature over a hash of the version and its ordered
+  tests, so a signature cannot be reused after the criteria change.
+  Also **pending final quality/regulatory confirmation**.
+- **Existing released batches carry no stamp.** The column was added
+  NULL and nothing back-fills it; for those batches the effective-date
+  lookup still answers. Back-stamping would assert a review that never
+  took place.
 
 ---
 
@@ -186,6 +218,9 @@ assert their own prerequisites rather than trusting the filename sort:
 | 8 | `20261113000000` specifications | **asserts** `batch_qc_results.corrected_from_id` exists, i.e. 7 applied |
 | 9 | `20261114000000` restrictions on steps | `step_permissions`, `access_restrictions` |
 | 10 | `20261115000000` legacy audit marking | `audit_logs.hash_algo` (3) |
+| 11 | `20261116000000` audit immutability restored | `audit_logs`; must come **after** 10, which disables the update trigger for one statement |
+| 12 | `20261117000000` specification approval by QA Manager | `product_specifications` (8); `electronic_signatures` |
+| 13 | `20261118000000` governing specification preserved | `product_specifications` (8); `batch_records` |
 
 Each is idempotent: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT
 EXISTS`, `CREATE OR REPLACE FUNCTION`, `DROP TRIGGER IF EXISTS` before
@@ -201,6 +236,10 @@ the set is safe and was done repeatedly during development.
 | `audit_logs.hash_algo` | **one UPDATE**, setting a column that did not exist before, on rows that have a hash. No hash, sequence number or timestamp is touched. The immutability trigger is disabled for that single statement and an assertion fails the migration if it is left off. |
 | `product_specifications`, `product_specification_tests`, `access_restrictions`, `batch_dispatches` | new tables, empty |
 | Widened RLS policies | strictly additive — the `owner`/`admin` clause is kept and the grid clause OR-ed beside it |
+| `fn_block_audit_mutation` + three triggers (`20261116000000`) | no rows touched. On the Criateur project these are **absent today**, so this is a restoration, not a re-statement; see [`docs/audit-threat-model.md`](audit-threat-model.md) §4. |
+| `product_specifications.approval_signature_id`, `approved_by_role` (`20261117000000`) | added NULL on an empty table |
+| `batch_records.governing_specification_id`, `governing_specification_stamped_at` (`20261118000000`) | added NULL. **Existing released batches are left unstamped** — the stamp is applied at release, and back-stamping a batch released before the control existed would assert a review that never happened. `batch_governing_specification` falls back to the effective-date lookup for them. |
+| `batch_specification_reviews` | new table, empty |
 
 **The one behaviour change that affects live data is the release
 gate.** After `20261113000000`, a batch cannot be released unless an
@@ -222,49 +261,115 @@ afterwards**. See *Release blockers*.
 | `20261113000000` | dropping the two tables loses every specification written; the gate reverts by restoring the previous `batch_release_block_reason` |
 | `20261115000000` | the marking is **not reversible to "unknown"** by design — but it changed no hash, so nothing is lost; set `hash_algo` back to NULL if required |
 | `20261108000000` | **sealed entries cannot be unsealed.** Rolling the sealer back leaves rows sealed under `sha256-auditlog-v1`, which the older `verify_audit_chain` ignores. Not destructive; verification becomes weaker. |
+| `20261116000000` | dropping the triggers returns the database to the state production is in today, i.e. audit entries become mutable again. Reversible, and a regression. |
+| `20261117000000` | dropping the two columns loses the recorded approver role and the signature link. The 2-arg `product_specification_approve` overload was **dropped**, so a rollback must restore it from git or approval stops working. |
+| `20261118000000` | dropping `governing_specification_id` loses the stamp on any batch released after deployment — the one rollback in this branch that **does** lose data created after it. `batch_specification_reviews` likewise. Both should be exported before any such rollback. |
 
 No migration drops a column or a table, so **no rollback loses data
-that existed before this branch**.
+that existed before this branch**. Rolling back `20261118000000` does
+lose governing-specification stamps and controlled reviews recorded
+*after* deployment, which is the one exception and the reason to
+export those two before considering it.
 
 ---
 
 ## What still needs the live Criateur project
 
-None of the following can be settled from a local rebuild:
+**Updated 2026-10-23.** Read-only inspection of project
+`ovxfflilbqaxedzovgmz` has now answered most of what this section
+listed as unanswerable. The findings are in
+[`docs/live-readiness.md`](live-readiness.md); the five items are
+re-stated here with what is now known.
 
-1. **That the migrations apply to the real database in order.** Local
-   is built from the same files, but the live project has three years
-   of history and `company_members.role` is an **enum** there and
-   `text` locally — the divergence that broke an apply once already.
-2. **How many existing audit entries are marked legacy,** and whether
-   any are found `unhashed` — which would be a finding.
-3. **How many batches are currently blocked by the specification
-   gate,** which is the number that decides whether deployment needs a
-   data-preparation step first.
+1. **That the migrations apply to the real database in order.** Still
+   unproven — nothing has been applied. The divergence that worried
+   this entry is real and worse than expected: `company_members.role`
+   is enum `company_role` with values `owner, admin, legal, marketing,
+   viewer`, and **not one of the eight PM-03 work roles exists in it.**
+   This is now release blocker 1.
+2. **How many existing audit entries are marked legacy, and whether
+   any are `unhashed`.** Answered: 192 entries, 135 hashed, **57 with
+   no hash at all** — a finding. Plus one back-dated `CHAIN_REANCHOR`
+   entry; see [`docs/audit-threat-model.md`](audit-threat-model.md) §4.
+3. **How many batches are blocked by the specification gate.**
+   Answered: **2** batches in `qc_in_progress`, across 7 distinct
+   products with non-terminal batches. `batch_qc_results` is **empty**
+   (0 rows), so finished-product QC results do not exist for any of
+   them either. Small enough to prepare deliberately.
 4. **Whether `app_is_service_context()` behaves as expected** on the
-   managed platform. It is known to differ: `rolsuper` is false for
-   `postgres` on Supabase, which `20260918500000` exists to handle.
+   managed platform. **Still unverified** — it cannot be settled
+   without executing on the project, and it is a read of
+   `session_user`, so inspection of the schema does not answer it.
 5. **Whether any other table carries an owner/admin-only write policy**
-   that this sweep did not reach, in schemas or tables that only exist
-   live.
+   that the sweep did not reach. **Still open**; the live project has
+   258 public tables against the subset this branch touches. Section 6
+   of `scripts/ci/live-readiness-report.sql` counts them.
 
-The Supabase MCP credentials available to this session hold two
-projects, **Nonameyet** and **Traitwar**, neither of which is Criateur.
-Neither has been queried.
+Still requiring live execution, not just live reading: 1, 4, 5, and
+every assertion in §§2–3 of this document, all of which were proved
+against a local rebuild only.
+
+The Supabase MCP account reachable from this session held two
+projects: `ovxfflilbqaxedzovgmz` (Criateur, display name "my-app",
+identity confirmed by schema — 258 public tables, all 8 Criateur core
+tables, 30 companies, 18 batch records) and `lzuuwdtrivqvccedbivz`
+(RentTruth App, not queried beyond the listing). **Nonameyet and
+Traitwar were not present in the account and were not queried.** The
+MCP server has since dropped out of this session, so the figures above
+are a snapshot of 2026-10-23 and must be re-taken before deployment
+with `scripts/ci/live-readiness-report.sql`.
 
 ---
 
 ## Release blockers
 
-1. **No specification exists in any live workspace**, so every batch
-   awaiting release will be blocked on deployment. A specification must
-   be approved per product, back-dated for batches already made. The
-   screen exists (*Quality → Specifications*) and the blocked release
-   links to it.
-2. **Nothing has been run against the live project** — see above.
-3. **Approval authority for a specification is unconfirmed.** It uses
-   the designated QA authority register because PM-03 names no role.
-   One predicate to change if the answer differs.
-4. **The audit chain has no external anchor**, so a database owner can
+Re-ordered 2026-10-23 after live inspection. 1 is new and is the one
+that stops deployment being useful at all.
+
+1. **No PM-03 work role can be assigned on the live project.**
+   `company_members.role` is enum `company_role` =
+   `owner, admin, legal, marketing, viewer`. None of `procurement`,
+   `storekeeper`, `qc_analyst`, `qa_officer`, `qa_manager`,
+   `production_supervisor`, `compliance_admin`, `management` exists in
+   it, and all 21 members are `owner`. Deploy as-is and the entire
+   PM-03 layer is **inert**: every guard abstains for an untabulated
+   role, so nothing is refused and nothing is granted by it — the
+   controls would be installed and silent. The enum must be extended
+   and roles assigned before the gates mean anything. **This needs a
+   migration that does not yet exist**, because writing it requires
+   deciding what happens to the five existing values and to the 21
+   people holding `owner`; that is a question for you, not a default
+   to pick. See [`docs/live-readiness.md`](live-readiness.md) §2.
+2. **Audit immutability is absent on production** despite its
+   migration being recorded as applied, so audit entries are mutable
+   there today. `20261116000000` restores it.
+   [`docs/audit-threat-model.md`](audit-threat-model.md) §4.
+3. **A script back-dated an audit entry on production.** One
+   `CHAIN_REANCHOR` row at sequence 7 carries a `created_at` of
+   2026-02-25 that is not when it was written, and the next entry's
+   `previous_hash` was rewritten to link through it. The script is
+   withdrawn; the entry is left in place and documented rather than
+   rewritten again. The anon key it hardcoded is in git history and
+   **must be rotated**.
+4. **No specification exists in any live workspace**, so the 2 batches
+   in `qc_in_progress` will be blocked on deployment, as will any new
+   release. A specification must be approved per product and
+   back-dated for batches already made — under the controlled plan in
+   [`docs/specification-backfill-plan.md`](specification-backfill-plan.md),
+   not by hand. The screen exists (*Quality → Specifications*) and the
+   blocked release links to it.
+5. **Nothing has been executed against the live project.** Every
+   assertion in this document comes from a local rebuild. Items 1, 4
+   and 5 of the section above can only be settled by running there.
+6. **The audit chain has no external anchor**, so a database owner can
    rewrite it undetectably with enough effort. Acceptable or not is a
    decision, not a bug.
+
+### Resolved since the last revision
+
+- **Approval authority for a specification.** Was blocker 3. Decided:
+  QA Manager, enforced server-side in
+  `20261117000000_specification_approval_by_qa_manager.sql`, with an
+  administrator explicitly unable to bypass it. **Pending final
+  quality/regulatory confirmation**, and dependent on blocker 1 — the
+  role it names cannot be held by anyone on production today.

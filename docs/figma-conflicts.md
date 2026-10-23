@@ -9,7 +9,7 @@ an administrator uses to grant access, so where another frame draws a
 different cell, the code follows PM-03 and the difference is recorded
 below rather than split.
 
-Last reviewed: 2026-10-22, against file `wSj81KWfoy7rS8u9CDcqtY`.
+Last reviewed: 2026-10-23, against file `wSj81KWfoy7rS8u9CDcqtY`.
 
 ---
 
@@ -728,3 +728,159 @@ judgements.
 refused unless it parses as a number. That would close the gap and
 would also refuse legitimate entries like `"< 0.1"`, which is why it
 has not been done unasked.
+
+---
+
+## 27. Who may approve a specification
+
+Not a design conflict — PM-03 has no *Specifications* column at all,
+which is the silence. §12 recorded that nothing says which
+finished-product tests a batch needs; this records who is allowed to
+say it.
+
+**Decision, taken 2026-10-23: the QA Manager, and nobody else.**
+Enforced server-side in
+`20261117000000_specification_approval_by_qa_manager.sql`:
+
+- `product_specification_approve` resolves the caller's work role and
+  raises `PRODUCT_SPEC_FORBIDDEN` unless it is `qa_manager`. The
+  message names the caller's actual role, and the hint says
+  **"Administrative access does not carry this authority."**
+- `owner` and `admin` are refused by the same clause as any other
+  role. There is no administrative bypass, and the assertion that
+  there is none is in section A of
+  `supabase/tests/decisions_and_step_restrictions_test.sql`.
+- The approval records `approved_by`, `approved_by_role`,
+  `approved_at` (server clock, never supplied by the caller),
+  `effective_date`, the specification `version`, and
+  `approval_signature_id`.
+- The signature is bound to `product_specification_record_hash`, a
+  hash over the version and its ordered tests, so **a signature
+  cannot survive an edit to the criteria** — change a limit after
+  signing and approval is refused as stale.
+- `fn_product_spec_approval_evidence` refuses any `effective` row that
+  lacks the evidence, so the status cannot be reached by a side door.
+
+The 2-argument overload of `product_specification_approve` was
+**dropped**, deliberately: leaving it would leave a callable path with
+no signature argument.
+
+**Pending final quality/regulatory confirmation.** Whether a single
+QA Manager approval is sufficient, or whether a second authorised
+signature is required, is a quality-system question this branch does
+not settle. One predicate changes if the answer differs.
+
+Two things this exposed on the way:
+
+- `lifecycle_consume_signature` could not be used. It reads
+  `entity_current_state`, which returns NULL for a specification,
+  so **every human approval would have been refused
+  `LIFECYCLE_SIGNATURE_STALE`** — a control that refuses everyone is
+  not a control. Hence the specification-specific hash and
+  `product_specification_sign`.
+- `material_qa_authorities`, the register the earlier mechanism read,
+  is **empty on the live project**. The pre-decision approval path had
+  nobody in it and would have refused every approval. Recorded in
+  `docs/live-readiness.md` §5.
+
+---
+
+## 28. Which version governs, and what happens when it changes
+
+§12 left this open and §26 inherited it. Now decided.
+
+**Decision, taken 2026-10-23: the approved specification effective at
+the time of manufacture**, implemented in
+`20261118000000_governing_specification_preserved.sql`.
+
+What that means concretely:
+
+- `batch_governing_specification` looks for the specification whose
+  `effective_date` is on or before the batch's `manufacturing_date`,
+  taking the latest such version.
+- The lookup reads `status IN ('effective', 'superseded')`, which is
+  the clause that matters: filtering on `'effective'` alone meant a
+  batch made under version 1.0 **found no specification the moment 2.0
+  was approved**, and the batch that had been releasable yesterday was
+  blocked today by someone else's paperwork. Caught by assertion, not
+  by reasoning.
+- At release, `fn_batch_stamp_governing_specification` writes the
+  resolved version into `batch_records.governing_specification_id`
+  with a `governing_specification_stamped_at`. From then on the batch
+  carries the criteria it was judged against, rather than re-deriving
+  them each time anyone looks.
+- `fn_batch_governing_spec_locked` refuses to change that stamp. The
+  only way past it is `batch_specification_review(batch, to_spec,
+  reason, signature)`, which records the old version, the new version,
+  the reason and the signer in the immutable
+  `batch_specification_reviews`, and sets a session flag the lock
+  recognises. **A reassessment is therefore a visible controlled
+  review, never a silent replacement of historical criteria.**
+
+**Pending final quality/regulatory confirmation.** "Effective at
+manufacture" is the proposed rule, subject to confirmation against the
+applicable regulatory requirements and the site's quality procedures.
+The alternative readings — effective at release, or effective at test
+— would each change which version a batch is judged by, and the choice
+is not the software's to make.
+
+**Batches released before this existed carry no stamp**, and none is
+back-filled. Stamping one would assert a judgement that never took
+place; the effective-date lookup still answers for them.
+
+---
+
+## 29. The live project cannot hold a work role
+
+Not a Figma conflict. Recorded here because it decides whether
+anything in this register is enforced.
+
+`company_members.role` on the Criateur project is enum `company_role`
+= `owner, admin, legal, marketing, viewer`. **None of PM-03's eight
+roles is in it**, no enum anywhere contains `qa_manager`, and all 21
+members hold `owner`.
+
+The abstention policy — a role PM-03 does not tabulate abstains rather
+than being refused — is deliberate and documented, and here it has a
+consequence: deploy as-is and **every guard abstains for every member,
+so the whole layer is installed and silent.** §27's QA Manager
+requirement would refuse everyone, because nobody can hold the role.
+
+Extending the enum is not in this branch, because it means deciding
+what becomes of the five existing values and of the 21 people holding
+`owner`, and whether a person may hold more than one role. Those are
+organisational answers. Set out in
+[`docs/live-readiness.md`](live-readiness.md) §2 as release blocker 1.
+
+---
+
+## 30. A migration recorded as applied that left nothing behind
+
+`20260225000000_immutable_audit_trail` is in the live migration ledger
+as applied. Its triggers are **not on the table**, and
+`fn_block_audit_mutation` does not exist. Only
+`trg_prevent_audit_log_deletion` is there.
+
+Audit entries on the live project are UPDATE-able today.
+
+Two findings, not one. The second is the more useful: **the migration
+ledger records what was run, not what survived.** A later `DROP …
+CASCADE`, a restore from an earlier dump, or a manual drop would each
+produce this, and the ledger distinguishes none of them. Any assertion
+of the form "control X is present because migration Y is applied"
+is unsound on this database, and several such assertions were being
+made before this was checked — including §1 of
+`docs/release-verification.md`, now corrected.
+
+`20261116000000_restore_audit_immutability.sql` recreates the function
+and the three triggers, and **self-tests them by attempting the
+refused writes** inside a rolled-back subtransaction rather than
+checking that a trigger exists — precisely because existence turned
+out not to imply effect.
+
+Related and separate: `scripts/repair_audit_chain.mjs` **ran against
+this project**, inserting a `CHAIN_REANCHOR` entry with a back-dated
+`created_at` and rewriting the next entry's `previous_hash`. The
+script is withdrawn and now throws; the entry is left in place and
+documented rather than rewritten again. Full account in
+[`docs/audit-threat-model.md`](audit-threat-model.md) §4.
