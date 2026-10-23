@@ -8,8 +8,9 @@ staging infrastructure exists.** All three are on hold pending your
 approval of the deployment plan.
 
 Branch `claude/project-remodel-review-5e064v`, unmerged.
-Compiled 2026-10-23 from a local PostgreSQL dropped and rebuilt from
-all 156 migrations.
+Compiled from a local PostgreSQL dropped and rebuilt from all 214
+migrations. Revised after the finalisation brief ruled on all nine
+decisions.
 
 Nothing in this document, or in the product, establishes regulatory
 compliance or validation.
@@ -20,13 +21,14 @@ compliance or validation.
 
 | | |
 |---|---|
-| SQL assertions | **2577, 0 failed** |
-| Suites | 50 |
+| SQL assertions | **2626, 0 failed** |
+| Suites | 52 |
 | Database | dropped and rebuilt from the migration files, every run |
 | Frontend unit tests | **1057, 0 failed** |
 | TypeScript | clean |
 | Production build | clean |
-| Render check | every PM-03 page drawn against an empty database, no page errors |
+| Lint on changed files | no new errors against the `HEAD` baseline |
+| Render check | **17 pages × empty database, 0 errors, 0 blank**; the rail rendered for all eight roles, for a two-role holder, and for somebody holding none |
 | Applied to the Criateur project | **nothing** |
 
 ### The suites this branch added
@@ -38,6 +40,7 @@ compliance or validation.
 | `product_specification_test.sql` | 38 | the specification model and its criterion limits |
 | `stranded_work_and_service_grants_test.sql` | 37 | work left by a revocation, the notice, reassignment, unsigned service grants |
 | `decisions_and_step_restrictions_test.sql` | 33 | QA Manager approval, governing version, PM-04 on all five protected steps |
+| `decision_enforcement_test.sql` | 47 | all nine decisions enforced: attribution, both material separations, dispatch ordering and backdating, signed verdicts, correction laundering |
 
 ---
 
@@ -59,10 +62,14 @@ Grouped by the problem each solved, oldest first.
 | Separation of duties, batch and material | Built; three pairs enforced, three recorded unenforced |
 | Stranded work after a revocation | Built; report, notice, and an auditable reassignment |
 | The rule tables locked down | Built, after finding them world-writable |
+| **Attribution the guards read** | Built, after finding three columns unwritten or forgeable — §3.5 |
+| **Decision 2**, beyond PM-03 on a named approval | Built; the divergence is recorded, not hidden |
+| **Decision 5**, signatures on the verdict the gate reads | Built and enforced for the finished-product verdict; two more registered and held |
+| **Decision 4**, dispatch ordering | Built; a dispatch cannot be dated before its release or in the future |
 
 ---
 
-## 3. The four findings that were not in the brief
+## 3. The five findings that were not in the brief
 
 Each was found by checking rather than by being told, and each changed
 something.
@@ -120,52 +127,72 @@ them the rail filter itself. `docs/screen-audit.md` §5.
 
 ---
 
-## 4. Decisions waiting on you
+### 3.5 Three columns the guards read, and nobody was writing them
 
-Nothing below is blocked on engineering. Each has a default
-implemented; what is missing is your ruling.
+`material_lots.received_by` was **never set by the application**, so
+decision 1's conflict read NULL for every lot the product created and
+could not fire — a guard installed, attached and unreachable.
+`batch_qc_results.tested_by` and `material_test_results.analyst_id`
+were both supplied by the caller, so whoever recorded a result could
+name somebody else as the analyst, which defeats the release gate's
+self-tested rule.
 
-### 4.1 Separation of duties — six decisions
+All four actor columns (including the in-process reading's recorder,
+for decision 6) are now written from the session and frozen once set.
+Seven test fixtures then had to stop using one person for two jobs,
+which is the control proving itself.
 
-The full table, with PM-03 impact and what each default costs, is
+## 4. What is decided, and what is still open
+
+### 4.1 The nine decisions — all ruled
+
+| # | Decision | State |
+|---|---|---|
+| 1 | Receiver may not disposition | **Enforced** |
+| 2 | CoA verifier may not disposition | **Enforced**, beyond PM-03 on a named approval |
+| 3 | Sampler may not test | **Not enforced** — the one still open |
+| 4 | Releaser may not dispatch; no backdating | **Enforced** |
+| 5 | Signatures on QC/Production actions | **Enforced** for the finished-product verdict; two registered and held |
+| 6 | One reading counts as execution | **Confirmed**, broad reading |
+| A | Specification approval is the QA Manager's | **Enforced**, signed |
+| B | Governing version = effective at manufacture | **Enforced**, stamped and locked |
+| C | Self-assignment refused; bootstrap narrow | **Enforced**, marked and reported |
+
+Detail, PM-03 impact and what each costs:
 [`docs/separation-of-duties.md`](separation-of-duties.md) §5.
 
-| # | Question | Default | Needs |
-|---|---|---|---|
-| 1 | Receiver may not disposition the lot | **enforced** | confirm |
-| 2 | CoA verifier may not disposition | **not enforced** | decide **+ PM-03 change** |
-| 3 | Sampler may not test | **not enforced** | decide **+ PM-03 column** |
-| 4 | Releaser may not dispatch | **enforced** | confirm |
-| 5 | qc_analyst / production_supervisor need a signature to be granted | **no** | decide **+ PM-03 change** |
-| 6 | One in-process reading counts as having executed the batch | **yes (broad)** | confirm |
+### 4.2 Still open — one decision and two held actions
 
-Three are *confirm or overturn*; three need PM-03 changed before they
-could be enforced at all. **I will not enforce a rule the permission
-matrix contradicts.**
-
-### 4.2 Proposed defaults from earlier rounds, still pending
-
-| Decision | Status |
+| Item | Needs |
 |---|---|
-| Specification approval reserved to the QA Manager | implemented; **pending quality/regulatory confirmation** |
-| Governing version = effective at manufacture | implemented; **pending confirmation** |
-| Self-assignment refused outright, so a one-person workspace needs bootstrap | implemented; **pending confirmation** |
-| Should a role assignment need a second approver? | **open** — currently one signature |
-| Should `release` require a signature? | **open** — `requires_signature` is `false` on production today |
+| **Decision 3**, sampler versus tester | A PM-03 column for sampling, **and** a site procedure requiring independence. The brief forbids inventing a universal rule without one. The attribution it would read already exists and is preserved. |
+| `material_test_result` signature | The site's testing procedure: every result, or only critical parameters |
+| `batch_execution_close` signature | Procedure: whether closing is clerical, given stage completion is already signed |
+| Should `release` require a signature? | `requires_signature` is `false` on production today. A data change, not a migration. |
+| Should a role assignment need a second approver? | Currently one signature |
 
-### 4.3 Acknowledged residuals
+`SELECT * FROM duty_decisions_outstanding();` returns exactly one row,
+and it is sampling. `SELECT * FROM signed_quality_actions WHERE NOT
+required;` returns the two held actions.
 
-Not defects, and not closable from inside the database. They need a
-decision about whether they are acceptable.
+### 4.3 Subject to quality/regulatory confirmation before production
+
+Decisions A and B are implemented and enforced, and remain proposed
+defaults pending confirmation against the site's approved quality
+procedures and the applicable regulations. Nothing in the product
+claims otherwise.
+
+### 4.4 Acknowledged residuals
+
+Not defects, and not closable from inside the database.
 
 | Residual | Why it cannot be closed here |
 |---|---|
-| **Anyone who can run a migration can appoint a QA Manager** | A service context has no password and cannot sign. A migration is what defines what the database enforces. **Mitigated**: every such grant is stamped `provenance = 'service'` and listed — see §5 |
-| **The audit chain has no external anchor** | Nothing is signed by a key the database does not hold. The chain shows records are internally consistent; it cannot show they were not replaced |
-| **Bootstrap does not independently verify authority** | In a workspace of one there is no second party. The compensating control is the regulatory submission, outside this database |
+| **Anyone who can run a migration can appoint a QA Manager** | A service context has no password and cannot sign. A migration defines what the database enforces. **Mitigated**: every such grant is stamped `provenance = 'service'` and listed — §5.1 |
+| **A service context can record an unsigned verdict** | Same reasoning. Such rows carry `signature_id IS NULL`, which is the honest record of a verdict nobody attested to, and they are findable |
+| **The audit chain has no external anchor** | Nothing is signed by a key the database does not hold |
+| **Bootstrap does not independently verify authority** | In a workspace of one there is no second party. The compensating control is the regulatory submission |
 | **A database owner can rewrite the chain** | Tamper-evident against careless alteration, not against deliberate alteration by whoever holds the credentials |
-
----
 
 ## 5. The pre-release checks — mandatory
 
@@ -218,12 +245,31 @@ Every conservative default still unconfirmed, and every pair not
 enforced. If this does not match §4.1 as you ruled on it, the database
 and the decision have drifted.
 
-### 5.4 Data readiness
+### 5.4 Unsigned verdicts — the new one
+
+```sql
+SELECT b.company_id, q.batch_id, q.test_name, q.result, q.pass, q.tested_at
+  FROM public.batch_qc_results q
+  JOIN public.batch_records b ON b.id = q.batch_id
+ WHERE q.signature_id IS NULL
+ ORDER BY q.tested_at DESC;
+```
+
+Finished-product verdicts nobody signed for. After deployment there
+should be none from the application; rows here are seeds, migrations
+or results predating the control. A released batch resting on an
+unsigned verdict is a finding to explain.
+
+### 5.5 Data readiness
 
 `scripts/ci/live-readiness-report.sql` — SELECTs only. Re-run it; the
 figures in `docs/live-readiness.md` are a snapshot of 2026-10-23 and
 the Supabase connector has since dropped out of the session that took
-them.
+them, so **no live check in this document has been repeated since**.
+
+Everything in §§5.1–5.4 is written to be run by an engineer with
+database access. None of it has been run against the Criateur
+project.
 
 ---
 
@@ -236,7 +282,7 @@ Not to be started until you approve this plan.
 | 0 | Re-run `scripts/ci/live-readiness-report.sql` | engineer |
 | 1 | Review and approve: the role model, the six decisions, the deployment plan | **you** |
 | 2 | Apply `20261103000000` … `20261118000000` in filename order | engineer |
-| 3 | Apply `20261119000000` … `20261125000000` | engineer |
+| 3 | Apply `20261119000000` … `20261128000000` | engineer |
 | 4 | Verify: §5.1, §5.2, §5.3, plus `verify_audit_chain` per company | engineer |
 | 5 | **Appoint operational roles** — a workspace owner or admin assigns them to named people, with a reason and, for a GMP-critical role, a signature | **you / QA** |
 | 6 | Approve specifications under the backfill plan | **QA Manager** |

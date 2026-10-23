@@ -413,6 +413,14 @@ $a$;
 --  — the dossier NAFDAC registers is built from batches already made — so
 --  a pre-registration batch has to be recordable. What must NOT be
 --  possible is releasing it, and that control is in the database.
+--
+--  IN SERVICE CONTEXT, deliberately. Since 20261126000000 the QC
+--  result _release_batch creates is attributed to the session, and the
+--  same session then attempts the release — so a person's session now
+--  meets BATCH_RELEASE_SELF_TESTED first and A16 would pass on the
+--  wrong refusal. Product eligibility has no service exemption, which
+--  is the point of this section, so it still fires here.
+RESET ROLE;
 DO $a2$
 DECLARE
   c_a uuid := current_setting('b7.c_a')::uuid;
@@ -464,6 +472,8 @@ BEGIN
     ok, left(coalesce(msg,''),140));
 END
 $a2$;
+--  Back to the session the sections below expect.
+SET ROLE authenticated;
 
 
 -- =====================================================================

@@ -217,6 +217,42 @@ defects, and neither is on the release path.
 
 ---
 
+## 6b. Second pass: the four that had no fixture
+
+The first pass rendered the harness's *"no fixture wired"* placeholder
+for `batch-release`, `coa`, `deviations` and `master-formulas`, which
+proves nothing about those pages. They are now wired and render real
+content:
+
+| Page | Renders |
+|---|---|
+| Batch release | *"Track QC testing and release decisions for every production batch."* |
+| CoA register | *"Every CoA issued from a released batch — searchable, re-…"* |
+| Deviations | *"Raise a deviation / Raising against a batch, a lot or an instrument happens from the…"* |
+| Master formulas | *"The manufacturing instruction a batch is made against."* |
+
+**17 pages, 0 page errors, 0 blank.**
+
+### The rail, rendered for every role
+
+| Rendered as | Rail items |
+|---|---|
+| qa_manager | 27 |
+| qa_officer | 27 |
+| compliance_admin | 27 |
+| management | 27 |
+| qc_analyst | 23 |
+| storekeeper | 22 |
+| procurement | 22 |
+| production_supervisor | 20 |
+| **qc_analyst + qa_manager** | **27 — the union** |
+| no operational role | 26 (abstention; the legacy model decides) |
+
+The multi-role row is the one that matters: before the fix in §5 it
+fell through to the legacy permission model entirely. The harness now
+takes `?roles=a,b` so that case can be looked at rather than reasoned
+about.
+
 ## 7. What this audit did not cover
 
 - **Phone layouts.** The file has an `HS-M04`–`HS-M13` set for phone

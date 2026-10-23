@@ -206,13 +206,30 @@ SELECT set_config('request.jwt.claims',
   json_build_object('sub', current_setting('br.u_qc'), 'role','authenticated')::text, false);
 SET ROLE authenticated;
 DO $results$
-DECLARE u_qc uuid := current_setting('br.u_qc')::uuid;
+DECLARE
+  u_qc uuid := current_setting('br.u_qc')::uuid;
+  c_a  uuid := current_setting('br.c_a')::uuid;
+  b_f  uuid := current_setting('br.b_fail')::uuid;
+  b_p  uuid := current_setting('br.b_pass')::uuid;
+  r jsonb;
 BEGIN
+  --  SIGNED, since 20261127000000. The release gate reads `pass` and
+  --  the value, so the analyst attests to them as they are recorded.
+  --  The signature is taken over the verdict rather than the row, so
+  --  the suite cannot sign one result and write another.
+  r := public.quality_verdict_sign('batch_qc_result', c_a, b_f,
+         'Assay', '88.1 %', false, 'CorrectHorse1!');
   INSERT INTO public.batch_qc_results
-    (batch_id, test_name, test_method, specification, result, pass, tested_by)
-  VALUES
-    (current_setting('br.b_fail')::uuid,'Assay','HPLC','98.0 - 102.0 %','88.1 %', false, u_qc),
-    (current_setting('br.b_pass')::uuid,'Assay','HPLC','98.0 - 102.0 %','99.4 %', true,  u_qc);
+    (batch_id, test_name, test_method, specification, result, pass, tested_by, signature_id)
+  VALUES (b_f,'Assay','HPLC','98.0 - 102.0 %','88.1 %', false, u_qc,
+          (r->>'signature_id')::uuid);
+
+  r := public.quality_verdict_sign('batch_qc_result', c_a, b_p,
+         'Assay', '99.4 %', true, 'CorrectHorse1!');
+  INSERT INTO public.batch_qc_results
+    (batch_id, test_name, test_method, specification, result, pass, tested_by, signature_id)
+  VALUES (b_p,'Assay','HPLC','98.0 - 102.0 %','99.4 %', true, u_qc,
+          (r->>'signature_id')::uuid);
 END
 $results$;
 RESET ROLE;
@@ -658,13 +675,20 @@ DO $i3$
 DECLARE v_msg text; v_ok boolean := false;
 BEGIN
   BEGIN
-    INSERT INTO public.batch_qc_results(batch_id, test_name, result, pass, tested_by)
+    --  WITH A SIGNATURE, since 20261127000000. The point of I3 is that
+    --  the analyst is the one who may record a verdict; what they now
+    --  do is attest to it as they record it.
+    INSERT INTO public.batch_qc_results
+      (batch_id, test_name, result, pass, tested_by, signature_id)
     VALUES (current_setting('br.b_none')::uuid,'Dissolution','82 %', true,
-            current_setting('br.u_qc')::uuid);
+            current_setting('br.u_qc')::uuid,
+            (public.quality_verdict_sign('batch_qc_result',
+               current_setting('br.c_a')::uuid, current_setting('br.b_none')::uuid,
+               'Dissolution', '82 %', true, 'CorrectHorse1!')->>'signature_id')::uuid);
     v_ok := true; v_msg := 'recorded';
   EXCEPTION WHEN OTHERS THEN v_msg := SQLERRM;
   END;
-  PERFORM _brk('I','I3 the QC analyst can', v_ok, left(v_msg,160));
+  PERFORM _brk('I','I3 the QC analyst can, with a signature', v_ok, left(v_msg,160));
 END
 $i3$;
 RESET ROLE;

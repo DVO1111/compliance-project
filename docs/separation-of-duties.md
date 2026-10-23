@@ -77,7 +77,7 @@ it is still a decision.
 |---|---|---|---|
 | release | recorded its QC results | **enforced**, `mandatory` | An existing product decision: `BATCH_RELEASE_SELF_TESTED` predates this branch |
 | release | executed it | **enforced**, `mandatory` | PM-03 separates batch_records (Production Supervisor) from batch_release (QA Manager) |
-| dispatch | made its release decision | **enforced**, `conservative_default` | PM-03 separates distribution (Storekeeper) from batch_release (QA Manager), but this separates a decision from a physical movement rather than from the work it judges — the weakest of the three. §5 decision 4 |
+| dispatch | made its release decision | **enforced**, `mandatory` | PM-03 separates distribution from batch_release. Confirmed in the brief as decision 4, together with a refusal to record a dispatch dated before its release |
 
 ### Why these three are mine to draw and not yours
 
@@ -117,9 +117,9 @@ Receive → sample → test → verify the CoA → disposition → release.
 | Attempting | Blocked if they already | Status | Rests on |
 |---|---|---|---|
 | disposition | recorded its test results | **enforced**, `mandatory` | The product's own `BATCH_RELEASE_SELF_TESTED` decision, applied where the same facts hold |
-| disposition | received the lot | **enforced**, `conservative_default` | Derivable from PM-03; no product decision requires it, so it is the safe reading pending §5 decision 1 |
-| disposition | verified its CoA | **not enforced** — not derivable | PM-03 gives *both* columns to qa_manager and qa_officer |
-| qc_testing | sampled the lot | **not enforced** — not derivable | Sampling has no PM-03 column at all |
+| disposition | received the lot | **enforced**, `mandatory` | Derivable from PM-03; ruled in the brief as decision 1 |
+| disposition | verified its CoA | **enforced**, `mandatory` | **Not derivable.** Ruled in the brief as decision 2 and enforced on a named approval — §5.1 |
+| qc_testing | sampled the lot | **not enforced** | Sampling has no PM-03 column. Decision 3 awaits the site procedure |
 
 ### The one that is enforced
 
@@ -157,65 +157,84 @@ behaviour I would want.
 
 ---
 
-## 5. The six decisions
+## 5. The six decisions — ruled, and what was implemented
 
-Each is now **implemented with a conservative default** — the reading
-that refuses more — except where refusing more would have meant
-inventing a rule PM-03 does not contain, which is the one thing that
-must not happen here.
+All six were decided in the finalisation brief. What each now does,
+and what it rests on.
 
-A conservative default is not an answer. It is a position held until
-there is one, chosen so that being wrong costs a conversation rather
-than a release. The database distinguishes the two:
+| # | Decision | Ruling | Implemented as | Authority |
+|---|---|---|---|---|
+| **1** | Receiver may not disposition the lot | **Enforced** | `MATERIAL_DISPOSITION_SELF_RECEIVED` on the lifecycle guard and the release-record trigger | Derived from PM-03 |
+| **2** | CoA verifier may not disposition | **Enforced** | `MATERIAL_DISPOSITION_SELF_VERIFIED`, same two points | **Approved beyond PM-03** — see below |
+| **3** | Sampler may not test | **Not enforced** | Registered, unenforced, with the switch and what it takes documented on the row | Awaiting the site procedure |
+| **4** | Releaser may not dispatch | **Enforced**, plus no backdating | `BATCH_DUTY_CONFLICT`, and `DISPATCH_BEFORE_RELEASE` / `DISPATCH_IN_THE_FUTURE` | Derived from PM-03 |
+| **5** | Signatures on QC Analyst / Production Supervisor actions | **Enforced for the finished-product verdict**; two more registered and held | `QUALITY_VERDICT_SIGNATURE_REQUIRED` on `batch_qc_results` | The workflow model — see §5.2 |
+| **6** | One in-process reading counts as execution | **Confirmed**, broad reading | `batch_actor_duties`, and the recorder is now frozen | Confirmed in the brief |
 
-| `decision_status` | Means |
+### 5.1 Decision 2 diverges from PM-03, deliberately
+
+PM-03 gives `coa_register` **and** `qa_disposition` both to
+`qa_manager` and `qa_officer`. The matrix contemplates one person
+doing both; the decision says they may not, on the same lot.
+
+So the gate is now **stricter than the permission screen**. That is
+not a transcription error and it is not hidden:
+
+- `duty_conflicts.authority` distinguishes `derived_from_pm03` from
+  `approved_by_quality`;
+- an `approved_by_quality` pair is refused by a CHECK unless it
+  carries a written `approved_reference`, and the migration asserts
+  the reference is long enough to be a reference rather than a shrug;
+- the derivation guard is **narrowed, not removed** — a pair claiming
+  PM-03 as its authority is still refused unless PM-03 derives it.
+
+If PM-03 is ever changed so the two columns are disjoint, the
+migration raises a NOTICE saying the special authority can be dropped.
+
+**The permission matrix itself is unchanged.** Reducing a role's Act
+on `coa_register` or `qa_disposition` would alter what those roles can
+reach across the whole product, which is a larger change than this
+decision asked for. Recorded in the conflict register §40 as a
+standing divergence for the design to resolve.
+
+### 5.2 Decision 5 — which actions, and which are enforced
+
+Taken from the workflow model: an action is here when a later control
+reads its result and acts on it.
+
+| Action | Performed by | State | Why |
+|---|---|---|---|
+| `batch_qc_result` | QC Analyst | **Enforced** | The release gate reads `pass` and the value and refuses the batch on them |
+| `material_test_result` | QC Analyst | Registered, held | The disposition gate reads it the same way. Held pending the site's testing procedure, which decides whether every result is signed or only critical parameters |
+| `batch_execution_close` | Production Supervisor | Registered, held | Stage completion is **already** signed by `batch_stage_complete`. Closing is the one step that is not; on some sites it is clerical and the stage signatures are the record |
+
+The signature is taken over the **verdict** — action, record, test,
+value and pass/fail — not over a row id. Signing an id would let the
+values be edited afterwards with the signature still attached.
+Single-use by unique index, bound to the signer, and the Part 11
+`meaning` vocabulary is not widened: a verdict is `authored`, and
+`action` carries which verdict it was.
+
+### 5.3 What the decisions cost
+
+| # | Who it affects |
 |---|---|
-| `mandatory` | an existing product decision requires it |
-| `conservative_default` | enforced as the safe reading, **pending your confirmation** |
-| `awaiting_decision` | not enforced; needs your answer, and in two cases a PM-03 change first |
+| 1 | Only somebody holding both storekeeper and a QA role — a storekeeper has no Act on `qa_disposition` to begin with |
+| 2 | A QA Manager or QA Officer, on a lot whose certificate they verified. This one **does** bite a single role, which is why it needed an explicit approval |
+| 4 | Only somebody holding both qa_manager and storekeeper |
+| 5 | Every QC Analyst recording a finished-product result — one password prompt per verdict |
+| 6 | Only a multi-role holder |
 
-`SELECT * FROM duty_decisions_outstanding();` lists everything still
-open, so a default cannot become permanent by being forgotten.
+### 5.4 Still open
 
----
+**Decision 3 only.** `duty_decisions_outstanding()` returns exactly
+one row, and it is sampling. Enforcing it needs a PM-03 column for
+sampling and a site procedure requiring independence; the brief is
+explicit that a universal rule must not be invented without one.
 
-### The list to approve
-
-| # | Decision | Default implemented | PM-03 impact | Database enforcement | Needs |
-|---|---|---|---|---|---|
-| **1** | May the storekeeper who **received** a material lot make its disposition? | **No — enforced** (`conservative_default`) | None. PM-03 already gives goods_receipt to the Storekeeper and qa_disposition to QA, with no overlap | `MATERIAL_DISPOSITION_SELF_TESTED`'s sibling `MATERIAL_DISPOSITION_SELF_RECEIVED`, on the lifecycle guard and the release-record trigger | **Your confirmation** |
-| **2** | May the person who **verified the CoA** make the disposition? | **Yes — not enforced** (`awaiting_decision`) | **Blocking.** PM-03 gives `coa_register` *and* `qa_disposition` both to qa_manager and qa_officer, so the matrix contemplates one person doing both | None. Enforcing it would make the gate contradict the permission screen | **Your decision AND a PM-03 change** |
-| **3** | Must the person who **sampled** a lot be different from the one who tests it? | **Not enforced** (`awaiting_decision`) | **Blocking.** Sampling has no PM-03 column at all | None | **Your decision AND a PM-03 column** |
-| **4** | May the QA who **released** a batch also dispatch it? | **No — enforced**, reclassified from `mandatory` to `conservative_default` | None. PM-03 separates distribution (Storekeeper) from batch_release (QA Manager) | `BATCH_DUTY_CONFLICT` on the dispatch gate | **Your confirmation** |
-| **5** | Should **qc_analyst** and **production_supervisor** also need a signature to be granted? | **No — unchanged** | **Blocking.** `20261121000000` derives the signature list from `step_permissions` and fails if a seeded role holds no protected step. Neither role has one | None | **Your decision AND a PM-03 change** |
-| **6** | Does *"executed the batch"* include recording a single in-process reading? | **Yes — the broad reading**, `conservative_default` | None | `batch_actor_duties` reads `batch_stages.started_by`, `batch_stage_parameter_readings.recorded_by`, `batch_records.execution_closed_by` | **Your confirmation** |
-
-### How to answer
-
-Three of the six (**1, 4, 6**) are *confirm or overturn* — they are
-enforced now and you are agreeing or not. Overturning 1 or 4 is one
-`UPDATE` in a migration; overturning 6 is an edit to
-`batch_actor_duties`.
-
-Three (**2, 3, 5**) are *decide*, and all three need PM-03 changed
-before they could be enforced at all. **That is the honest position:
-I will not enforce a rule the permission matrix contradicts, because a
-gate that disagrees with the screen granting the permission is worse
-than no gate.** If you want any of them, the matrix changes first and
-the enforcement follows.
-
-### What each default costs if it is wrong
-
-| # | If the default is wrong |
-|---|---|
-| 1 | A person holding **both** storekeeper and a QA role cannot disposition a lot they booked in. Nobody else is affected — a storekeeper has no Act on qa_disposition to begin with |
-| 4 | A person holding **both** qa_manager and storekeeper cannot dispatch a batch they released |
-| 6 | A production supervisor who recorded one reading cannot release that batch — and they could not anyway, since production_supervisor has no Act on batch_release. It bites only a multi-role holder |
-
-**Every conservative default costs nothing except to somebody holding
-two roles at once.** That is not a coincidence: it is the case PM-03's
-arithmetic used to make impossible, and the only case this layer
-exists for.
+The attribution it would read already exists and is preserved:
+`material_lot_sampling.sampled_by` / `sampled_on` and
+`material_test_results.analyst_id` / `test_date`.
 
 ---
 
@@ -267,5 +286,13 @@ plus `operational_role_model_test.sql` section F.
 | Conservative defaults are listed, so one cannot become permanent by being forgotten | G6c, `duty_decisions_outstanding()` |
 | An unenforced pair refuses nobody | G6b |
 
-Full run: **2577 assertions, 0 failed**, from a database dropped and
+| Decision 1 reachable at all — the receiver is now written | `decision_enforcement_test.sql` A1–A3, B1–B3 |
+| Decision 2 on a named approval, and PM-03 still not deriving it | C1–C7 |
+| Decision 3 registered and refusing nobody | D1–D4 |
+| Decision 4, including backdating and future-dating | E1–E5 |
+| Decision 5: required, bound to the values, single use, bound to the signer | F1–F11 |
+| Decision 6: the broad reading, and attribution that cannot be edited | G1–G6 |
+| Every enforced pair has an authority and claims only the one it has | H1–H2 |
+
+Full run: **2626 assertions, 0 failed**, from a database dropped and
 rebuilt from the migrations.

@@ -240,6 +240,28 @@ export async function updateBatchStatus(
   }).catch(e => logger.error('Audit failed for batch status update:', e));
 }
 
+/**
+ * A signing refusal, in words somebody can act on.
+ *
+ * Falls through to the database's own message rather than a generic
+ * one: a refusal the screen cannot name is still more useful than
+ * "something went wrong".
+ */
+export function explainVerdictSignatureError(code?: string, message?: string): string {
+  switch (code) {
+    case 'E_SIGNATURE_BAD_PASSWORD':
+      return 'That password is not correct.';
+    case 'E_SIGNATURE_LOCKED':
+      return 'Too many failed signature attempts. Wait fifteen minutes before trying again.';
+    case 'E_SIGNATURE_NO_USER':
+      return 'You are signed out. Sign in again — nothing you have typed is lost.';
+    case 'E_SIGNATURE_BAD_ACTION':
+      return 'That is not an action this system signs.';
+    default:
+      return message || 'The signature could not be taken.';
+  }
+}
+
 export async function addQcResult(
   batchId: string,
   userId: string,
@@ -257,7 +279,43 @@ export async function addQcResult(
    * without one, because the log entry is the point.
    */
   correction?: { correctedFromId: string; reason: string },
+  /**
+   * The password this verdict is signed with.
+   *
+   * REQUIRED SINCE 20261127000000, decision 5. The release gate reads
+   * `pass` and the recorded value and refuses the batch on them, so
+   * the analyst attests to them as they are recorded. The signature is
+   * taken over the VERDICT — the test, the value and the pass/fail —
+   * not over a row id, so it cannot be minted for one result and
+   * attached to another.
+   *
+   * There is no path that writes a verdict without one, and no
+   * test-only signing route. Omitting it reaches the database and is
+   * refused there, which is the right place for the refusal to live.
+   */
+  signing?: { companyId: string; password: string },
 ): Promise<BatchQcResult> {
+  let signatureId: string | null = null;
+  if (signing) {
+    //  Typed, not `as any`: quality_verdict_sign is in database.types.ts,
+    //  so the argument names and the Json return are checked here rather
+    //  than discovered at runtime.
+    const { data: sig, error: sigErr } = await supabase.rpc('quality_verdict_sign', {
+      p_action: 'batch_qc_result',
+      p_company_id: signing.companyId,
+      p_record_id: batchId,
+      p_subject: result.test_name,
+      p_result: result.result,
+      p_pass: result.pass,
+      p_password: signing.password,
+      p_reason: correction?.reason ?? null,
+    });
+    if (sigErr) throw new Error(sigErr.message);
+    const r = sig as { ok?: boolean; code?: string; message?: string; signature_id?: string };
+    if (!r?.ok) throw new Error(explainVerdictSignatureError(r?.code, r?.message));
+    signatureId = r.signature_id ?? null;
+  }
+
   const { data, error } = await (supabase as any)
     .from('batch_qc_results')
     .insert({
@@ -266,6 +324,7 @@ export async function addQcResult(
       tested_by: userId,
       corrected_from_id: correction?.correctedFromId ?? null,
       correction_reason: correction?.reason ?? null,
+      signature_id: signatureId,
     })
     .select()
     .single();

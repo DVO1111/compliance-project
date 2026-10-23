@@ -22,6 +22,7 @@ import {
 } from '../../lib/pharma/coaService';
 import { isQaAuthority } from '../../lib/pharma/qaAuthority';
 import { resolveWorkRoles, sectionAccessFor } from '../../lib/access/roleAccess';
+import PasswordPromptModal from '../Common/PasswordPromptModal';
 
 interface Props {
   batch: BatchRecord;
@@ -59,6 +60,12 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
   //  result pointing at the old one; both stay, and the gate reads the
   //  one that stands.
   const [correcting, setCorrecting] = useState<BatchQcResult | null>(null);
+  //  DECISION 5. Recording a finished-product verdict is a signed act:
+  //  the release gate reads `pass` and the value, so the analyst
+  //  attests to them as they are recorded. The form is validated
+  //  first, then the password is asked for — asking somebody to sign
+  //  before telling them the form is wrong is the wrong order.
+  const [signingFinal, setSigningFinal] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
 
   const load = async () => {
@@ -111,29 +118,41 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
     finally { setSaving(false); }
   };
 
-  const submitFinal = async (e: React.FormEvent) => {
+  const submitFinal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!finForm.test_name || !finForm.result) { setError('Test name and result are required.'); return; }
+    if (correcting && correctionReason.trim() === '') {
+      setError('A correction needs a reason. The database refuses one without.');
+      return;
+    }
+    setError(null);
+    setSigningFinal(true);
+  };
+
+  const signAndRecordFinal = async (password: string) => {
     setSaving(true); setError(null);
     try {
-      if (correcting && correctionReason.trim() === '') {
-        setError('A correction needs a reason. The database refuses one without.');
-        setSaving(false);
-        return;
-      }
       await addQcResult(batch.id, userId, {
         test_name: finForm.test_name,
         test_method: finForm.test_method || null,
         specification: finForm.specification || null,
         result: finForm.result,
         pass: finForm.pass,
-      }, correcting ? { correctedFromId: correcting.id, reason: correctionReason } : undefined);
+      },
+        correcting ? { correctedFromId: correcting.id, reason: correctionReason } : undefined,
+        { companyId: batch.company_id, password },
+      );
+      setSigningFinal(false);
       setFinForm(emptyFinal);
       setCorrecting(null);
       setCorrectionReason('');
       await load();
       onChanged?.();
-    } catch (e: any) { setError(e.message || 'Failed to log QC result'); }
+    } catch (e: any) {
+      //  The prompt stays open on a bad password so the form is not
+      //  lost; it closes only when the verdict is recorded.
+      setError(e.message || 'Failed to log QC result');
+    }
     finally { setSaving(false); }
   };
 
@@ -350,6 +369,24 @@ export default function BatchDetailModal({ batch, companyId, userId, onClose, on
           ))}
         </div>
       </div>
+
+      {/*  DECISION 5, at the point of the act. The password is asked
+          for after the form validates, and the prompt stays open on a
+          bad password so nothing typed is lost. */}
+      <PasswordPromptModal
+        isOpen={signingFinal}
+        onClose={() => { setSigningFinal(false); setError(null); }}
+        onConfirm={(password) => { void signAndRecordFinal(password); }}
+        isLoading={saving}
+        title="Sign this result"
+        description={
+          `You are recording ${finForm.test_name || 'this test'} as `
+          + `${finForm.result || '—'} (${finForm.pass ? 'pass' : 'fail'}). `
+          + 'The release gate reads this verdict, so it is signed. '
+          + 'Enter your password to sign.'
+        }
+        confirmLabel="Sign and record"
+      />
     </div>
   );
 }

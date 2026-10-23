@@ -55,6 +55,12 @@ BEGIN
   INSERT INTO public.companies(id,name) VALUES (c_a,'Write Path Works '||tag);
   INSERT INTO auth.users(id,email) VALUES
     (u_qm,'qm-'||tag||'@wp.test'), (u_qc,'qc-'||tag||'@wp.test'), (u_sk,'sk-'||tag||'@wp.test');
+  --  A real password, because 20261127000000 makes recording a
+  --  finished-product verdict a signed act and there is no test-only
+  --  signing path. The suite signs the way the application will.
+  UPDATE auth.users
+     SET encrypted_password = extensions.crypt('CorrectHorse1!', extensions.gen_salt('bf'))
+   WHERE id IN (u_qm,u_qc,u_sk);
   INSERT INTO public.profiles(id,email,full_name,company_id,role) VALUES
     (u_qm,'qm-'||tag||'@wp.test','Ngozi Quality', c_a,'compliance_officer'),
     (u_qc,'qc-'||tag||'@wp.test','Amaka Analyst', c_a,'content_creator'),
@@ -218,10 +224,15 @@ DECLARE
   b uuid := current_setting('wp.b')::uuid;
   v_id uuid;
 BEGIN
+  --  SIGNED, since 20261127000000: the release gate reads this verdict,
+  --  so the analyst attests to it as it is recorded.
   INSERT INTO public.batch_qc_results
-    (batch_id,test_name,test_method,specification,result,pass,tested_by)
+    (batch_id,test_name,test_method,specification,result,pass,tested_by,signature_id)
   VALUES (b,'Assay','HPLC','98.0 - 102.0 %','88.1 %', false,
-          current_setting('wp.u_qc')::uuid)
+          current_setting('wp.u_qc')::uuid,
+          (public.quality_verdict_sign('batch_qc_result',
+             current_setting('wp.c_a')::uuid, b, 'Assay', '88.1 %', false,
+             'CorrectHorse1!')->>'signature_id')::uuid)
   RETURNING id INTO v_id;
   PERFORM set_config('wp.r_fail', v_id::text, false);
 END
@@ -301,8 +312,11 @@ DECLARE
 BEGIN
   BEGIN
     INSERT INTO public.batch_qc_results
-      (batch_id,test_name,result,pass,tested_by,corrected_from_id)
-    VALUES (b,'Assay','99.4 %',true,current_setting('wp.u_qc')::uuid,r);
+      (batch_id,test_name,result,pass,tested_by,corrected_from_id,signature_id)
+    VALUES (b,'Assay','99.4 %',true,current_setting('wp.u_qc')::uuid,r,
+            (public.quality_verdict_sign('batch_qc_result',
+               current_setting('wp.c_a')::uuid, b, 'Assay', '99.4 %', true,
+               'CorrectHorse1!')->>'signature_id')::uuid);
     v_msg := 'A CORRECTION WITH NO REASON WAS ACCEPTED';
   EXCEPTION WHEN OTHERS THEN
     v_ok := SQLERRM LIKE 'BATCH_QC_CORRECTION_NO_REASON%'; v_msg := SQLERRM;
@@ -310,9 +324,12 @@ BEGIN
   PERFORM _wpk('D','D1 a correction requires a reason', v_ok, left(v_msg,140));
 
   INSERT INTO public.batch_qc_results
-    (batch_id,test_name,result,pass,tested_by,corrected_from_id,correction_reason)
+    (batch_id,test_name,result,pass,tested_by,corrected_from_id,correction_reason,signature_id)
   VALUES (b,'Assay','99.4 %',true,current_setting('wp.u_qc')::uuid,r,
-          'Transcribed from the wrong column of the chromatogram')
+          'Transcribed from the wrong column of the chromatogram',
+          (public.quality_verdict_sign('batch_qc_result',
+             current_setting('wp.c_a')::uuid, b, 'Assay', '99.4 %', true,
+             'CorrectHorse1!')->>'signature_id')::uuid)
   RETURNING id INTO v_id;
   PERFORM set_config('wp.r_corr', v_id::text, false);
   PERFORM _wpk('D','D2 a correction with one is recorded', v_id IS NOT NULL);

@@ -664,16 +664,37 @@ BEGIN
     coalesce(public.duty_conflict('material_lot', v_lot, 'disposition',
       current_setting('rs.u_sk')::uuid), '(no conflict)'));
 
-  --  …and it says so, rather than passing for a settled rule. The
-  --  distinction is the point: 'mandatory' means an existing product
-  --  decision requires it, 'conservative_default' means it is the safe
-  --  reading until somebody rules.
-  PERFORM _rsk('G','G6 and it is on the record as pending confirmation',
-    (SELECT decision_status = 'conservative_default' AND enforced
+  --  …and it says so. 20261128000000 moved it from
+  --  'conservative_default' to 'mandatory' when the brief confirmed
+  --  it: leaving a ruled decision reading as provisional would
+  --  misreport the state, which is the one thing the status exists to
+  --  prevent.
+  PERFORM _rsk('G','G6 and the brief''s confirmation is on the record',
+    (SELECT decision_status = 'mandatory' AND enforced
        FROM public.duty_conflicts
       WHERE scope='material_lot' AND duty_a='disposition' AND duty_b='receipt'),
     (SELECT decision_status FROM public.duty_conflicts
       WHERE scope='material_lot' AND duty_a='disposition' AND duty_b='receipt'));
+
+  --  DECISION 2, which PM-03 does not derive. It is enforced on an
+  --  explicit approval, and the approval names where it is recorded.
+  PERFORM _rsk('G','G6d the CoA pair is enforced on a named approval',
+    (SELECT enforced AND authority = 'approved_by_quality'
+            AND length(coalesce(approved_reference,'')) >= 40
+       FROM public.duty_conflicts
+      WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'),
+    (SELECT authority FROM public.duty_conflicts
+      WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition'));
+
+  --  And nothing enforced claims PM-03 as its authority without
+  --  actually being derivable from it.
+  PERFORM _rsk('G','G6e no pair claims a derivation it does not have',
+    NOT EXISTS (SELECT 1 FROM public.duty_conflicts
+                 WHERE enforced AND authority = 'derived_from_pm03'
+                   AND NOT public.duty_pair_is_derived(section_a, section_b)),
+    (SELECT string_agg(format('%s/%s',duty_a,duty_b),', ') FROM public.duty_conflicts
+      WHERE enforced AND authority = 'derived_from_pm03'
+        AND NOT public.duty_pair_is_derived(section_a, section_b)));
 
   --  The pairs that are NOT enforced must still refuse nobody. A
   --  recorded proposal is not a rule.
@@ -686,21 +707,36 @@ BEGIN
   --  And every outstanding decision is findable in one query, which is
   --  what stops a conservative default becoming a permanent one by
   --  being forgotten.
-  PERFORM _rsk('G','G6c the outstanding decisions are listed in one place',
-    (SELECT count(*) FROM public.duty_decisions_outstanding()) >= 4,
-    (SELECT count(*)::text FROM public.duty_decisions_outstanding()));
+  --  One left after the brief: sampling, which needs the site's
+  --  procedure rather than a ruling. The query still has to work —
+  --  that is what stops a decision being forgotten.
+  PERFORM _rsk('G','G6c the outstanding decisions are still listed in one place',
+    (SELECT count(*) FROM public.duty_decisions_outstanding()) >= 1,
+    (SELECT string_agg(format('%s %s',scope,pair),'; ')
+       FROM public.duty_decisions_outstanding()));
 
   --  NOT DERIVABLE: PM-03 gives both columns to the same roles, so the
   --  coa pair cannot be enforced without contradicting the matrix.
   PERFORM _rsk('G','G7 the CoA pair is not derivable from PM-03',
     NOT public.duty_pair_is_derived('coa_register','qa_disposition'));
 
-  PERFORM _rsk('G','G8 and the enforced pairs all are',
-    NOT EXISTS (SELECT 1 FROM public.duty_conflicts
-                 WHERE enforced AND NOT public.duty_pair_is_derived(section_a, section_b)),
+  --  EVERY ENFORCED PAIR HAS AN AUTHORITY: PM-03 derives it, or
+  --  somebody approved it by name. The CoA pair is the second kind and
+  --  is a deliberate divergence from the matrix, so the assertion
+  --  checks the authority rather than the derivation alone.
+  PERFORM _rsk('G','G8 and every enforced pair has an authority',
+    NOT EXISTS (
+      SELECT 1 FROM public.duty_conflicts
+       WHERE enforced
+         AND NOT (public.duty_pair_is_derived(section_a, section_b)
+                  OR (authority = 'approved_by_quality'
+                      AND coalesce(approved_reference,'') <> ''))),
     (SELECT string_agg(format('%s %s/%s',scope,section_a,section_b),'; ')
        FROM public.duty_conflicts
-      WHERE enforced AND NOT public.duty_pair_is_derived(section_a, section_b)));
+      WHERE enforced
+        AND NOT (public.duty_pair_is_derived(section_a, section_b)
+                 OR (authority = 'approved_by_quality'
+                     AND coalesce(approved_reference,'') <> ''))));
 END $g$;
 
 --  Through the real guard, as the analyst.

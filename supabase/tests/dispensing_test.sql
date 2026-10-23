@@ -247,6 +247,13 @@ DECLARE
   u_qa uuid := current_setting('d9.u_qa')::uuid;
   l uuid; r jsonb; coa uuid; v_crit text;
 BEGIN
+  --  GOODS RECEIPT IS NOT WHAT THIS FIXTURE TESTS. Since
+  --  20261126000000 received_by is written from the session, and
+  --  decision 1 refuses the disposition to whoever received the lot —
+  --  so building and releasing a lot as one person is now refused,
+  --  correctly. This helper is SECURITY DEFINER and cannot change
+  --  role, so its CALLERS run it in service context instead; see the
+  --  $lots$ block below.
   INSERT INTO public.material_lots
     (company_id,material_id,quantity_received,quantity_available,unit_of_measure,created_by)
   VALUES (c_a,p_material,p_qty,p_qty,p_unit,u_qa) RETURNING id INTO l;
@@ -293,7 +300,11 @@ END $$;
 
 SELECT set_config('request.jwt.claims',
   json_build_object('sub', current_setting('d9.u_qa'), 'role','authenticated')::text, false);
-SET ROLE authenticated;
+--  RESET ROLE, deliberately: the lots below are scaffolding, not the
+--  subject. Built in service context so no person is recorded as
+--  having received them, which is what lets the same fixture user go
+--  on to disposition them. See 20261126000000.
+RESET ROLE;
 DO $lots$
 BEGIN
   PERFORM set_config('d9.lot_ok',   _d9_lot(current_setting('d9.m_api')::uuid, 100, 'kg','approved')::text, false);

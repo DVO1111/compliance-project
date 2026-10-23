@@ -6587,6 +6587,25 @@ isOneToOne: false
 "operational_role_revoke":
 { Args: { "p_assignment_id": string,"p_reason": string,"p_signature_id"?: string }; Returns: undefined
                            },
+"quality_verdict_sign":
+{ Args: { "p_action": string,"p_company_id": string,"p_record_id": string,"p_subject": string,"p_result": string,"p_pass": boolean,"p_password": string,"p_reason"?: string }; Returns: Json
+                           },
+"quality_action_needs_signature":
+{ Args: { "p_action": string }; Returns: boolean
+                           },
+"operational_role_stranded_work":
+{ Args: { "p_company_id": string }; Returns: {
+              "entity_type": string,"entity_id": string,"state_key": string,"section": string,"last_actor": string,"last_acted_at": string,"roles_lost": string[],"roles_remaining": string[],"reassigned_to": string,"reassigned_at": string,"still_stranded": boolean
+            }[]
+                           },
+"stranded_work_reassign":
+{ Args: { "p_company_id": string,"p_entity_type": string,"p_entity_id": string,"p_to_user": string,"p_reason": string }; Returns: string
+                           },
+"duty_decisions_outstanding":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "decision": string,"scope": string,"pair": string,"enforced": boolean,"decision_status": string,"derivable": boolean,"note": string
+            }[]
+                           },
 "operational_role_sign":
 { Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_action": string,"p_password": string,"p_assignment_id"?: string,"p_reason"?: string }; Returns: Json
                            },

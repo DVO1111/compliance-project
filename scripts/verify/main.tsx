@@ -27,6 +27,10 @@ import BatchExecutionPage from '../../src/components/Batch/BatchExecutionPage';
 import MyTasksPage from '../../src/components/Tasks/MyTasksPage';
 import DispatchPage from '../../src/components/Distribution/DispatchPage';
 import ProductSpecificationsPage from '../../src/components/Specifications/ProductSpecificationsPage';
+import BatchReleasePage from '../../src/components/BatchRelease/BatchReleasePage';
+import CoaRegisterPage from '../../src/components/Coa/CoaRegisterPage';
+import DeviationsPage from '../../src/components/Deviations/DeviationsPage';
+import MasterFormulaPage from '../../src/components/Formula/MasterFormulaPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
@@ -50,6 +54,14 @@ const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
   'my-tasks': (role) => <MyTasksPage companyId="c1" role={role} />,
   'dispatch': (role) => <DispatchPage companyId="c1" userId="u1" role={role} />,
   'product-specifications': () => <ProductSpecificationsPage companyId="c1" userId="u1" />,
+  //  Added so the screen audit covers them: each was rendering the
+  //  harness's "no fixture wired" placeholder, which proves nothing
+  //  about the page. BatchReleasePage and CoaRegisterPage read the
+  //  auth context themselves rather than taking props.
+  'batch-release': () => <BatchReleasePage />,
+  'coa': () => <CoaRegisterPage />,
+  'deviations': (role) => <DeviationsPage companyId="c1" isQa={role === 'qa_manager'} />,
+  'master-formulas': () => <MasterFormulaPage companyId="c1" />,
 };
 
 /** The same role-to-dashboard choice App.tsx makes. */

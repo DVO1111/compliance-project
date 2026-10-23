@@ -1238,3 +1238,117 @@ Two related findings from the same audit:
 
 `docs/screen-audit.md` has the full pass, including the three pages
 that had no branch at all for a load that fails.
+
+---
+
+## 40. The gate is now stricter than the matrix, on purpose
+
+Decision 2 of the finalisation brief: the person who verified a
+material lot's certificate of analysis may not then make its
+disposition.
+
+PM-03 does not derive that. It gives `coa_register` **and**
+`qa_disposition` both to `qa_manager` and `qa_officer`, so the matrix
+contemplates one person doing both — which is why §33 recorded the
+pair as unenforceable without a ruling.
+
+The ruling came, so `20261128000000` adds a second, narrower authority
+rather than loosening the first:
+
+| `duty_conflicts.authority` | Means |
+|---|---|
+| `derived_from_pm03` | the matrix already separates the two columns |
+| `approved_by_quality` | a named decision that goes beyond the matrix, and must carry a written reference |
+
+A CHECK refuses an `approved_by_quality` pair with no reference, the
+migration asserts the reference is long enough to be one, and the
+original guard still refuses any pair that *claims* PM-03 as its
+authority without being derivable from it. The second route cannot be
+used to smuggle a rule in; it can only be used to record one that
+somebody signed for.
+
+**The matrix itself is unchanged**, and that is the standing
+divergence: the permission screen will go on showing a QA Officer able
+to do both while the gate refuses it on the same lot. Changing PM-03
+instead would alter what those two roles reach across the whole
+product, which is a larger change than the decision asked for. If the
+design is ever updated to separate the columns, the migration raises a
+NOTICE saying the special authority can be dropped.
+
+*For the design to resolve:* whether PM-03 should be redrawn so the
+matrix and the gate agree.
+
+---
+
+## 41. Three columns the guards read, and nobody was writing
+
+The most serious thing found in this round, and it was found by
+checking the columns rather than trusting them.
+
+`material_lots.received_by` was **never set by the application**.
+`receiveLot()` inserts a lot without it. So decision 1 —
+`MATERIAL_DISPOSITION_SELF_RECEIVED`, enforced since §38 — read NULL
+for every lot the product created and could not fire. A guard
+installed, attached and unreachable: the fourth time this schema has
+produced one.
+
+Two more were being written by whoever was asking:
+
+- `batch_qc_results.tested_by`, supplied by the client on a direct
+  INSERT. The release gate refuses a releaser who recorded the batch's
+  results, and that refusal is worth nothing if the recorder chooses
+  the name on the row.
+- `material_test_results.analyst_id`, defaulted to `auth.uid()` by
+  `material_test_record_result` — so the default was right and any
+  caller could override it.
+
+`20261126000000` writes all four from the session (the fourth is
+`batch_stage_parameter_readings.recorded_by`, for decision 6) and
+freezes each once set. The gate is on `app_is_service_context()` and
+not on `auth.uid()` being null — the first draft used the latter and
+broke four suites, because `request.jwt.claims` survives a `RESET
+ROLE` and fixtures running as postgres were having their attribution
+rewritten to the last person impersonated.
+
+**A separation-of-duties rule is exactly as good as the attribution it
+reads.** None of this was new policy; it was existing policy made
+reachable, and the proof is that seven test fixtures then had to stop
+using one person for two jobs.
+
+---
+
+## 42. Signing the verdict the gate reads
+
+Decision 5. §34 required a signature to *grant* a GMP-critical role;
+this is a signature on the *actions* those roles perform.
+
+Taken from the workflow model rather than from a list of things that
+sound important: an action needs a signature when a later control
+reads its result and acts on it. That is the finished-product QC
+verdict — the release gate reads `pass` and the recorded value and
+refuses the batch on them — and it is now enforced.
+
+Two more are registered and **held**: the material test result, held
+pending the site's testing procedure, which decides whether every
+result is signed or only critical parameters; and closing batch
+execution, held because stage completion is already signed by
+`batch_stage_complete` and on some sites closing is clerical. Both are
+rows in `signed_quality_actions` with `required = false`, so "we
+looked at this and are waiting" is distinguishable from "nobody
+considered it".
+
+The signature is taken over the **verdict** — action, record, test,
+value and pass/fail — not over a row id. Signing an id would let the
+values be edited afterwards with the signature still attached; signing
+the values means an edit invalidates it, which is the property that
+makes a signature worth taking. Single use by unique index, bound to
+its signer, and the Part 11 `meaning` vocabulary is **not widened**: a
+verdict is `authored` and `action` carries which verdict it was.
+
+One ordering lesson, caught by the suite: the signature check must
+fire **after** the section guard and the validity rules. Asking
+somebody to sign a result they are not allowed to record, or one with
+no verdict in it, answers the wrong question — four assertions about
+authority began failing on a missing signature instead. BEFORE
+triggers run alphabetically, so the trigger is named to sort last and
+says why.
