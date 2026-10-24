@@ -54,12 +54,12 @@ database's own `now()`.
 | `material_certificates_of_analysis` | **0 rows, 0 verified** | The membership-only CoA hole has **never been exercised**; no data remediation needed |
 | `material_coa_verify` EXECUTE to `anon` | **false** | PASS |
 | `operational_role_assignments`, `product_specifications` | absent | Expected — they arrive with the deployment |
-| Organization plan | **`free`** (`tier_free`) | **FAIL — see §12.** No PITR, no downloadable backup |
-| Production Postgres | **17.6** | Local verification was PG16. Recorded as unverified risk |
+| Organization plan | **`free`** (`tier_free`) | **FAIL — see §12.** No PITR, no downloadable backup. **Decision awaiting approval** |
+| Production Postgres | **17.6** | **Now verified.** The 30 migrations and all 2668 assertions pass on PostgreSQL 17.6 — [`deployment-rehearsal.md`](deployment-rehearsal.md) §2 |
 
-Two of those readings change the deployment plan rather than just
-confirming it: the **free plan** (§12) and the **Postgres version
-gap**.
+Of those two, the **Postgres version gap is closed** and the **free
+plan remains open**: see [`recovery-readiness.md`](recovery-readiness.md),
+where the decision is still marked awaiting approval.
 
 ---
 
@@ -150,6 +150,26 @@ SELECT e.version,
 | **PASS, after deployment** | all **30** read `applied`, and §§2–12 re-run |
 | **FAIL** | any row `applied` in the before pass — the live position is not `20261101000000`, so `docs/live-readiness.md` and `docs/migration-verification.md` §1 are both computed from a stale boundary and must be recomputed before going further |
 | **FAIL** | any row `OUTSTANDING` in the after pass — the deployment stopped partway. `docs/migration-verification.md` §6 covers recovery; the boundary is a file, not a half-built table |
+
+### BLOCKER before this check can even be run
+
+**`supabase db push` will refuse to apply anything against production
+as it stands.** Five local migration files share a version string with
+another file, and the ledger holds one row per version, so the CLI
+reports `DbPushMissingRemoteError` and stops before the first
+migration. Its suggested remedy, `--include-all`, widens the set from
+30 to 35 and then fails on the first of the five because their objects
+already exist on the target.
+
+Both failures were reproduced with the real CLI, and production was
+confirmed read-only to hold the first file of each pair in its ledger
+and the five migrations' objects in its schema. Full evidence and the
+fix in [`deployment-rehearsal.md`](deployment-rehearsal.md) §3.
+
+The fix is a repository change (rename five files) plus five
+`supabase migration repair --status applied` calls, which **write to
+the production ledger and need approval.** Do not start the
+deployment window before it is done.
 
 Only 20 of these 30 are new on this branch. The first ten
 (`20261103000000`…`20261112000000`) are already on `main` and are
@@ -654,6 +674,118 @@ control.
 
 *Arrives with `20261130000000`.*
 
+### Production is NOT protected by this correction yet
+
+Stated plainly because it is easy to misread the local evidence:
+
+| | |
+|---|---|
+| **Live state, 2026-10-23** | `material_coa_verify(uuid)` exists on production with `EXECUTE` to `authenticated`, and **its only authorisation is company membership.** `20261130000000` is unapplied |
+| **Live exposure** | `material_certificates_of_analysis` holds **0 rows, 0 verified** — the gap has never been exercised, so there is no unauthorised verification to investigate and no data to remediate |
+| **When protection begins** | when `20261130000000` is applied **and** the two tests below pass against `ovxfflilbqaxedzovgmz` |
+
+Until both have happened, no document, report or conversation should
+describe production as protected against unauthorised CoA
+verification. The local suite passing is not that.
+
+### 10a. Post-deployment NEGATIVE test — a member with no quality role
+
+Read-only, and conclusive on its own:
+`material_coa_verify_authority_error()` is `STABLE` and returns the
+refusal reason without writing.
+
+```sql
+--  Pick any active member who holds no operational role, in any
+--  company, and ask whether they may verify.
+WITH candidate AS (
+  SELECT m.company_id, m.user_id
+    FROM public.company_members m
+   WHERE coalesce(m.status::text,'active') = 'active'
+     AND coalesce(array_length(public.app_work_roles(m.company_id, m.user_id), 1), 0) = 0
+   LIMIT 1
+)
+SELECT c.company_id, c.user_id,
+       coalesce(array_to_string(public.app_work_roles(c.company_id,c.user_id), ', '),
+                '(none)')                                           AS roles_held,
+       public.app_section_access(c.company_id,'qc_testing',     c.user_id) AS qc_testing,
+       public.app_section_access(c.company_id,'qa_disposition', c.user_id) AS qa_disposition,
+       public.material_coa_verify_authority_error(c.company_id, c.user_id) AS refusal
+  FROM candidate c;
+```
+
+| | |
+|---|---|
+| **PASS** | `refusal` begins `COA_VERIFY_FORBIDDEN:` and names "QC testing or QA disposition". `roles_held` is `(none)` and both access columns are null or `none` |
+| **FAIL, release blocker** | `refusal` is **null**. A member with no quality role may verify, and the correction is not in force |
+| **Inconclusive** | the query returns no rows — every active member holds a role. Then pick a member whose roles give Act on neither column (a storekeeper or production supervisor) and run the same three expressions for them |
+
+Then confirm the guard is where it has to be, so that a direct write
+meets the same refusal as the RPC:
+
+```sql
+SELECT t.tgname,
+       CASE t.tgenabled WHEN 'D' THEN 'DISABLED' ELSE 'enabled' END AS state
+  FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+ WHERE c.relname = 'material_certificates_of_analysis'
+   AND NOT t.tgisinternal
+ ORDER BY t.tgname;
+```
+
+**PASS:** `trg_material_coa_verification_authority` present and
+**enabled**.
+**FAIL, release blocker:** absent or `DISABLED` — the RPC's guard
+lives in that trigger precisely so `UPDATE … SET verification_status`
+cannot go round it.
+
+### 10b. Post-deployment POSITIVE test — the quality roles still can
+
+A control that refuses everybody is an outage, not a control. **This
+test matters as much as the negative one** and is the reason a blanket
+`REVOKE` was not the fix.
+
+```sql
+--  Every active member who holds Act on either quality column should
+--  be permitted. Expect zero rows: anyone listed here is a quality
+--  role being wrongly refused.
+SELECT co.name AS company, p.full_name,
+       array_to_string(public.app_work_roles(co.id, m.user_id), ', ') AS roles_held,
+       public.app_section_access(co.id,'qc_testing',     m.user_id)   AS qc_testing,
+       public.app_section_access(co.id,'qa_disposition', m.user_id)   AS qa_disposition,
+       public.material_coa_verify_authority_error(co.id, m.user_id)    AS wrongly_refused
+  FROM public.company_members m
+  JOIN public.companies co ON co.id = m.company_id
+  LEFT JOIN public.profiles p ON p.id = m.user_id
+ WHERE coalesce(m.status::text,'active') = 'active'
+   AND (public.app_section_access(co.id,'qc_testing',     m.user_id) = 'act'
+     OR public.app_section_access(co.id,'qa_disposition', m.user_id) = 'act')
+   AND public.material_coa_verify_authority_error(co.id, m.user_id) IS NOT NULL;
+```
+
+| | |
+|---|---|
+| **PASS** | **zero rows.** Everyone with Act on a quality column is permitted |
+| **FAIL** | any row. A QC Analyst, QA Officer or QA Manager is being refused work they are entitled to — a functional regression, not a security finding, and it will be reported as "the CoA check is broken" |
+
+**Expected immediately after deployment: the negative test passes and
+the positive test returns zero rows trivially**, because no
+operational role has been appointed yet, so nobody holds Act on
+anything. Re-run **both** after roles are appointed (§8) — that is the
+first moment the positive test means something.
+
+### 10c. And the duty conflict it must not have weakened
+
+```sql
+SELECT enforced, authority, left(approved_reference, 60) AS reference
+  FROM public.duty_conflicts
+ WHERE scope='material_lot' AND duty_a='coa_verification' AND duty_b='disposition';
+```
+
+**PASS:** `enforced = true`, `authority = approved_by_quality`, with a
+reference. Narrowing *who may verify* must not narrow *what verifying
+costs them*: whoever verifies a lot's certificate is still refused
+that lot's disposition.
+**FAIL:** `enforced = false`, or no row.
+
 ---
 
 ## §11 — Unsigned release attempt
@@ -830,6 +962,8 @@ Not a SQL query — a plan and billing question:
 | | |
 |---|---|
 | **PASS** | either (a) the plan is Pro or above **and** the PITR add-on is enabled with a window covering the deployment; or (b) a `supabase db dump` has been taken, held off-site, **and test-restored into a scratch database** |
+| **Status** | **AWAITING APPROVAL.** The two options are compared, and the restore procedure plus its 16-check verification script are tested, in [`recovery-readiness.md`](recovery-readiness.md). No dump of this project has been taken and no plan change has been made |
+| **Note** | Taking the Option A dump needs a **PostgreSQL 17** `pg_dump`. Demonstrated: a PG16 client refuses outright (`aborting because of server version mismatch; server version: 17.6; pg_dump version: 16.2`), so an operator on a PG16 toolchain cannot back this project up at all |
 | **FAIL — as read on 2026-10-23** | the project is on the free plan. Supabase's documentation is explicit: daily backups cover "Pro, Team, and Enterprise Plan projects", "database backups are **not available for download for Free Plan projects**", and PITR is a paid per-project add-on. **There is no automated backup, no downloadable backup and no PITR for this project.** |
 
 Combined with the fact that **no migration in this repository has a
@@ -839,15 +973,18 @@ down-migration**, the position is:
 > rollback path of any kind.**
 
 Resolve it one of two ways before applying anything — see
-[`migration-verification.md`](migration-verification.md) §6, which
-sets out both options and their costs. A dump is the minimum; it is
-not equivalent to PITR, and **an untested dump is a hope, not a
-backup.**
+[`recovery-readiness.md`](recovery-readiness.md), which compares both
+options on scope, retention, data-loss window and recovery time, and
+records the tested procedure. A dump is the minimum; it is not
+equivalent to PITR, and **an untested dump is a hope, not a backup.**
 
 ### A separate observation from the same pass
 
-Production holds **7 released batches** and **0 finished-product QC
-results**. Those releases were made before the gate in
+Production holds **7 released batch rows** — which are **four**
+distinct batch numbers across three companies, six of them bearing the
+marks of seeded demo data — and **0 finished-product QC results**. The
+read-only report is [`historical-release-review.md`](historical-release-review.md);
+disposition is for the authorised QA process. Those releases were made before the gate in
 `20261107000000` and the signature requirement existed, and
 `requires_signature` is `false` live today.
 
@@ -915,8 +1052,11 @@ Stated so the sign-off is not read as more than it is:
 - It does not make Criateur validated, or compliant with 21 CFR
   Part 11 or any other regulation. It records what a database
   contains.
-- It does not confirm the migrations run on **Postgres 17.6**.
-  Production is 17.6; every local result is from **Postgres 16**.
+- It does not confirm the migrations run on production's **data**.
+  They are confirmed to run on **PostgreSQL 17.6** — the version
+  gap is closed ([`deployment-rehearsal.md`](deployment-rehearsal.md)
+  §2) — but on the test fixtures, on x86_64 rather than aarch64, and
+  against a schema built locally.
 - It does not resolve the open quality decisions. Six remain, one of
   them a temporary exception — §4b, and
   `docs/decision-note-coa-separation.md` §8.
