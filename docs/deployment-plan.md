@@ -23,6 +23,7 @@ any other document disagrees, this one is right.
 
 | Document | Governs | Agreed figures |
 |---|---|---|
+| [`APPROVAL-PACKAGE.md`](APPROVAL-PACKAGE.md) | **the approval decision**: rename diffs, repair preconditions, ledger integrity, abort proof | 5 renames, 5 repairs, fingerprint `ebbd113e…` |
 | **this plan** | sequence, commands, ledger, abort criteria | 31 migrations; ledger 133 → 138 → 169 |
 | [`migration-history-reconciliation.md`](migration-history-reconciliation.md) | the five pairs, effect-by-effect equivalence, the renames and repairs | 5 renames, 5 repairs, 31st migration |
 | [`deployment-manifest.md`](deployment-manifest.md) | per-migration purpose, dependencies, live applied status | 31 rows, all `OUTSTANDING` at 2026-10-23 21:06 UTC |
@@ -179,9 +180,39 @@ supabase migration repair --db-url "$PROD_URL" --status reverted 20260305100001
 supabase migration repair --db-url "$PROD_URL" --status reverted 20260306190001
 ```
 
-That restores the ledger to 133 rows, latest `20261101000000` — the
-exact pre-deployment state — and leaves no false history claim behind.
-Verify with §2's query 0a before standing down.
+**A restored row count does not prove a restored ledger.**
+`migration repair` was tested against a faithful ledger model on
+PostgreSQL 17.6 and two of its behaviours are destructive:
+
+| Case | Effect |
+|---|---|
+| `--status applied` on a version that **already exists** | **overwrites** that row's `statements` with whatever the current file holds |
+| `--status reverted` on a version that **already exists** | **deletes the row**, evidence and all |
+| `--status applied` on a version with **no file** | fails closed, writes nothing |
+
+Every one of the five *original* versions has a file and holds real
+`statements` evidence (20, 2, 5, 12 and 20 statements), so a single
+transposed digit — `…00` for `…02` — is destructive and does **not**
+fail closed.
+
+So the abort is verified by fingerprint, not by counting:
+
+```sql
+SELECT count(*) AS rows,
+       md5(string_agg(version||'|'||coalesce(name,'')||'|'||
+           coalesce(array_length(statements,1)::text,'0'), E'\n' ORDER BY version)) AS fingerprint
+  FROM supabase_migrations.schema_migrations;
+```
+
+**Must return `133` and `ebbd113e5966eaa1e934bba790e9860a`** — the
+pre-deployment ledger exactly. A matching count with a different
+fingerprint is a **failed abort**.
+
+And none of this is attempted without the full ledger capture taken
+first, which is the only recovery for a destroyed row short of PITR.
+The capture command, the per-command preconditions and the integrity
+check are in [`APPROVAL-PACKAGE.md`](APPROVAL-PACKAGE.md) §§2–3, which
+is the operative document for this step.
 
 Then confirm, read-only:
 
