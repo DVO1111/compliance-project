@@ -40,7 +40,7 @@ database's own `now()`.
 | Reading | Value | Verdict |
 |---|---|---|
 | Migrations applied / latest | **133** / **`20261101000000`** | PASS — matches the expected boundary |
-| Applied with version `> 20261101000000` | **0** | PASS — all 30 outstanding |
+| Applied with version `> 20261101000000` | **0** | PASS — all 31 outstanding |
 | Public tables | **258** | PASS |
 | Companies / members / batches | **30** / **21** / **18** | PASS |
 | `company_role` enum | `owner, admin, legal, marketing, viewer` | PASS — unchanged |
@@ -55,7 +55,7 @@ database's own `now()`.
 | `material_coa_verify` EXECUTE to `anon` | **false** | PASS |
 | `operational_role_assignments`, `product_specifications` | absent | Expected — they arrive with the deployment |
 | Organization plan | **`free`** (`tier_free`) | **FAIL — see §12.** No PITR, no downloadable backup. **Decision awaiting approval** |
-| Production Postgres | **17.6** | **Now verified.** The 30 migrations and all 2668 assertions pass on PostgreSQL 17.6 — [`deployment-rehearsal.md`](deployment-rehearsal.md) §2 |
+| Production Postgres | **17.6** | **Now verified.** The 31 migrations and the full suite pass on PostgreSQL 17.6 — [`deployment-rehearsal.md`](deployment-rehearsal.md) §2 |
 
 Of those two, the **Postgres version gap is closed** and the **free
 plan remains open**: see [`recovery-readiness.md`](recovery-readiness.md),
@@ -85,7 +85,7 @@ starting it.
 | § | Check | PASS | FAIL = do not release |
 |---|---|---|---|
 | 0 | Identity and position | it is Criateur: 8 of 8 core tables | a core table missing, or a project reference other than `ovxfflilbqaxedzovgmz` |
-| 1 | Migration position | 30 outstanding before, 30 applied after | any applied before, or any outstanding after |
+| 1 | Migration position | 31 outstanding before, 31 applied after (ledger 133 → 138 → 169, incl. 5 repairs) | any applied before, or any outstanding after |
 | 2 | **Role assignments** | every live grant of a GMP-critical role carries a signature **or** a recorded explanation | an unexplained `provenance = 'service'` or `rpc`-with-no-signature grant |
 | 3 | **Stranded work** | empty immediately after deployment | a row with `still_stranded` and no reassignment or explanation |
 | 4 | Outstanding duty decisions | exactly 1 duty row open (sampling); 6 enforced, 1 not | any other count, in either direction |
@@ -135,7 +135,7 @@ WITH expected(version) AS (VALUES
   ('20261119000000'),('20261120000000'),('20261121000000'),('20261122000000'),
   ('20261123000000'),('20261124000000'),('20261125000000'),('20261126000000'),
   ('20261127000000'),('20261128000000'),('20261129000000'),('20261130000000'),
-  ('20261131000000'),('20261201000000')
+  ('20261131000000'),('20261201000000'),('20261202000000')
 )
 SELECT e.version,
        CASE WHEN m.version IS NULL THEN 'OUTSTANDING' ELSE 'applied' END AS state
@@ -146,8 +146,8 @@ SELECT e.version,
 
 | | |
 |---|---|
-| **PASS, before deployment** | all **30** rows read `OUTSTANDING`. **Verified live 2026-10-23 21:06 UTC:** 0 migrations applied above the boundary |
-| **PASS, after deployment** | all **30** read `applied`, and §§2–12 re-run |
+| **PASS, before deployment** | all **31** rows read `OUTSTANDING`. **Verified live 2026-10-23 21:06 UTC:** 0 migrations applied above the boundary |
+| **PASS, after deployment** | all **31** read `applied`, and §§2–12 re-run |
 | **FAIL** | any row `applied` in the before pass — the live position is not `20261101000000`, so `docs/live-readiness.md` and `docs/migration-verification.md` §1 are both computed from a stale boundary and must be recomputed before going further |
 | **FAIL** | any row `OUTSTANDING` in the after pass — the deployment stopped partway. `docs/migration-verification.md` §6 covers recovery; the boundary is a file, not a half-built table |
 
@@ -171,7 +171,7 @@ The fix is a repository change (rename five files) plus five
 the production ledger and need approval.** Do not start the
 deployment window before it is done.
 
-Only 20 of these 30 are new on this branch. The first ten
+Only 21 of these 31 are new on this branch. The first ten
 (`20261103000000`…`20261112000000`) are already on `main` and are
 **also** unapplied live, and most of what the branch builds on arrives
 in them — so the branch cannot be deployed without them. See
@@ -1033,7 +1033,7 @@ what the deployment changed.
 | Backup **test-restored** | ☐ yes ☐ no — if no, do not proceed |
 | Deployment started (UTC) | …………………………………………… |
 | Deployment finished (UTC) | …………………………………………… |
-| Migrations applied, before → after | ……… → ……… (expect 133 → 163) |
+| Migrations applied, before → after | ……… → ……… (expect **133 → 138** after the 5 ledger repairs, then **→ 169** after the push) |
 | `20261201000000` applied without raising | ☐ |
 | All 12 sections run and recorded | ☐ |
 | Release blockers outstanding | …………………………………………… |

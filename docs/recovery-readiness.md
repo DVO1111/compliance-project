@@ -14,7 +14,7 @@ Written 2026-10-23/24.
 ## 1. Why this document exists
 
 No migration in this repository has a down-migration, and the
-deployment is 30 migrations. The only way back is a snapshot taken
+deployment is 31 migrations. The only way back is a snapshot taken
 beforehand.
 
 Confirmed from the Supabase Management API, 2026-10-23:

@@ -1,8 +1,16 @@
 # Deployment rehearsal on PostgreSQL 17
 
-The 30 migrations run against a PostgreSQL 17.6 database with the real
+The migrations run against a PostgreSQL 17.6 database with the real
 Supabase CLI, from production's ledger position, in production's
 order.
+
+**This document records the rehearsal that found the duplicate-version
+blocker, when the sequence was 30 migrations.** The sequence is now
+**31** — `20261202000000` was added to close the gaps that finding
+exposed — and it was re-rehearsed the same way with the same result:
+[`migration-history-reconciliation.md`](migration-history-reconciliation.md)
+§5. [`deployment-plan.md`](deployment-plan.md) is authoritative for
+counts, order and ledger states.
 
 **It found a blocker that would have stopped the deployment on first
 contact with production, and it is not in the migrations.** §3.
@@ -65,8 +73,8 @@ out.
 | Applied | **203** |
 | Failed | **15** |
 | Failed set | **exactly** `scripts/ci/expected-migration-failures.txt` |
-| SQL assertions | **2668** |
-| Passed | **2668** |
+| SQL assertions | **2668** at the time of this run; **2687** on the current baseline |
+| Passed | all |
 | **Failed** | **0** |
 | Runner exit code | **0** |
 
@@ -85,7 +93,7 @@ the version: missing `pg_net` and `pg_cron` extensions, no
 `storage.buckets` schema, and seed files that need a company row.
 They fail the same way on 16.
 
-**Conclusion: the 30 migrations and the whole regression suite are
+**Conclusion: the migration set and the whole regression suite are
 compatible with PostgreSQL 17.6.** This closes the second of the two
 blockers in the previous review.
 
@@ -167,8 +175,8 @@ exist on the target. Verified on production, read-only:
 `retention_policies` and `ai_assets`. Their SQL has been run; only
 their version rows are missing.
 
-**So both documented paths fail, and the 30 migrations cannot
-currently be deployed with `supabase db push` at all.** This is the
+**So both documented paths fail, and the migrations cannot be deployed
+with `supabase db push` at all without the remediation below.** This is the
 finding that justified the rehearsal.
 
 `supabase migration repair --status applied <version>` does **not**
@@ -273,7 +281,7 @@ move.
   test fixtures rather than production's 30 companies and 54 batches.
 - **The starting schema was approximate.** The ledger position was
   exact; the schema was built locally, so the 15 environmentally
-  failing migrations left their objects absent. None of the 30 depends
+  failing migrations left their objects absent. None of the set depends
   on them — the suite passing proves that — but production's schema is
   not identical to the rehearsal's.
 - **Architecture differs** (x86_64 versus aarch64).
@@ -291,10 +299,10 @@ before everything else technical:
 > deployment window.** Rename the five files in the repository, push
 > that change, and run `supabase migration repair --status applied`
 > for the five new versions against production. Only then will
-> `supabase db push` see exactly the 30.
+> `supabase db push` see exactly the 31.
 
 That is a repository change plus five ledger writes, and both need
-approval. The alternative — applying the 30 with `psql` and inserting
+approval. The alternative — applying the 31 with `psql` and inserting
 the ledger rows by hand — avoids renaming anything but abandons the
 documented tool and the ordering guarantees it enforces, so it is the
 worse option and is recorded only for completeness.

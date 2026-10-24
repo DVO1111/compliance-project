@@ -79,6 +79,25 @@ BEGIN
     coalesce((SELECT indexdef FROM pg_indexes
                WHERE schemaname='public' AND indexname='idx_legal_hold_items_unique'),'MISSING'));
 
+  --  A3 AND A4 PASS LOCALLY FOR A DIFFERENT REASON THAN THEY WILL ON
+  --  PRODUCTION, and that is worth knowing before trusting them.
+  --
+  --  20260306190000_retention_legal_hold.sql is NOT in the local
+  --  baseline failure set, so it runs here and creates these four
+  --  indexes itself — which makes 20261202000000's
+  --  CREATE INDEX IF NOT EXISTS a no-op locally. On production the
+  --  file never ran and the indexes are absent, so there the forward
+  --  migration is what creates them.
+  --
+  --  That production path was proven separately, by dropping all four
+  --  in an isolated PostgreSQL 17.6 database and re-running the
+  --  migration: 0 indexes before, 4 after, the unique one UNIQUE, and
+  --  idempotent on a second run. See
+  --  docs/migration-history-reconciliation.md §5.
+  --
+  --  These two assertions therefore guard against REGRESSION — the
+  --  indexes disappearing — not against the forward migration failing
+  --  to create them.
   PERFORM _mrk('A','A4 the three remaining legal-hold indexes exist',
     (SELECT count(*) FROM pg_indexes
       WHERE schemaname='public'
@@ -228,9 +247,26 @@ BEGIN
              WHERE schemaname='public' AND tablename='migration_reconciliations'
                AND cmd = 'SELECT'));
 
-  PERFORM _mrk('C','C3 and row level security is enabled and forced-safe',
-    (SELECT relrowsecurity FROM pg_class
-      WHERE oid = 'public.migration_reconciliations'::regclass));
+  --  ENABLE *and* FORCE, so the read policy applies to the owner too.
+  --  policy_decisions sets both; the five older rule tables set only
+  --  ENABLE, which is pre-existing and deliberately not changed.
+  PERFORM _mrk('C','C3 row level security is enabled AND forced',
+    (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class
+      WHERE oid = 'public.migration_reconciliations'::regclass),
+    (SELECT format('enabled=%s forced=%s', relrowsecurity, relforcerowsecurity)
+       FROM pg_class WHERE oid = 'public.migration_reconciliations'::regclass));
+
+  --  `anon` keeps a SELECT grant, as on every other rule table — RLS
+  --  is what protects the rows, and the read policy is TO
+  --  authenticated, so anon sees none. Asserted so that nobody
+  --  "fixes" the grant and believes they have changed the exposure,
+  --  and so that a policy widened to anon would fail here.
+  PERFORM _mrk('C','C4 the read policy admits authenticated only, not anon',
+    NOT EXISTS (SELECT 1 FROM pg_policies
+                 WHERE schemaname='public' AND tablename='migration_reconciliations'
+                   AND 'anon' = ANY(roles)),
+    (SELECT array_to_string(roles,'+') FROM pg_policies
+      WHERE schemaname='public' AND tablename='migration_reconciliations'));
 END
 $c$;
 

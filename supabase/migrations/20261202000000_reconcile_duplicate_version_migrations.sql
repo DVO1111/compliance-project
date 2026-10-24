@@ -170,7 +170,19 @@ CREATE TABLE IF NOT EXISTS public.migration_reconciliations (
 COMMENT ON TABLE public.migration_reconciliations IS
   'Why five migration files were marked applied in the ledger without being executed. One row per file, with the evidence that its effects were already present and a note of any intended effect deliberately NOT reconciled. Written by 20261202000000; see docs/migration-history-reconciliation.md.';
 
+--  ENABLE *and* FORCE, matching policy_decisions (20261131000000), the
+--  most recently added rule table. FORCE makes the read policy apply
+--  to the table owner too, so a SECURITY DEFINER function owned by
+--  postgres cannot read round it by accident.
+--
+--  The five earlier rule tables (duty_conflicts, duty_definitions,
+--  gmp_critical_roles, signed_quality_actions, lifecycle_entity_sections)
+--  have ENABLE without FORCE. That asymmetry is pre-existing and is
+--  NOT changed here: altering RLS on tables the guards already read is
+--  a behaviour change, not a reconciliation. Recorded rather than
+--  tidied.
 ALTER TABLE public.migration_reconciliations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.migration_reconciliations FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS migration_reconciliations_read ON public.migration_reconciliations;
 CREATE POLICY migration_reconciliations_read ON public.migration_reconciliations
   FOR SELECT TO authenticated USING (true);

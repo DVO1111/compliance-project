@@ -15,6 +15,30 @@ not run and then explained.
 | Rehearsed on | PostgreSQL 17.6, Supabase CLI 2.122.0, production's ledger position |
 | Expected duration | push itself ~2 s; the window is dominated by backup and verification |
 
+## 0. The package, and which document governs what
+
+**This document is authoritative** for the migration count, the
+filenames, the order, the ledger states and the postconditions. Where
+any other document disagrees, this one is right.
+
+| Document | Governs | Agreed figures |
+|---|---|---|
+| **this plan** | sequence, commands, ledger, abort criteria | 31 migrations; ledger 133 → 138 → 169 |
+| [`migration-history-reconciliation.md`](migration-history-reconciliation.md) | the five pairs, effect-by-effect equivalence, the renames and repairs | 5 renames, 5 repairs, 31st migration |
+| [`deployment-manifest.md`](deployment-manifest.md) | per-migration purpose, dependencies, live applied status | 31 rows, all `OUTSTANDING` at 2026-10-23 21:06 UTC |
+| [`live-verification-checklist.md`](live-verification-checklist.md) | the read-only before/after checks and their pass/fail | 31 versions; before-pass partially run, after-pass NOT RUN |
+| [`recovery-readiness.md`](recovery-readiness.md) | Option A vs B, tools, operator evidence | 31 migrations, no down-migrations, **neither option ready** |
+| [`historical-release-review.md`](historical-release-review.md) | the seven released rows, QA packages | read-only; **no engineering action** |
+| [`migration-verification.md`](migration-verification.md) | dependency chain, irreversible steps, rollback limits | 31 migrations, 21 new on this branch |
+
+Two things are deliberately **outside** this plan and must not be
+folded into it:
+
+- **The historical-release review** is a QA matter. No step here
+  touches those seven rows.
+- **The open quality decisions** — six, one of them temporary — are
+  site-procedure questions. No step here resolves one.
+
 ---
 
 ## 1. Preconditions — all must hold
@@ -26,7 +50,7 @@ not run and then explained.
 | P3 | **Five files renamed** and pushed to the branch | `ls supabase/migrations` shows no duplicate 14-digit prefixes | ❌ awaiting approval |
 | P4 | **Five ledger repairs** applied | §3 | ❌ awaiting approval |
 | P5 | Ledger at `20261101000000`, 133 rows | §2 | ✅ at 21:06 UTC 2026-10-23 |
-| P6 | Full suite green on PG17.6 | `scripts/ci/run-sql-tests.sh` | ✅ 2686/0 |
+| P6 | Full suite green on PG17.6 | `scripts/ci/run-sql-tests.sh` | ✅ **2687 assertions, 0 failed** |
 | P7 | Branch reviewed and approved for deployment | — | ❌ awaiting approval |
 | P8 | A maintenance window; nobody mid-batch | §2 last query | — |
 
@@ -95,6 +119,70 @@ supabase migration repair --db-url "$PROD_URL" --status applied 20260305100001
 supabase migration repair --db-url "$PROD_URL" --status applied 20260306190001
 ```
 
+### 3a. Why all five renames remain necessary
+
+The forward migration `20261202000000` does **not** reduce the rename
+count. The renames exist to break a **version collision**, and
+`20261202000000` changes no file's version string. Each of the five
+File Bs is stranded for the same reason after it as before.
+
+**All five renames stand.**
+
+### 3b. Why all five repairs remain necessary
+
+Without a ledger row for the new version, `db push` would not skip the
+renamed file — it would **execute** it. For every one of the five that
+is wrong, and for three of them it would fail outright:
+
+| File | What executing it would do |
+|---|---|
+| `20260226200002_team_chat` | **FAIL** — `CREATE INDEX idx_chat_channels_company` has no `IF NOT EXISTS` and the index exists. Also strips `SET search_path` from `ensure_default_chat_channels` |
+| `20260227100001_fix_dash_rpcs` | **Regress** `get_decisions_summary` to a body superseded by `20260305200000`, and strip `SET search_path` from all four functions |
+| `20260301000001_update_activity_feed_limit` | **Strip** `SET search_path` from `get_company_activity_feed` |
+| `20260305100001_policy_attestation_enhancements` | **FAIL** — two `CREATE POLICY` statements reference `policy_acknowledgements.company_id`, which does not exist |
+| `20260306190001_retention_legal_hold` | **FAIL** — its four `CREATE INDEX` statements have no `IF NOT EXISTS` and `20261202000000` has just created them. Its six `CREATE POLICY` names differ from the live ones, so if it did run it would **add six more policies** — an unintended permission change |
+
+**All five repairs stand.** The forward migration does not change
+*how many* are needed; it changes *whether two of them are true*.
+
+### 3c. What `20261202000000` changes about the repairs
+
+| File | Repair justified by | Before `20261202000000` | After |
+|---|---|---|---|
+| `20260226200002` | effects already present | ✅ true | ✅ true |
+| `20260227100001` | effects superseded | ✅ true | ✅ true |
+| `20260301000001` | effects already present | ✅ true | ✅ true |
+| `20260305100001` | effects completed by `20261202000000` | ❌ **false** — the uniqueness constraint was absent | ✅ true |
+| `20260306190001` | effects completed by `20261202000000` | ❌ **false** — all four indexes absent | ✅ true |
+
+Three of the five repairs are honest on their own. **Two are honest
+only because `20261202000000` runs in the same deployment**, and
+`public.migration_reconciliations` records exactly that, per file,
+with its evidence — so the ledger's claim is never left unexplained.
+
+### 3d. The ordering window, and how it is closed
+
+The repairs must precede the push, or `db push` sees 36 outstanding
+instead of 31. So between step 1 and step 2 completing, the ledger
+asserts `20260305100001` and `20260306190001` applied while their
+effects are still absent.
+
+**That window is minutes, inside one maintenance operation, and it
+must not be left open.** If step 2 fails for any reason, revert the
+five repairs before doing anything else:
+
+```bash
+supabase migration repair --db-url "$PROD_URL" --status reverted 20260226200002
+supabase migration repair --db-url "$PROD_URL" --status reverted 20260227100001
+supabase migration repair --db-url "$PROD_URL" --status reverted 20260301000001
+supabase migration repair --db-url "$PROD_URL" --status reverted 20260305100001
+supabase migration repair --db-url "$PROD_URL" --status reverted 20260306190001
+```
+
+That restores the ledger to 133 rows, latest `20261101000000` — the
+exact pre-deployment state — and leaves no false history claim behind.
+Verify with §2's query 0a before standing down.
+
 Then confirm, read-only:
 
 ```sql
@@ -133,9 +221,19 @@ filename order. **Ledger 138 → 169 rows, latest `20261202000000`.**
 | `POLICY_ACK_DUPLICATES_EXIST` / `LEGAL_HOLD_ITEM_DUPLICATES_EXIST` | data violates a constraint M4/M5 intended. Stop; this is step 0c's check firing late |
 | any other `DbPushApplyError` | stop at the named file. Earlier files are committed; the boundary is a file, not a half-built table |
 
-**On abort:** do not re-run with different flags. Record the ledger
-position, read the error, and decide. Recovery is §1 P1 and it is
-hours, not minutes.
+**On abort:** do not re-run with different flags.
+
+1. **Revert the five repairs** — §3d. This is not optional: leaving
+   them in place leaves the ledger claiming two migrations applied
+   whose effects are absent.
+2. Record the ledger position and the exact error.
+3. Decide. Recovery is §1 P1 and it is hours, not minutes.
+
+A partial push leaves a **clean boundary at a file**: migrations
+before the failure are applied and committed, the failing one is not
+recorded. Note which file, because resuming means pushing from that
+file onward once the cause is fixed — and the five repairs must be
+re-applied first if they were reverted.
 
 ---
 
@@ -269,6 +367,57 @@ working.
   batches intended for release.
 
 **Do not** switch a gate off to make a batch releasable.
+
+---
+
+## 8b. Known defects carried into production
+
+These deploy **as they are**. None is fixed by this package and none
+is pretended away.
+
+### The M4 schema defect
+
+`20260305100000_policy_attestation_enhancements.sql` declares three
+RLS policies on `policy_acknowledgements`, two of which reference a
+**`company_id` column that does not exist** on that table — not on
+production, not locally. Its own comment admits the assumption
+(*"Assuming policy_acknowledgements already has company_id based on
+previous sprint context"*). It was wrong.
+
+Consequences, stated plainly:
+
+| | |
+|---|---|
+| **Its three policies were never installed.** The live table carries two, `users_read_own_acks` and `users_insert_own_acks`, created elsewhere | The register says so; nothing in this package claims otherwise |
+| The file **cannot be executed** against production in its current form | Which is why the repair in §3 is the only route, not a convenience |
+| The third intended policy — compliance staff reading other people's attestations — **does not exist and is not created here** | It would need a `company_id` column plus a backfill, and it grants a read over other people's records. That is a decision, not a repair |
+| `requires_ack` defaults to `false`, where the file intended `true` | Left as production has it. Flipping it would make every future policy version require acknowledgement |
+| `published_by` references `profiles(id) ON DELETE SET NULL`, where the file said `auth.users(id)` | Left as production has it |
+| `due_days` is `NOT NULL` where the file allowed null | Left as production has it; live is stricter |
+
+**What `20261202000000` does supply** is the one missing *integrity*
+effect: `UNIQUE (policy_id, version_id, user_id)`, which stops the
+same person attesting to the same policy version twice. Constraints
+and indexes only — no policy, no default, no foreign key.
+
+### Also carried forward
+
+- **Five rule tables have `ENABLE` without `FORCE` row-level
+  security** (`duty_conflicts`, `duty_definitions`,
+  `gmp_critical_roles`, `signed_quality_actions`,
+  `lifecycle_entity_sections`). `policy_decisions` and
+  `migration_reconciliations` set both. Changing RLS on tables the
+  guards already read is a behaviour change, not a reconciliation.
+- **`anon` holds `SELECT` on every rule table**, from the project's
+  default privileges. RLS is what protects the rows — every read
+  policy is `TO authenticated`, so `anon` sees none. Unchanged, and
+  asserted so a widened policy would fail a test.
+- **M5's policy predicates were not compared clause by clause.** Six
+  policies, two per table, names differing from the file's, intent
+  apparently equivalent. Recorded as unverified.
+- **Four files in `supabase/migrations/` are silently skipped** by the
+  CLI for having no version prefix, and have never been applied
+  anywhere.
 
 ---
 

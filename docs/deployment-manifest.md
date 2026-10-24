@@ -23,7 +23,7 @@ project's own migration ledger:
 | Writes performed | **none.** Every statement was a `SELECT` |
 
 Because the count of applied migrations above the boundary is **zero**,
-every one of the 30 rows below reads `OUTSTANDING`, and that is a
+every one of the 31 rows below reads `OUTSTANDING`, and that is a
 measured result rather than an assumption.
 
 **Re-read it immediately before deploying.** A ledger position is true
@@ -33,17 +33,20 @@ the same queries.
 
 ---
 
-## Scope: 30 migrations, not 18 and not 28
+## Scope: 31 migrations
 
-Two earlier figures in this repository were wrong and are corrected
-here. The count rose as work continued in the same session and the
-documents were written before the last files existed.
+Earlier figures in this repository said 18, 28 and 30. All were
+correct when written and all are superseded: the count rose as work
+continued. **31 is the final number**, and
+[`deployment-plan.md`](deployment-plan.md) is the authoritative source
+for the sequence, the ledger states and the postconditions. If any
+document disagrees with it, the plan is right.
 
 | | Files | Range |
 |---|---|---|
 | Already on `main`, **not** live | **10** | `20261103000000` … `20261112000000` |
-| New on this branch | **20** | `20261113000000` … `20261201000000` |
-| **Total to apply** | **30** | `20261103000000` … `20261201000000` |
+| New on this branch | **21** | `20261113000000` … `20261202000000` |
+| **Total to apply** | **31** | `20261103000000` … `20261202000000` |
 
 The ten already on `main` are not optional. §2 of
 [`migration-verification.md`](migration-verification.md) shows that
@@ -66,7 +69,7 @@ supabase migration list --db-url <local scratch>
 
 Findings:
 
-1. **The order is filename order**, and all 30 appear last, in the
+1. **The order is filename order**, and all 31 appear last, in the
    sequence tabulated below.
 2. **Four files are silently skipped** by the tool, in every
    environment, because their names carry no version prefix:
@@ -181,6 +184,7 @@ before it".
 | 28 | `20261130000000` | Verifying an incoming certificate needs a quality role | 17, 27 | **Closes the release blocker.** Reserves verification to PM-03's existing `qc_testing`/`qa_disposition` Act holders. No PM-03 change |
 | 29 | `20261131000000` | The policy decisions, in one place, with their kind of open | 23, 25, 26 | `policy_decisions` register; Option B recorded `temporary` |
 | 30 | `20261201000000` | The batch-release signature requirement, asserted rather than hoped | 5 | **Refuses to apply unless 5's UPDATE actually landed.** Adds `batch_release_signature_postcondition()` |
+| 31 | `20261202000000` | The effects five stranded migrations never delivered | — | Adds the absent `policy_acknowledgements` uniqueness constraint and the four absent legal-hold indexes; records why five files are marked applied without execution. **Makes the ledger repairs honest** — [`migration-history-reconciliation.md`](migration-history-reconciliation.md) |
 
 ---
 
@@ -243,7 +247,7 @@ forward-looking.
 
 **Production runs Postgres 17.6. The local verification ran on
 Postgres 16.** Every "applies cleanly" result in this repository is a
-PG16 result. Nothing in the 30 uses version-specific syntax as far as
+PG16 result. Nothing in the 31 uses version-specific syntax as far as
 review found, and PG17 is backward-compatible for everything they do,
 but **that is an argument, not a test.** The honest statement is that
 these migrations have been proven to install on PG16 and have never

@@ -42,7 +42,7 @@ been run.
 
 ## 1. What is actually being deployed
 
-**Not 18 migrations, and not 28. Thirty.**
+**Not 18, not 28, not 30. Thirty-one.**
 
 Both earlier figures in this document were wrong: the count rose as
 work continued and this section was written before the last two files
@@ -52,8 +52,8 @@ existed. Corrected, and cross-checked against the live ledger in
 | | Files | Range | On `main`? |
 |---|---|---|---|
 | Already on `main`, not yet live | **10** | `20261103000000` … `20261112000000` | yes |
-| New on this branch | **20** | `20261113000000` … `20261201000000` | no |
-| **Total to apply** | **30** | `20261103000000` … `20261201000000` | — |
+| New on this branch | **21** | `20261113000000` … `20261202000000` | no |
+| **Total to apply** | **31** | `20261103000000` … `20261202000000` | — |
 
 The per-migration manifest, with each one's live applied status, is in
 [`deployment-manifest.md`](deployment-manifest.md). That document
@@ -131,7 +131,7 @@ listed in `scripts/ci/expected-migration-failures.txt` with reasons.
 
 ## 3. Preconditions against the live schema
 
-What has to be true of `ovxfflilbqaxedzovgmz` for the 30 to apply.
+What has to be true of `ovxfflilbqaxedzovgmz` for the 31 to apply.
 Every row was **predicted** here and has since been **measured** live —
 see [`deployment-manifest.md`](deployment-manifest.md), which carries
 the readings and the timestamp.
@@ -241,7 +241,7 @@ state and whether any is mid-release is check 7 of the checklist.
 
 ## 6. Rollback, realistically
 
-**There is no down-migration, for any of the 30.** The repository has
+**There is no down-migration, for any of the 31.** The repository has
 never had them and this branch did not add them. Saying so plainly
 matters more than a plan that would not survive contact.
 
@@ -290,7 +290,7 @@ One of these two, and it is a decision for the project owner:
 | **A — take a manual dump first** | `supabase db dump --db-url … -f pre-deploy-YYYYMMDD.sql`, held off-site. A logical snapshot to rebuild from. Restoring means creating a database and replaying it: **hours, not minutes**, and anything written after the dump is lost | free; needs doing by hand, and verifying the dump restores |
 | **B — upgrade to Pro and enable PITR** | daily backups, 7-day retention, and PITR to second-level granularity | a paid plan plus a per-project add-on |
 
-**Option A is the minimum.** Deploying 30 migrations to a regulated
+**Option A is the minimum.** Deploying 31 migrations to a regulated
 system with no recoverable snapshot is not a risk this review can
 sign off, and it is not a software problem — it is a plan decision.
 
@@ -336,7 +336,7 @@ backup.**
 ### Partial application
 
 The migrations run in one psql session per file, not one transaction
-across all 30. If number *n* fails, numbers 1…*n*−1 are applied and
+across all 31. If number *n* fails, numbers 1…*n*−1 are applied and
 committed. Most of this branch's migrations are individually
 transactional (each is a single file psql runs top to bottom, with
 `DO` blocks that raise on their own assertions), so a failure leaves a
@@ -365,7 +365,7 @@ signal that the file already ran.
 3. Take the pre-deployment snapshot
    (`scripts/ci/live-readiness-report.sql`, read-only) and record it
    with a date.
-4. Apply `20261103000000` … `20261201000000` **in filename order**, in
+4. Apply `20261103000000` … `20261202000000` **in filename order**, in
    one pass, stopping at the first failure. `20261201000000` is last
    deliberately: it refuses to complete unless `20261107000000`'s
    signature `UPDATE` actually landed.

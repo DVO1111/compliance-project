@@ -21,7 +21,7 @@ compliance or validation.
 
 | | |
 |---|---|
-| SQL assertions | **2629, 0 failed** |
+| SQL assertions | **2687, 0 failed** on PostgreSQL **17.6** — production's version (2629 when this report was first written; 2686 was the last figure verified on 16.15) |
 | Suites | 52 |
 | Branch migrations applying cleanly on a bare build | **17 of 17**, in filename order |
 | Database | dropped and rebuilt from the migration files, every run |
@@ -306,7 +306,7 @@ Checked empirically, not asserted.
 | Claim | How it was checked | Result |
 |---|---|---|
 | All branch migrations apply in filename order | A database created from nothing, bootstrap applied, then every migration in `supabase/migrations` in order | **17 of 17 applied.** The 15 that fail are dated Feb–Jul 2026 and predate this branch — the runner's pinned baseline |
-| The suite runs from that schema | `scripts/ci/run-sql-tests.sh` drops and rebuilds every run | 2629 assertions, 0 failed |
+| The suite runs from that schema | `scripts/ci/run-sql-tests.sh` drops and rebuilds every run | 2687 assertions, 0 failed |
 | `company_role` enum untouched | `grep` for `ALTER TYPE` and `company_role` across the branch's migrations | Four mention it; **all four are comments or read-only predicates**. No `ALTER TYPE` anywhere |
 | `company_members` untouched | `grep` for `ALTER TABLE public.company_members` | **None** |
 | Audit immutability restored | Count the three triggers on a migrations-only build | **3 present** |
