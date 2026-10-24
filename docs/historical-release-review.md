@@ -173,3 +173,143 @@ unique constraint spans `(company_id, batch_number)` for released
 records. Whether one should exist is a separate design question,
 **recorded here, not acted on**, since adding a constraint over
 existing data is a change to historical records.
+
+---
+
+## 8. QA review package
+
+For the authorised QA process. **Nothing below is a determination.**
+Each item states what the record shows, what is absent, and the
+question to answer. The read-only queries are given so the reviewer
+can reproduce every figure rather than take this document's word.
+
+### Package A — `FT-9767`, "mANGO", Sam and Co Ltd
+
+| Field | Value |
+|---|---|
+| Batch number | `FT-9767` |
+| Company | Sam and Co Ltd |
+| Manufacturing date | 2026-07-23 |
+| Released at | 2026-07-23 14:52:45 UTC |
+| Released by | **Samuel Balogun** |
+| Created by | populated (same person) |
+| Release notes | **absent** |
+| `qc_completed_at` | **null** |
+| `execution_closed_at` | **null** |
+| Finished-product QC results | **0** |
+| Electronic signatures on the batch | **0** |
+| Audit entries | **3, all hashed**, sequence 10–12 |
+| Elapsed, creation → release | **1 min 31 s** |
+
+Audit trail, complete and intact:
+
+| Seq | UTC | Action | Hashed | Actor |
+|---|---|---|---|---|
+| 10 | 14:51:15 | `create_batch_record` | yes | Samuel Balogun |
+| 11 | 14:51:26 | `batch_status_qc_in_progress` | yes | Samuel Balogun |
+| 12 | 14:52:46 | `batch_status_released` | yes | Samuel Balogun |
+
+**Questions for QA**
+
+1. Was `FT-9767` a genuine manufacturing batch, or a test record
+   created while evaluating the system? The batch-number format
+   (`FT-` + 4 digits) differs from the other rows, and the product
+   name `mANGO` has irregular capitalisation.
+2. If genuine: the record shows no finished-product QC results and no
+   signature. What, outside the system, evidenced the release
+   decision?
+3. One person created, progressed and released it. Was any
+   independent check performed outside the system?
+4. Should the record be annotated to say which of 1–3 applies? **The
+   software cannot annotate it** — after deployment
+   `batch_records.status` is derived and `BATCH_STATUS_READ_ONLY`
+   refuses direct writes — so any annotation belongs in the quality
+   system.
+
+**Reproduce:**
+
+```sql
+SELECT b.batch_number, b.product_name, b.manufacturing_date, b.released_at,
+       p.full_name AS released_by, b.release_notes,
+       b.qc_completed_at, b.execution_closed_at,
+       (SELECT count(*) FROM public.batch_qc_results q WHERE q.batch_id=b.id) AS qc_results,
+       (SELECT count(*) FROM public.electronic_signatures s WHERE s.entity_id=b.id) AS signatures
+  FROM public.batch_records b
+  LEFT JOIN public.profiles p ON p.id=b.released_by
+ WHERE b.batch_number='FT-9767';
+
+SELECT a.sequence_number, a.created_at, a.action,
+       a.integrity_hash IS NOT NULL AS hashed, pr.full_name AS actor
+  FROM public.audit_logs a
+  LEFT JOIN public.profiles pr ON pr.id=a.user_id
+ WHERE a.entity_id=(SELECT id FROM public.batch_records WHERE batch_number='FT-9767')
+ ORDER BY a.sequence_number;
+```
+
+### Package B — the six `BT-2024-*` rows
+
+| | |
+|---|---|
+| Rows | 6 |
+| Batch numbers | `BT-2024-0041`, `BT-2024-0042`, `BT-2024-0043` — **each twice** |
+| Companies | HealthBridge HMO and Muy Ent — **one copy of each batch in each** |
+| Products | NASCO Cornflakes 500g, NASCO Biscuits Original 200g, NASCO Noodles Chicken 70g |
+| `created_by` | **null on all six** |
+| `created_at` | three at `2026-06-04 14:52:00.290752+00`, three at `2026-06-04 17:58:07.228323+00` — identical to the microsecond within each cluster |
+| `released_at` | April–May 2026, offset by the same 3 h 06 m between clusters |
+| Release notes | present on all six |
+| QC results / signatures / audit entries | **0 / 0 / 0** |
+
+**The inference, offered for confirmation or rejection:** these are
+demo-seed records. The five supporting observations are in §4. The
+product names match
+`20260603600000_seed_nasco_demo_data.sql`, which is **not** in the
+production ledger — so if that is the source, it was run outside the
+migration tooling.
+
+**Questions for QA**
+
+1. Confirm or reject the seeded-data reading. One answer settles all
+   six.
+2. If seeded: should demo data exist on a production project at all,
+   and in companies named *HealthBridge HMO* and *Muy Ent* —
+   neither of which is the demo company the seed names? That is a
+   data-hygiene question, not a release question.
+3. If **not** seeded: six releases with no creator, no QC results, no
+   signature and no audit entry need a different conversation, and
+   this package is the start of it.
+4. Either way: is the absence of audit entries itself reportable? The
+   application emits one on every write path, so six batch records
+   with none did not arrive through the application.
+
+**Reproduce:**
+
+```sql
+SELECT b.batch_number, c.name AS company, b.created_by, b.created_at,
+       b.released_at, b.released_by,
+       (SELECT count(*) FROM public.audit_logs a WHERE a.entity_id=b.id) AS audit_entries
+  FROM public.batch_records b
+  LEFT JOIN public.companies c ON c.id=b.company_id
+ WHERE b.batch_number LIKE 'BT-2024-%' AND b.status='released'
+ ORDER BY b.batch_number, b.created_at;
+```
+
+### What QA is not being asked to do
+
+- **Not** to make these records compliant. They cannot be
+  retrospectively signed, and attempting it is the forgery the
+  signature control exists to prevent.
+- **Not** to delete or amend them. After deployment the application
+  cannot, and doing it at the database level would destroy the audit
+  evidence in Package A.
+- **Not** to decide anything before §4's reading is settled. Treating
+  six probable seed rows as six manufacturing events would waste the
+  investigation.
+
+### What engineering will do with the answer
+
+Nothing automatic. If QA determines the six are seed data and should
+not be on a production project, removing them is a **data** change
+requiring its own approval, its own backup, and its own record — and
+`FT-9767` must not be swept up with them, because its audit trail is
+intact and is evidence.

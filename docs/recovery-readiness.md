@@ -247,6 +247,88 @@ volume, and the deployment would be done out of hours — but it is
 
 ---
 
+## 5b. Option A — the exact tools, named
+
+Production is PostgreSQL **17.6**. `pg_dump` refuses a server newer
+than itself, so **every tool below must be 17.x**. Any of these three
+routes gives that:
+
+| Route | Commands | Notes |
+|---|---|---|
+| **Supabase CLI** (simplest) | `supabase db dump --db-url "$PROD_URL" -f out.sql` | Runs a matching client itself, so no local Postgres install is needed. Produces plain SQL — restore with `psql`, which has no `pg_restore` parallelism or selective restore |
+| **PGDG `postgresql-client-17`** | `pg_dump` / `pg_restore` / `psql` from `apt.postgresql.org` (Debian/Ubuntu) or Homebrew `postgresql@17` | The full toolchain. Needed for custom-format (`-Fc`) archives |
+| **Docker** | `docker run --rm postgres:17.6 pg_dump …` | No host install. Mind that the output path must be a mounted volume |
+
+**Verify before relying on any of them:**
+
+```bash
+pg_dump --version     # must print 17.x — NOT 16.x
+```
+
+### Limitations of Option A, restated at the tool level
+
+| | |
+|---|---|
+| Format | `-Fc` (custom) is restorable selectively and in parallel; plain SQL is not. `supabase db dump` emits plain SQL |
+| Scope | the database only. **Not** storage objects, edge functions, API keys, project settings, or custom-role passwords |
+| Roles | `--no-owner --no-privileges` on restore is usual on a fresh project, and it discards ownership and grants — which for this schema means **RLS policies survive but role grants may not**. Verify §3's `policies` and `rls_tables` counts after restoring |
+| Granularity | one instant. No way to recover anything written after it |
+| Encryption | none by default. A dump of this database contains company and personnel data; store it encrypted |
+
+### Evidence required from the authorised operator
+
+Option A is **not** satisfied until all seven exist and are recorded.
+A dump file alone is not evidence.
+
+| # | Evidence | Form |
+|---|---|---|
+| E1 | Tool version used | output of `pg_dump --version` showing 17.x |
+| E2 | Dump taken | filename with UTC timestamp, byte size |
+| E3 | Integrity | `sha256sum` of the dump, recorded separately from the dump |
+| E4 | **Test restore performed** | the target database name, and `pg_restore`/`psql` exit status and stderr line count |
+| E5 | **Verification comparison** | §3's 16-check script run against production **and** the restored copy, with the two outputs and a `diff` showing them identical |
+| E6 | Off-site location | where it is stored, who can reach it, and that it is encrypted |
+| E7 | Sign-off | name, role, date |
+
+**E4 and E5 are the ones that make it recovery rather than a file.**
+An untested dump has an unknown probability of restoring, and the
+moment you discover it is the moment you need it.
+
+---
+
+## 5c. Option B — prerequisites and the tested procedure
+
+Enabling PITR is not the same as having recovery.
+
+### Prerequisites
+
+| # | Prerequisite | Today |
+|---|---|---|
+| B1 | Organization `lgcbbmkiywvcpuffkszy` on **Pro or above** | ❌ `free` |
+| B2 | **PITR add-on enabled on this project** (configured per project, billed per project) | ❌ |
+| B3 | Retention window chosen and **long enough to cover the deployment plus the time to notice a problem** | ❌ |
+| B4 | Physical backups active — Supabase notes these require Postgres `15.8.1.079`+, which 17.6 satisfies | ✅ by version |
+| B5 | Someone with dashboard access authorised to trigger a restore | ❌ unconfirmed |
+
+### The tested procedure Option B still needs
+
+**Option B is also not ready on purchase.** Required before it counts:
+
+| # | Evidence | Form |
+|---|---|---|
+| F1 | PITR shown enabled | the project's Database → Backups page showing the add-on and its window |
+| F2 | A restore actually performed | into a **separate** project or a clone — never over production |
+| F3 | Recovery point verified | the restored copy's state matches the chosen timestamp, checked with §3's script |
+| F4 | Time measured | wall-clock from initiating to usable, recorded |
+| F5 | Sign-off | name, role, date |
+
+A PITR window nobody has restored from is the same category of
+assumption as an untested dump. The difference is that Option B's
+drill can be run once and trusted, whereas Option A's dump must be
+retaken before **every** deployment.
+
+---
+
 ## 6. What is being asked for
 
 **One decision, and it is not a software decision:**
