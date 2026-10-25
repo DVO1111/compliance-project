@@ -15,13 +15,13 @@ that guesses reads as evidence, which is worse than one with gaps.
 
 | Destination kind | Pages |
 |---|---|
-| `rail` — a top-level entry | 20 |
+| `rail` — a top-level entry | 21 |
 | `hosted` — inside another entry | 53 |
 | `detail` — a record page of its list | 6 |
 | `pendingDesign` — in scope, design owed (D3) | 24 |
 | `review` — works, needs owner confirmation | 4 |
 | `standalone` — reachable outside the rail | 4 |
-| **Total** | **111** |
+| **Total** | **112** |
 
 Every page has exactly one destination, enforced by the type
 `Record<PageId, Destination>`: a page with none does not compile.
@@ -123,7 +123,7 @@ There is no fallback group, and `More` is not a group any more.
 | Tests | _navigation only: covered by `src/tests/hs02Navigation.test.ts`_ |
 
 
-### Manufacturing & Quality — 21 pages
+### Manufacturing & Quality — 22 pages
 
 #### `training-log`
 
@@ -392,6 +392,19 @@ There is no fallback group, and `More` is not a group any more.
 | Destination | Rail: Manufacturing & Quality › Specifications (below the rule) |
 | Pilot scope | In pilot (D3) — design owed |
 | Design | None — No frame for a specification screen; 20261113000000 made one necessary because a batch cannot be released without an approved specification. |
+| Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
+| Services | _not assessed in this phase_ |
+| Data model / RLS | _not assessed in this phase_ |
+| Functional status | _not assessed in this phase_ |
+| Tests | _navigation only: covered by `src/tests/hs02Navigation.test.ts`_ |
+
+#### `facility-logs`
+
+| | |
+|---|---|
+| Destination | Rail: **Manufacturing & Quality › Facility logs** |
+| Pilot scope | In pilot |
+| Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
 | Services | _not assessed in this phase_ |
 | Data model / RLS | _not assessed in this phase_ |

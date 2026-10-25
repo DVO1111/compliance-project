@@ -94,6 +94,9 @@ export type PageId =
   //  canManageRoles, so every configuration area sat behind a
   //  role-administration permission.
   | 'settings-home'
+  //  HS-02's fourteenth rail entry. W6·29 designs it (FL-01 to FL-14);
+  //  only the implementation was missing until 20261204000000.
+  | 'facility-logs'
   | 'correction-editor'
   | 'profile'
   | 'license-vault'
@@ -261,6 +264,7 @@ export const PAGE_IDS = [
   'coa',
   'product-specifications',
   'settings-home',
+  'facility-logs',
 ] as const;
 
 /**
@@ -522,6 +526,10 @@ export default function MainLayout({
       { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      //  HS-01 row 7: "GMP Inspection — Rail; Facility logs sits under
+      //  it." Same industry gate as the rest of this cluster; no new
+      //  permission key was invented for it.
+      { id: 'facility-logs', label: 'Facility logs', icon: ClipboardList, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       // Training records are inspection evidence for a manufacturer — an
       // inspector asks for them. They stay in Administration for sectors that
       // don't run a quality system.

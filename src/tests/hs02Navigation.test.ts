@@ -137,6 +137,28 @@ describe('the four HS-02 items that were buried under More', () => {
   });
 });
 
+//  Phase 1 recorded Facility logs as the one HS-02 rail entry with no
+//  page at all, and deliberately did not invent a rail entry for it.
+//  Phase 3 built it (20261204000000 + FacilityLogsPage), so the gap is
+//  now a test rather than a note in a document.
+describe('HS-02 is complete: Facility logs has a page', () => {
+  it('is a top-level rail entry in Manufacturing & Quality', () => {
+    const d = DESTINATIONS['facility-logs'];
+    expect(d.kind).toBe('rail');
+    expect((d as Extract<Destination, { kind: 'rail' }>).group).toBe('Manufacturing & Quality');
+    expect((d as Extract<Destination, { kind: 'rail' }>).label).toBe('Facility logs');
+  });
+
+  it('is one of the design\'s own entries, not an addition of ours', () => {
+    const d = DESTINATIONS['facility-logs'] as Extract<Destination, { kind: 'rail' }>;
+    expect(d.order).toBeLessThan(BEYOND_DESIGN);
+  });
+
+  it('is not owed a design — W6\u00b729 draws it', () => {
+    expect(owedDesigns().map((o) => o.id)).not.toContain('facility-logs');
+  });
+});
+
 describe('decision 1 — Governance is in the pilot', () => {
   it.each<PageId>(['obligations', 'risk-register', 'policies'])(
     '%s is a top-level rail entry in Governance',

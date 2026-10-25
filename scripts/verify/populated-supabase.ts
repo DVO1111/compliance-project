@@ -122,7 +122,58 @@ const LOTS = [
   },
 ];
 
+
+//  FL-01's register: one row outside its action limit, one overdue and
+//  never sampled, one clean. Enough to see the triage order and the
+//  banner, and plainly synthetic so no screenshot reads as real data.
+const FACILITY_REGISTER = [
+  {
+    schedule_id: 'fsc-1', zone_id: 'fz-1', zone_name: 'FIXTURE Granulation G2',
+    zone_grade: 'Grade D', zone_line_ref: 'Line TL-1',
+    log_type: 'environmental_surface', description: 'Surface swabs, 5 sites',
+    frequency: 'weekly', due_time: null,
+    alert_limit: 25, action_limit: 50, result_unit: 'CFU',
+    last_entry_id: 'fe-1', last_recorded_at: '2026-10-24T06:20:00Z',
+    last_result_value: 112, last_result_position: 'CP-3',
+    last_outcome: 'outside_action', last_reference: null, days_since_last: 1,
+  },
+  {
+    schedule_id: 'fsc-2', zone_id: 'fz-2', zone_name: 'FIXTURE Compression hall C1',
+    zone_grade: 'Grade D', zone_line_ref: null,
+    log_type: 'environmental_air', description: 'Air · settle plates, 4 positions',
+    frequency: 'daily', due_time: '09:00:00',
+    alert_limit: 50, action_limit: 100, result_unit: 'CFU',
+    last_entry_id: null, last_recorded_at: null,
+    last_result_value: null, last_result_position: null,
+    last_outcome: null, last_reference: null, days_since_last: null,
+  },
+  {
+    schedule_id: 'fsc-3', zone_id: 'fz-3', zone_name: 'FIXTURE Packing hall P1',
+    zone_grade: 'Unclassified', zone_line_ref: null,
+    log_type: 'cleaning_routine', description: 'Routine clean after shift',
+    frequency: 'daily', due_time: '06:00:00',
+    alert_limit: null, action_limit: null, result_unit: null,
+    last_entry_id: 'fe-3', last_recorded_at: new Date().toISOString(),
+    last_result_value: null, last_result_position: null,
+    last_outcome: 'not_assessed', last_reference: 'FIXTURE-CR-0414',
+    days_since_last: 0.1,
+  },
+];
+
+const FACILITY_ENTRIES = [
+  {
+    id: 'fe-1', company_id: 'c1', zone_id: 'fz-1', schedule_id: 'fsc-1',
+    log_type: 'environmental_surface', due_at: null,
+    recorded_at: '2026-10-24T06:20:00Z', recorded_by: 'u-analyst',
+    result_value: 112, result_unit: 'CFU', result_position: 'CP-3',
+    performed: true, outcome: 'outside_action',
+    notes: 'Re-swabbed after cleaning; second result pending.',
+    reference: null, linked_deviation_id: 'dev-1',
+  },
+];
+
 const BY_TABLE: Record<string, unknown[]> = {
+  facility_log_entries: FACILITY_ENTRIES,
   material_lots: LOTS,
   material_certificates_of_analysis: CERTIFICATES,
   material_coa_discrepancies: DISCREPANCIES,
@@ -132,6 +183,7 @@ const BY_TABLE: Record<string, unknown[]> = {
 
 const BY_RPC: Record<string, unknown> = {
   operational_role_stranded_work: STRANDED,
+  facility_log_register: FACILITY_REGISTER,
 };
 
 function builder(table: string): any {

@@ -199,3 +199,88 @@ Consolidating is not the place to start refusing something.
 - The nesting under each host is still transitional. Settings now has a
   real home; the other hosts (Materials tabs, Batch Release ›
   Certificates, Registrations & Licences tabs) do not yet.
+
+---
+
+## Phase 3, batch 1 — Facility logs
+
+### D7 — Facility logs is built from W6·29, not invented
+
+Phase 1 recorded this as the one HS-02 rail entry with **no page at
+all**, and deliberately did not fabricate a rail entry for it. The
+design was never missing: W6·29 draws fourteen screens (FL-01 to
+FL-14). Only the implementation was.
+
+What the design establishes, and is therefore implemented:
+
+- **Logs belong to the facility, not to a batch** — FL-01 says so in as
+  many words, which is why nothing in the schema references a batch.
+- A zone carries a grade, a line, equipment, an owner and a cleaning
+  SOP (FL-02's edit panel).
+- Each zone has its own scheduled tests, each with a frequency and
+  **two** thresholds: FL-01 shows "alert 25, action 50".
+- The log types are FL-01's tabs: environmental air and surface,
+  cleaning routine and deep, water, pest control.
+- Overdue escalation is a per-zone **field**, not a constant —
+  "Alert the owner after (days overdue)" and "Escalate to QA Manager
+  after (days)", tagged in the design "SAME RULE AS CAPA OVERDUE".
+
+What is **not** established anywhere, and so was not invented:
+
+- **No sign-off.** FL-03 and FL-08 show one person recording a reading;
+  no second signature appears in W6·29. Adding one to a GMP record is a
+  quality decision, so the signature machinery is untouched.
+- **No automatic deviation.** FL-05 shows a deviation *linked* to a
+  zone's history, but not what raises it or on which rule.
+  `linked_deviation_id` exists so the link can be recorded; nothing
+  creates one.
+- **Grade is open text, not an enum.** The design shows Grade C, D and
+  Unclassified; EU GMP also has A and B and a company may classify
+  differently. Constraining it to three values seen on one screen would
+  be inventing a rule. `log_type` and `frequency` *are* constrained,
+  because the tabs are the vocabulary.
+
+### The one rule the database does enforce
+
+`outcome` is **derived, never accepted**. A reading's standing against
+its limits is the evidential content of an environmental log, and a
+client that computes it can be made to report 112 CFU against an action
+limit of 100 as fine — the same defect found in the customs flag one
+migration earlier. `facility_log_outcome()` plus a BEFORE trigger
+decide it, and the service sends no `outcome` at all.
+
+`not_assessed` is deliberately distinct from `within_limits`: a reading
+taken where no limit is configured has not passed anything. FL-01 draws
+exactly that row.
+
+Two integrity checks come with it: an entry cannot be attached to a
+zone belonging to another company (even with your own `company_id`),
+and a schedule from a different zone is refused because its limits
+would be the wrong ones.
+
+### Permissions — nothing new
+
+Gated by the same industry check the rest of the manufacturing-quality
+cluster uses (`isLogisticsProfile || !usesManufacturingQuality`), which
+is how `gmp-inspection` is gated. PM-03 does not tabulate facility
+logs, so no section check applies and **no permission key was
+invented**. HS-01 row 7 supports the placement: "GMP Inspection — Rail;
+Facility logs sits under it."
+
+### Deferred, and recorded rather than part-built
+
+- **FL-06 / FL-07 trends** (rising counts with limit lines) — the data
+  supports it; the chart is not built.
+- **FL-13 / FL-14 finding → corrective-action task** — needs the rule
+  that turns a finding into a task, which the design does not state.
+- **FL-02's zone editing UI.** Zones and schedules are readable and the
+  register depends on them, but creating one is not yet a screen; the
+  empty state says so rather than pretending otherwise.
+
+### Still outstanding from earlier phases
+
+`qa_officer`'s permission mapping, the logistics `company_id` foreign
+keys and `rejection_reason` validation (items 7A–7C) are **not** in this
+batch. The three new facility tables do each carry a `company_id`
+foreign key to `companies`, asserted in A3 of the new suite — the gap
+found on the logistics tables was not repeated.

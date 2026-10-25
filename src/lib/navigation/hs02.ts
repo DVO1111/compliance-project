@@ -207,6 +207,10 @@ export const DESTINATIONS: Record<PageId, Destination> = {
   'sop-library': { kind: 'rail', group: 'Manufacturing & Quality', label: 'SOP Library', order: 7 },
   'training-log': { kind: 'rail', group: 'Manufacturing & Quality', label: 'Training', order: 8 },
   'gmp-inspection': { kind: 'rail', group: 'Manufacturing & Quality', label: 'GMP Inspection', order: 9 },
+  //  HS-02's fourteenth entry, and the last one to get a page. W6·29
+  //  designs it in full; 20261204000000 built the tables and
+  //  FacilityLogsPage the screen.
+  'facility-logs': { kind: 'rail', group: 'Manufacturing & Quality', label: 'Facility logs', order: 10 },
 
   'training-simulation': {
     kind: 'pendingDesign', group: 'Manufacturing & Quality', label: 'Training Sim',

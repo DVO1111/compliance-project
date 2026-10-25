@@ -208,6 +208,7 @@ const EvidenceIngestionsPage    = lazyPage(() => import('./components/Platform/E
 const EcosystemHubPage          = lazyPage(() => import('./components/Platform/EcosystemHubPage'));
 const CompanySettingsPage       = lazyPage(() => import('./components/company/CompanySettingsPage'));
 const SettingsHomePage          = lazyPage(() => import('./components/Settings/SettingsHomePage'));
+const FacilityLogsPage          = lazyPage(() => import('./components/Facility/FacilityLogsPage'));
 const BillingPage               = lazyPage(() => import('./components/Billing/BillingPage'));
 const BatchReleasePage          = lazyPage(() => import('./components/BatchRelease/BatchReleasePage'));
 const ChangeControlPage         = lazyPage(() => import('./components/ChangeControl/ChangeControlPage'));
@@ -1430,6 +1431,14 @@ function AppContent() {
 
       case 'gmp-inspection':
         return !isLogisticsProfile ? <GmpInspectionPage /> : <AccessDenied />;
+
+      //  Same industry gate as the rest of the manufacturing-quality
+      //  cluster. PM-03 does not tabulate facility logs, so no section
+      //  check applies and none was invented.
+      case 'facility-logs':
+        return !isLogisticsProfile
+          ? <FacilityLogsPage companyId={profile?.company_id ?? undefined} />
+          : <AccessDenied />;
 
       case 'ai-insights':
         return <AIInsightsPage />;

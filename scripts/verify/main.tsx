@@ -25,6 +25,7 @@ import MaterialsPage from '../../src/components/Materials/MaterialsPage';
 import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
 import SettingsHomePage from '../../src/components/Settings/SettingsHomePage';
+import FacilityLogsPage from '../../src/components/Facility/FacilityLogsPage';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
@@ -53,6 +54,9 @@ const PAGES: Record<string, () => JSX.Element> = {
   //  exactly the behaviour worth looking at here — ?role= changes what
   //  the page lists.
   'settings-home': () => <SettingsHomePage />,
+  //  FL-01. Renders the empty state against the empty stub and the
+  //  triage table against VERIFY_FIXTURE=populated.
+  'facility-logs': () => <FacilityLogsPage companyId="c1" />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */
