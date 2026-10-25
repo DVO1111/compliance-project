@@ -222,3 +222,110 @@ reported as a gap.
 recovery is still unestablished and the 31-migration sequence is
 untouched. A UI release candidate does not imply a deployable
 database change.
+
+---
+
+## 7. Mobile review at 390 px — run 2026-10-25
+
+Rendered with Chromium at **390 × 844, DPR 2**, through the real
+`MainLayout` and the real route guard. 14 page/role combinations:
+`qc-testing` and `access-control` as QC Analyst, QA Manager and
+Storekeeper; `materials`, `qa-disposition`, `goods-receipt`,
+`batch-release`, `traceability`, `coa`, `dispatch`, `batch-execution`
+as QA Manager.
+
+### Results
+
+| Check | Result |
+|---|---|
+| **Horizontal page scroll** | **0 px on every combination.** `scrollWidth − clientWidth = 0` throughout |
+| **Elements wider than the viewport** | **none** on any combination |
+| **Blank pages** | none — rendered text 323–1014 characters per page |
+| **Page errors / exceptions** | **none** |
+| Failed requests | one, on every page: `404 /criateur-logo-ondark.svg`. **Harness artefact, not an application defect** — the file is present in `public/` and the verification build does not copy it |
+
+### Touch targets — measured, not estimated
+
+WCAG 2.5.8 (AA) requires 24 × 24 px; 2.5.5 (AAA) prefers 44 × 44.
+
+| Control | Size | Verdict |
+|---|---|---|
+| "More" category toggle | **was 23 × 222** | **Below the AA floor. FIXED** — `min-h-[28px]`, re-measured at **28 × 222** |
+| "Close navigation" | 26 × 26 | Passes AA, below AAA. Recorded |
+| Profile / Security / Sign Out tabs | 34 | Passes AA, below AAA |
+| Navigation rail items | 36 × 244 | Passes AA, below AAA |
+| "Open navigation", "Notifications" | 36 × 36 | Passes AA, below AAA |
+| `batch-release` filter chips | under 32 | Passes AA, below AAA |
+
+**One genuine defect found and fixed.** Everything else clears AA and
+sits below the 44 px comfortable target — recorded as a follow-up, not
+a pilot blocker.
+
+### Not covered
+
+Dialogs and long error messages were **not** exercised at 390 px: the
+harness renders against an empty database, so no modal and no
+server-error state was reachable. That remains open.
+
+---
+
+## 8. CoA end-to-end integration — run 2026-10-25
+
+The distinction raised in review was right: passing SQL assertions and
+mocked unit tests does not prove the workflow. An RPC called with the
+wrong argument name, an insert naming a column that does not exist, or
+a status read from the wrong field satisfies both and fails in
+production.
+
+`src/tests/integration/coaWorkflow.integration.test.ts` runs the
+**real service functions** against a **real PostgreSQL 17.6** database
+carrying the full migration set, with real impersonation
+(`SET ROLE authenticated` + `request.jwt.claims`), so RLS, the section
+guards, the CoA authority trigger and the duty conflict all apply.
+`pg` is installed with `--no-save`, so it is not a project dependency,
+and the suite **skips** without `COA_IT_DB` rather than reporting a
+pass.
+
+**13 tests, all passing**, covering the checklist:
+
+| Required check | Covered by |
+|---|---|
+| Submission → persisted status | storekeeper files a certificate; read back as `unverified`, `verified_by` null |
+| Upload failure / invalid data | non-array `supplier_results` rejected; certificate against a non-existent lot rejected |
+| Permission denial | storekeeper refused with the message naming QC testing / QA disposition, **and nothing written** |
+| Backend bypass | direct `UPDATE` of the verification fields refused with `COA_VERIFY_FORBIDDEN` |
+| Verification + persistence | QC Analyst verifies; `verification_status`, `verified_by`, `verified_at` all persisted |
+| Segregation of duties | the verifier is refused that lot's disposition, via `duty_conflict` **and** through `lifecycle_transition` |
+| Not an outage | a different quality role can still disposition the lot |
+| Discrepancy path | out-of-specification result → `discrepant`, critical count, findings surfaced |
+| Service/RPC contract | the argument name the function declares is asserted |
+
+### Non-vacuity, proven by mutation
+
+A test that cannot fail is not evidence. Three deliberate breakages
+were introduced and each was detected:
+
+| Mutation | Result |
+|---|---|
+| Run the denial test as an **entitled** role | **1 test failed** |
+| Expect the wrong person as verifier | **1 test failed** |
+| Rename the RPC argument in the service | **4 tests failed** |
+
+The third is the defect class that mocks and SQL assertions cannot
+catch, and it is now caught.
+
+### A fixture bug found and fixed
+
+The first version used fixed email addresses and deleted only the
+company in `afterAll`, so `auth.users` rows survived and the **second**
+run died on `users_email_key`. A test that passes once is not a test.
+Emails are now tagged per run and the users are cleaned up; verified by
+running the suite twice in succession, both green.
+
+### Still not covered end to end
+
+- **Document upload** — `document_path` / `document_mime_type` are
+  columns the panel does not yet write; filing records the stated
+  results, not an attached file. Storage integration is open.
+- **The React panel itself** was not driven in a browser against the
+  database; the service layer beneath it was.

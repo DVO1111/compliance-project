@@ -854,7 +854,7 @@ export default function MainLayout({
                   <button
                     onClick={() => toggleCategory(category)}
                     aria-expanded={!isCollapsed}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 rounded-lg hover:dash-surface-alt transition-colors group/cat"
+                    className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 min-h-[28px] rounded-lg hover:dash-surface-alt transition-colors group/cat"
                   >
                     <h4 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary text-left">{category}</h4>
                     <span className="flex items-center gap-1.5 dash-text-tertiary">

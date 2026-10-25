@@ -34,11 +34,11 @@ import MasterFormulaPage from '../../src/components/Formula/MasterFormulaPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
-import { resolveWorkRole } from '../../src/lib/access/roleAccess';
+import { resolveWorkRole, resolveWorkRoles } from '../../src/lib/access/roleAccess';
 import '../../src/index.css';
 
 const PAGES: Record<string, () => JSX.Element> = {
-  'access-control': () => <AccessPage companyId="c1" canDecide />,
+  'access-control': () => <AccessPage companyId="c1" canDecide roles={['compliance_admin']} />,
   'materials': () => <MaterialsPage companyId="c1" />,
   'in-process': () => <InprocessPage companyId="c1" userId="u1" canDecide />,
   'instruments': () => <InstrumentsPage companyId="c1" />,
@@ -48,7 +48,7 @@ const PAGES: Record<string, () => JSX.Element> = {
 const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
   'qa-disposition': (role) => <QaDispositionPage companyId="c1" role={role} />,
   'goods-receipt': (role) => <GoodsReceiptPage companyId="c1" role={role} />,
-  'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} />,
+  'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} roles={role ? [role] : []} />,
   'traceability': () => <TraceabilityPage companyId="c1" />,
   'batch-execution': (role) => <BatchExecutionPage companyId="c1" userId="u1" role={role} />,
   'my-tasks': (role) => <MyTasksPage companyId="c1" role={role} />,
