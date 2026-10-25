@@ -270,14 +270,14 @@ pg_dump --version     # must print 17.x — NOT 16.x
 | | |
 |---|---|
 | Format | `-Fc` (custom) is restorable selectively and in parallel; plain SQL is not. `supabase db dump` emits plain SQL |
-| Scope | the database only. **Not** storage objects, edge functions, API keys, project settings, or custom-role passwords |
+| Scope | the database only. **Not** storage objects, edge functions, API keys, project settings, custom-role passwords, or **`pg_cron` schedules** — those live in the `cron` schema, which is not dumped. §5d names the restore route for each of the two production jobs |
 | Roles | `--no-owner --no-privileges` on restore is usual on a fresh project, and it discards ownership and grants — which for this schema means **RLS policies survive but role grants may not**. Verify §3's `policies` and `rls_tables` counts after restoring |
 | Granularity | one instant. No way to recover anything written after it |
 | Encryption | none by default. A dump of this database contains company and personnel data; store it encrypted |
 
 ### Evidence required from the authorised operator
 
-Option A is **not** satisfied until all seven exist and are recorded.
+Option A is **not** satisfied until all nine exist and are recorded.
 A dump file alone is not evidence.
 
 | # | Evidence | Form |
@@ -289,6 +289,8 @@ A dump file alone is not evidence.
 | E5 | **Verification comparison** | §3's 16-check script run against production **and** the restored copy, with the two outputs and a `diff` showing them identical |
 | E6 | Off-site location | where it is stored, who can reach it, and that it is encrypted |
 | E7 | Sign-off | name, role, date |
+| E8 | Storage objects | the object list with per-file byte sizes and a hash manifest, since §5b's scope line excludes them from the dump entirely |
+| E9 | Scheduled jobs | the `cron.job` rows exported, and for each one a named restore route per §5d |
 
 **E4 and E5 are the ones that make it recovery rather than a file.**
 An untested dump has an unknown probability of restoring, and the
@@ -326,6 +328,61 @@ A PITR window nobody has restored from is the same category of
 assumption as an untested dump. The difference is that Option B's
 drill can be run once and trusted, whereas Option A's dump must be
 retaken before **every** deployment.
+
+---
+
+## 5d. The two cron jobs — why the restore had none, and how each comes back
+
+The local restore came back with **no scheduled jobs at all**, and that
+was read as a gap. It is not a defect in the dump. `pg_cron` keeps its
+schedule in the **`cron` schema**, and `supabase db dump` emits the
+public schema and the `auth` tables — not `cron`. So a logical dump
+never carries a job, and a restore from one is always unscheduled. This
+belongs in the same scope list as storage objects and edge functions
+(§5b), where it was missing.
+
+Read live and read-only from `cron.job` on `ovxfflilbqaxedzovgmz`,
+2026-10-25:
+
+| jobid | jobname | schedule | active | What restores it |
+|---|---|---|---|---|
+| 1 | `process-ai-jobs` | `*/1 * * * *` | yes | **nothing in this repository** — see below |
+| 2 | `material-lot-retest-sweep` | `30 2 * * *` | yes | migration `20261002000000` |
+
+**Job 2 needs no manual step.** `20261002000000` schedules it, and
+unschedules first, so replaying the migration is idempotent. It is
+conditional on `pg_cron` being installed: where the extension is absent
+the migration raises a `NOTICE` and skips scheduling, which is why a
+from-scratch Postgres build carries no such job and the SQL suites do
+not assert one.
+
+**Job 1 is not in any migration.** The `ai-worker` edge function it
+calls is in the repository (`supabase/functions/ai-worker/`), but the
+job that drives it was created by hand in the dashboard. No replay of
+this repository brings it back, so it has to be recreated from the
+exported definition or deliberately left out.
+
+**And job 1 does not currently work.** Its command still contains the
+literal placeholders `<YOUR_SUPABASE_URL>` and
+`<YOUR_SERVICE_ROLE_KEY>`. It is `active` on a once-a-minute schedule,
+so it has been firing every minute and failing on an unresolved host
+for as long as it has existed. Two consequences, and the second is the
+one that matters here:
+
+1. The `ai-worker` pipeline has never run on this schedule.
+2. **Restoring this definition verbatim restores a broken job.** So the
+   runbook must not treat "the row is back" as recovery. Either
+   substitute the real URL and key at restore time, or leave it
+   unscheduled and record that the AI pipeline is not scheduled —
+   chosen on purpose, not by omission.
+
+One convenience, recorded because it may stop being true: the command
+was checked for an embedded JWT and carries none, only the
+placeholders. So today the exported cron definitions are **not
+secret-bearing** and need no special handling beyond the rest of the
+evidence. Fixing job 1 means putting a real service-role key into a
+cron command, and at that point E9 becomes secret-bearing and must be
+stored encrypted like the dump.
 
 ---
 
