@@ -14,6 +14,11 @@ import { StrictMode, useState } from 'react';
 import MainLayout from '../../src/components/Layout/MainLayout';
 import AccessDenied from '../../src/components/Common/AccessDenied';
 import { pageRefused } from '../../src/lib/access/roleAccess';
+//  The two auth screens. They render OUTSIDE MainLayout — there is no
+//  navigation rail before sign-in — so they are special-cased below
+//  rather than added to PAGES.
+import LoginPage from '../../src/components/Auth/LoginPage';
+import ResetPasswordPage from '../../src/components/Auth/ResetPasswordPage';
 import { useAuth } from '../../src/contexts/AuthContext';
 import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
@@ -84,6 +89,15 @@ function Harness() {
   const initial = new URLSearchParams(location.search).get('page') ?? 'materials';
   const [page, setPage] = useState<any>(initial);
   const render = PAGES[page as string];
+
+  //  Auth screens have no rail and no route guard, so they short-circuit
+  //  the whole shell.
+  if (page === 'login') {
+    return <LoginPage onRequestAccess={() => {}} onBackToLanding={() => {}} />;
+  }
+  if (page === 'reset-password') {
+    return <ResetPasswordPage />;
+  }
   //  THE SAME GUARD App.tsx USES, not a copy of it. Rendering the page
   //  components directly was how this harness reported a Storekeeper
   //  reaching QA disposition as a pass: it never ran the route check,

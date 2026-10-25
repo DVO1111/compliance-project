@@ -347,7 +347,10 @@ const empty: React.CSSProperties = {
   margin: 0, padding: '18px 0', fontSize: 15, lineHeight: '23px', color: '#5b6472',
 };
 const back: React.CSSProperties = {
-  border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+  //  padding + a 24px floor: measured at 390px this was under the WCAG
+  //  2.5.8 AA minimum, and it is the only way out of the lot detail.
+  border: 'none', background: 'transparent', padding: '4px 0', minHeight: 24,
+  cursor: 'pointer',
   fontSize: 14, color: '#2b3038', fontWeight: 600, alignSelf: 'flex-start',
 };
 const card: React.CSSProperties = {

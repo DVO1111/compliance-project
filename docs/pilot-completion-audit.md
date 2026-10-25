@@ -329,3 +329,129 @@ running the suite twice in succession, both green.
   results, not an attached file. Storage integration is open.
 - **The React panel itself** was not driven in a browser against the
   database; the service layer beneath it was.
+
+---
+
+## 9. Final pass — 2026-10-25
+
+Scope frozen. No features added, no screens redesigned, no settled
+decision revisited, no production contact.
+
+### Repository state, verified not assumed
+
+The state reported at the start of this pass was HEAD `4b94145`,
+15 ahead / 4 behind. **Actual state differed** and the actual state was
+used:
+
+| | Reported | Actual at start |
+|---|---|---|
+| HEAD | `4b94145` | **`efaabc2`** — one commit later (the CoA integration test, the first 390 px pass and the `min-h` fix) |
+| Ahead / behind `origin/main` | 15 / 4 | **18 / 4** |
+| Working tree | clean | clean |
+| Remote | — | in sync |
+
+### 390 px review — completed for the named pages
+
+Rendered with Chromium at **390 × 844, DPR 2**, through the real
+`MainLayout` and the real route guard. The gap the previous pass had to
+record — auth screens, and the populated CoA / reassignment form states
+— is now closed.
+
+A populated harness fixture (`scripts/verify/populated-supabase.ts`,
+opt-in via `VERIFY_FIXTURE=populated`) was added because the verify
+control and the reassignment form only appear once there is a row to
+act on. The default empty fixture is unchanged: a workspace's first
+morning is still the state worth photographing.
+
+| Screen / state | Overflow | Wider than viewport | Sub-24 px targets | Result |
+|---|---|---|---|---|
+| Login | 0 | none | **3 → 0** | fixed |
+| Password reset | 0 | none | **1 → 0** | fixed |
+| QC testing — lot list | 0 | none | 0 | pass |
+| QC testing — **CoA panel, QC Analyst** | 0 | none | **1 → 0** | fixed; verify control present, select 320 × 39, inputs 320 × 40 |
+| QC testing — **CoA panel, view-only role** | 0 | none | 0 | pass; in-panel refusal copy renders, verify control absent |
+| Access — stranded-work list | 0 | none | 0 | pass |
+| Access — **reassignment form** | 0 | none | 0 | pass; select 306 × 34, reason input 306 × 36 |
+| Dispatch, materials, QA disposition, goods receipt, batch release, traceability, CoA register, batch execution | 0 | none | see §7 | pass |
+
+**No horizontal scroll, no element wider than the viewport, no blank
+page and no page exception on any screen inspected.**
+
+#### Material defects found and fixed in this pass
+
+All five were touch targets below the **WCAG 2.5.8 (AA) 24 px floor**,
+measured not estimated. Each fix adds vertical padding and a 24 px
+minimum; no layout was rewritten and no design changed.
+
+| Control | Before | After |
+|---|---|---|
+| Login — "Forgot password?" | **21 × 119** | 29 × 119 |
+| Login — "Join the Waitlist" | 22 × 118 | 30 × 118 |
+| Login — "Back to site" | **18 × 113** | 26 × 113 |
+| Password reset — "← Cancel and sign out" | 22 × 156 | 30 × 156 |
+| QC testing — "← All lots awaiting test" | under 24 | ≥ 24 |
+
+"Forgot password?" at 21 px is the one that mattered: it is the single
+recovery route for somebody locked out on a phone.
+
+#### Recorded, not fixed
+
+- Controls between 24 px and 44 px (navigation rail at 36, profile tabs
+  at 34, "Close navigation" at 26 × 26, batch-release filter chips)
+  **pass AA** and sit below the 44 px AAA comfort target. Follow-up, not
+  a pilot blocker.
+- A `404 /criateur-logo-ondark.svg` appears on every harness page. The
+  file **is** present in `public/`; the verification build does not copy
+  it. **Harness artefact, not an application defect.**
+
+#### Not covered, so not claimed
+
+- Server-error and loading states at 390 px: the harness has no way to
+  make a request fail, so those branches were not rendered.
+- A storekeeper's view of the CoA panel: PM-03 refuses that role the QC
+  testing page outright, so the in-panel refusal branch was exercised
+  with a view-only role (`compliance_admin`) instead.
+- **No claim of visual equivalence with Figma.** Per-frame comparison
+  was not performed in this pass either.
+
+### Checks actually run in this pass
+
+| Check | Environment | Result |
+|---|---|---|
+| TypeScript typecheck | — | **pass** |
+| Production build | vite | **pass** |
+| Full unit suite | vitest | **1124 passed**, 13 skipped (the integration file, which skips without `COA_IT_DB`) |
+| Targeted: CoA, stranded work, dispatch, role access, PM-03 | vitest | **112 passed** |
+| CoA integration | **real PostgreSQL 17.6** | **13 passed** |
+| SQL suite | **PostgreSQL 17.6** (`server_version_num 170006`) | **2687 assertions, 2687 passed, 0 failed**; 204 of 219 migrations applied, the 15 failures exactly the pinned baseline |
+
+Nothing failed. Nothing was weakened to make anything pass.
+
+### Critical paths confirmed
+
+**Incoming CoA** — service, rules, panel, RPC, trigger and error copy
+agree. Verified by the integration suite against a real database:
+submission persists as `unverified`; invalid `supplier_results` and a
+non-existent lot are both rejected; a storekeeper is refused **and
+nothing is written**; a direct `UPDATE` of the verification fields is
+refused with `COA_VERIFY_FORBIDDEN`; the QC Analyst's verification
+persists status, verifier and timestamp; **the verifier is then refused
+that lot's disposition through `duty_conflict` and through
+`lifecycle_transition`**; a different quality role still can; the
+discrepancy path records and surfaces critical findings. The RPC
+argument name is asserted against what the function declares.
+
+**Deployed verifier permissions are unchanged.** `mayVerify` still
+admits QC Analyst, QA Officer and QA Manager, exactly as
+`20261130000000` derives from PM-03. `PROPOSED_VERIFIER_SECTIONS`
+records the proposed QC-only narrowing, and a test **fails** if anyone
+applies it in the UI before the migration. **Pending the quality
+owner.**
+
+**Stranded work** — authority mirrored from the trigger
+(role-administration or Act in the section); the picker offers only
+people who hold Act in the section and says so when there is nobody;
+a reason is mandatory in the form *and* in the service; reassignment is
+a new row so the original attribution survives; the panel reports the
+database's own refusal and does not claim success when the backend
+refuses. 22 unit tests plus `stranded_work_and_service_grants_test.sql`.

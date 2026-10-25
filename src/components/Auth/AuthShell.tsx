@@ -166,7 +166,10 @@ export default function AuthShell({
               style={{
                 background: 'transparent',
                 border: 'none',
-                padding: 0,
+                //  Was 18px tall at 390px, the smallest control on the
+                //  sign-in screen and under the 24px AA floor.
+                padding: '4px 0',
+                minHeight: 24,
                 font: 'inherit',
                 letterSpacing: 'inherit',
                 textTransform: 'inherit',
@@ -248,7 +251,12 @@ export function AuthLink({ onClick, children }: { onClick: () => void; children:
     <button
       onClick={onClick}
       className="font-semibold transition hover:opacity-80"
-      style={{ color: 'var(--lp-accent)', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+      //  4px of vertical padding and a 24px floor: at 390px these text
+      //  controls measured 18-22px tall, under the WCAG 2.5.8 AA
+      //  minimum of 24. Padding rather than a font change, so the
+      //  design is unchanged and only the tap area grows.
+      style={{ color: 'var(--lp-accent)', background: 'transparent', border: 'none',
+               padding: '4px 0', minHeight: 24, cursor: 'pointer' }}
     >
       {children}
     </button>

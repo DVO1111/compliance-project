@@ -5,8 +5,17 @@ import path from 'path';
 //  Import specifier -> stand-in. Matched at resolve time because the
 //  real modules are imported by relative path from several depths, so
 //  one alias string cannot catch them all.
+//  VERIFY_FIXTURE=populated swaps the empty stand-in for the one with
+//  rows. The empty one stays the default: a workspace's first morning
+//  is the state most likely to be got wrong. The populated one exists
+//  because the CoA verify control and the stranded-work reassignment
+//  FORM only appear once there is a row to act on, and those two could
+//  not be inspected at phone width otherwise.
+const SUPABASE_STUB =
+  process.env.VERIFY_FIXTURE === 'populated' ? 'populated-supabase.ts' : 'empty-supabase.ts';
+
 const STUBS: [RegExp, string][] = [
-  [/(^|\/)supabase$/,            'empty-supabase.ts'],
+  [/(^|\/)supabase$/,            SUPABASE_STUB],
   [/(^|\/)contexts\/AuthContext$/, 'empty-auth.tsx'],
   [/(^|\/)hooks\/usePlan$/,      'plan.ts'],
 ];
