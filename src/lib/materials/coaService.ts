@@ -38,6 +38,7 @@
 
 import { supabase } from '../supabase';
 import { logger } from '../logger';
+import type { Json } from '../database.types';
 
 export type VerificationStatus = 'unverified' | 'verified' | 'discrepant' | 'rejected';
 
@@ -172,6 +173,27 @@ export async function listDiscrepancies(certificateId: string): Promise<Discrepa
 }
 
 /**
+ * The exact shape persisted into the `supplier_results` jsonb column.
+ *
+ * Written out field by field rather than cast. `SupplierResult` is an
+ * interface, so TypeScript gives it no implicit index signature and it
+ * is not assignable to `Json` — and the fix for that is not a cast,
+ * because this is the boundary where a domain type becomes a stored
+ * compliance record. Naming the four fields means a field added to the
+ * interface is not silently written to the database, and the optional
+ * ones are normalised to null so a reader cannot tell "absent" from
+ * "omitted by the serialiser".
+ */
+function supplierResultsAsJson(results: SupplierResult[]): NonNullable<Json> {
+  return results.map((r) => ({
+    parameter: r.parameter,
+    stated_value: r.stated_value ?? null,
+    stated_text: r.stated_text ?? null,
+    unit: r.unit ?? null,
+  }));
+}
+
+/**
  * File a certificate the supplier sent. Clerical: writes no
  * verification field, so goods-in can do it.
  */
@@ -189,7 +211,7 @@ export async function uploadCertificate(params: {
       material_lot_id: params.lotId,
       certificate_number: params.certificateNumber ?? null,
       issued_date: params.issuedDate ?? null,
-      supplier_results: params.supplierResults,
+      supplier_results: supplierResultsAsJson(params.supplierResults),
     })
     .select('id')
     .single();

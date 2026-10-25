@@ -75,10 +75,27 @@ describe('filing a certificate stays clerical', () => {
   //  Only verification is a quality judgement. If goods-in could no
   //  longer attach the supplier's document that would be a defect, not
   //  a control.
-  it.each<WorkRole[]>([['storekeeper'], ['procurement'], ['qc_analyst'], []])(
-    'lets %s file a certificate',
-    (roles) => {
+  //  Each case passes a real WorkRole[]. Written as [label, roles,
+  //  mayAlsoVerify] because `it.each` SPREADS each row into the
+  //  callback: an earlier version typed the rows as `WorkRole[]` and so
+  //  handed `mayFile` the string 'storekeeper', never an array, and
+  //  passed for a reason that had nothing to do with the rule.
+  //
+  //  The second assertion is what stops this being vacuous. `mayFile`
+  //  is unconditional today, so asserting it alone would pass however
+  //  the rule were written. Pinning the ASYMMETRY — three of these four
+  //  may file and may not verify — fails if filing is ever gated behind
+  //  verification authority, which is the realistic way to break it.
+  it.each<[string, WorkRole[], boolean]>([
+    ['a storekeeper', ['storekeeper'], false],
+    ['procurement', ['procurement'], false],
+    ['a QC analyst', ['qc_analyst'], true],
+    ['somebody holding no operational role', [], false],
+  ])(
+    'lets %s file a certificate, whether or not they may verify one',
+    (_label, roles, mayAlsoVerify) => {
       expect(mayFile(roles)).toBe(true);
+      expect(mayVerify(roles)).toBe(mayAlsoVerify);
     },
   );
 });

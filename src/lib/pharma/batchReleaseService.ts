@@ -308,7 +308,12 @@ export async function addQcResult(
       p_result: result.result,
       p_pass: result.pass,
       p_password: signing.password,
-      p_reason: correction?.reason ?? null,
+      //  undefined rather than null: p_reason is `text DEFAULT NULL` in
+      //  20261127000000, and supabase-js drops undefined keys from the
+      //  body, so the argument is omitted and the function applies that
+      //  same default. Passing null explicitly is the identical call to
+      //  the database and a type error here.
+      p_reason: correction?.reason ?? undefined,
     });
     if (sigErr) throw new Error(sigErr.message);
     const r = sig as { ok?: boolean; code?: string; message?: string; signature_id?: string };
