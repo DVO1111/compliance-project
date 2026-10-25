@@ -201,7 +201,53 @@ export function describeFacilityError(raw: string): { code: string; message: str
     };
   }
   if (text.includes('FACILITY_ZONE_NOT_FOUND')) {
-    return { code: 'FACILITY_ZONE_NOT_FOUND', message: 'That zone no longer exists.' };
+    return {
+      code: 'FACILITY_ZONE_NOT_FOUND',
+      message: 'No zone of this company has that id.',
+    };
+  }
+  if (text.includes('FACILITY_SITE_WRONG_COMPANY')) {
+    return {
+      code: 'FACILITY_SITE_WRONG_COMPANY',
+      message: 'That site belongs to another company, so a zone cannot be placed in it.',
+    };
+  }
+  //  Under the caller's own RLS a site belonging to another company is
+  //  invisible rather than merely wrong, so this one code covers both
+  //  "deleted" and "not yours". The message says what was checked
+  //  instead of guessing which it was.
+  if (text.includes('FACILITY_SITE_NOT_FOUND')) {
+    return {
+      code: 'FACILITY_SITE_NOT_FOUND',
+      message: 'No site of this company has that id, so a zone cannot be placed in it.',
+    };
+  }
+  if (text.includes('FACILITY_SCHEDULE_WRONG_COMPANY')) {
+    return {
+      code: 'FACILITY_SCHEDULE_WRONG_COMPANY',
+      message: 'That zone belongs to another company, so a test cannot be scheduled on it.',
+    };
+  }
+  if (text.includes('FACILITY_ZONE_NAME_REQUIRED')) {
+    return {
+      code: 'FACILITY_ZONE_NAME_REQUIRED',
+      message: 'A zone needs a name — it is how every result is quoted.',
+    };
+  }
+  if (text.includes('FACILITY_SCHEDULE_DESCRIPTION_REQUIRED')) {
+    return {
+      code: 'FACILITY_SCHEDULE_DESCRIPTION_REQUIRED',
+      message: 'Describe what the test is, so the register has a label for its rows.',
+    };
+  }
+  //  23505 on (site_id, name). FL-02 lets you rename a zone, and the
+  //  code is how a result is quoted, so the collision has to be said
+  //  plainly rather than surfaced as a constraint name.
+  if (text.includes('facility_zones_site_id_name_key')) {
+    return {
+      code: 'ZONE_NAME_TAKEN',
+      message: 'Another zone on this site already has that name.',
+    };
   }
   if (text.includes('facility_schedule_limits_ordered')) {
     return {
@@ -395,4 +441,273 @@ export function triageOrder(rows: RegisterRow[]): RegisterRow[] {
     (a, b) => rank(a) - rank(b) || a.zone_name.localeCompare(b.zone_name)
       || a.description.localeCompare(b.description),
   );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+//  FL-02 — setting a zone up
+//
+//  Everything below writes. The register, the recording of a reading
+//  and the history are all useless on a company whose zones were never
+//  created, which is what these close.
+//
+//  None of them sends `outcome`, and none of them sends a derived
+//  field: the same rule the recording path follows. What they do send
+//  is checked again by the triggers in 20261205000000, so a caller
+//  going straight to the API gets the same refusals this client does.
+// ───────────────────────────────────────────────────────────────────────
+
+/** FL-02's site selector. */
+export interface FacilitySiteOption {
+  id: string;
+  name: string;
+  site_type: string;
+}
+
+export async function listSiteOptions(companyId: string): Promise<FacilitySiteOption[]> {
+  const { data, error } = await supabase.rpc('facility_site_options', {
+    p_company_id: companyId,
+  });
+  if (error) {
+    logger.error('[facility] could not list sites', { error: error.message });
+    throw new Error(describeFacilityError(error.message).message);
+  }
+  return (data ?? []) as unknown as FacilitySiteOption[];
+}
+
+/**
+ *  What FL-02's zone panel can set. `company_id` is not among them —
+ *  it comes from the caller's own profile at the call site, so a form
+ *  cannot nominate a company.
+ */
+export interface ZoneDraft {
+  site_id: string;
+  name: string;
+  code?: string | null;
+  grade?: string | null;
+  line_ref?: string | null;
+  equipment_refs?: string[];
+  cleaning_sop_ref?: string | null;
+  owner_id?: string | null;
+  alert_owner_after_days?: number;
+  escalate_to_qa_after_days?: number;
+  is_active?: boolean;
+}
+
+/**
+ *  Client-side validation, mirroring the trigger so the form can
+ *  object before a round trip. It is NOT the enforcement: every rule
+ *  checked here is checked again in the database, which is why the
+ *  messages are the same strings `describeFacilityError` returns.
+ *
+ *  Returns one message per field, keyed by field, empty when valid.
+ */
+export function validateZoneDraft(draft: ZoneDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!draft.site_id) errors.site_id = 'Choose the site this zone is in.';
+  if (!String(draft.name ?? '').trim()) {
+    errors.name = 'A zone needs a name — it is how every result is quoted.';
+  }
+  for (const f of ['alert_owner_after_days', 'escalate_to_qa_after_days'] as const) {
+    const v = draft[f];
+    if (v === undefined || v === null) continue;
+    if (!Number.isInteger(v) || v < 0) {
+      errors[f] = 'Give a whole number of days, zero or more.';
+    }
+  }
+  return errors;
+}
+
+export async function createZone(
+  companyId: string,
+  draft: ZoneDraft,
+  createdBy: string | null,
+): Promise<FacilityZone> {
+  const { data, error } = await supabase
+    .from('facility_zones')
+    .insert({
+      company_id: companyId,
+      site_id: draft.site_id,
+      name: draft.name.trim(),
+      code: draft.code?.trim() || null,
+      grade: draft.grade?.trim() || null,
+      line_ref: draft.line_ref?.trim() || null,
+      equipment_refs: draft.equipment_refs ?? [],
+      cleaning_sop_ref: draft.cleaning_sop_ref?.trim() || null,
+      owner_id: draft.owner_id ?? null,
+      alert_owner_after_days: draft.alert_owner_after_days ?? 0,
+      escalate_to_qa_after_days: draft.escalate_to_qa_after_days ?? 1,
+      created_by: createdBy,
+    })
+    .select(ZONE_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not create a zone', { error: error.message });
+    throw new Error(describeFacilityError(error.message).message);
+  }
+  return data as unknown as FacilityZone;
+}
+
+/**
+ *  FL-02's "Changes apply from the next scheduled test" is why this
+ *  updates the zone and never touches recorded entries: an entry keeps
+ *  the limits it was judged against, which is the point of deriving
+ *  `outcome` at write time rather than reading it back through a join.
+ */
+export async function updateZone(
+  companyId: string,
+  zoneId: string,
+  draft: Partial<ZoneDraft>,
+): Promise<FacilityZone> {
+  const patch: Record<string, unknown> = {};
+  if (draft.site_id !== undefined) patch.site_id = draft.site_id;
+  if (draft.name !== undefined) patch.name = draft.name.trim();
+  if (draft.code !== undefined) patch.code = draft.code?.trim() || null;
+  if (draft.grade !== undefined) patch.grade = draft.grade?.trim() || null;
+  if (draft.line_ref !== undefined) patch.line_ref = draft.line_ref?.trim() || null;
+  if (draft.equipment_refs !== undefined) patch.equipment_refs = draft.equipment_refs;
+  if (draft.cleaning_sop_ref !== undefined) {
+    patch.cleaning_sop_ref = draft.cleaning_sop_ref?.trim() || null;
+  }
+  if (draft.owner_id !== undefined) patch.owner_id = draft.owner_id;
+  if (draft.alert_owner_after_days !== undefined) {
+    patch.alert_owner_after_days = draft.alert_owner_after_days;
+  }
+  if (draft.escalate_to_qa_after_days !== undefined) {
+    patch.escalate_to_qa_after_days = draft.escalate_to_qa_after_days;
+  }
+  if (draft.is_active !== undefined) patch.is_active = draft.is_active;
+
+  const { data, error } = await supabase
+    .from('facility_zones')
+    .update(patch)
+    //  Both predicates on purpose. RLS already confines the row to the
+    //  caller's company; stating it again means a wrong id cannot
+    //  silently match nothing and read as success.
+    .eq('id', zoneId)
+    .eq('company_id', companyId)
+    .select(ZONE_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not update a zone', { error: error.message });
+    throw new Error(describeFacilityError(error.message).message);
+  }
+  return data as unknown as FacilityZone;
+}
+
+/**
+ *  Retire rather than delete. A zone's entries are GMP records and
+ *  `facility_log_entries.zone_id` is ON DELETE CASCADE, so deleting a
+ *  zone would take its history with it. FL-02 offers no delete.
+ */
+export async function setZoneActive(
+  companyId: string,
+  zoneId: string,
+  isActive: boolean,
+): Promise<FacilityZone> {
+  return updateZone(companyId, zoneId, { is_active: isActive });
+}
+
+export interface ScheduleDraft {
+  zone_id: string;
+  log_type: FacilityLogType;
+  description: string;
+  frequency: FacilityFrequency;
+  due_time?: string | null;
+  alert_limit?: number | null;
+  action_limit?: number | null;
+  result_unit?: string | null;
+  owner_id?: string | null;
+  is_active?: boolean;
+}
+
+export function validateScheduleDraft(draft: ScheduleDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!draft.zone_id) errors.zone_id = 'Choose the zone this test belongs to.';
+  if (!String(draft.description ?? '').trim()) {
+    errors.description = 'Describe what the test is, so the register has a label for its rows.';
+  }
+  const alert = draft.alert_limit;
+  const action = draft.action_limit;
+  if (alert != null && action != null && action < alert) {
+    errors.action_limit =
+      'The action limit cannot be below the alert limit — every result measured ' +
+      'against them would read the wrong way round.';
+  }
+  //  A limit without a unit is a number nobody can check. Not a
+  //  database rule: FL-01 shows cleaning rows with neither.
+  if ((alert != null || action != null) && !String(draft.result_unit ?? '').trim()) {
+    errors.result_unit = 'Give the unit the limits are measured in, such as CFU.';
+  }
+  return errors;
+}
+
+export async function createSchedule(
+  companyId: string,
+  draft: ScheduleDraft,
+): Promise<FacilitySchedule> {
+  const { data, error } = await supabase
+    .from('facility_zone_schedules')
+    .insert({
+      company_id: companyId,
+      zone_id: draft.zone_id,
+      log_type: draft.log_type,
+      description: draft.description.trim(),
+      frequency: draft.frequency,
+      due_time: draft.due_time || null,
+      alert_limit: draft.alert_limit ?? null,
+      action_limit: draft.action_limit ?? null,
+      result_unit: draft.result_unit?.trim() || null,
+      owner_id: draft.owner_id ?? null,
+    })
+    .select(SCHEDULE_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not create a schedule', { error: error.message });
+    throw new Error(describeFacilityError(error.message).message);
+  }
+  return data as unknown as FacilitySchedule;
+}
+
+export async function updateSchedule(
+  companyId: string,
+  scheduleId: string,
+  draft: Partial<ScheduleDraft>,
+): Promise<FacilitySchedule> {
+  const patch: Record<string, unknown> = {};
+  if (draft.log_type !== undefined) patch.log_type = draft.log_type;
+  if (draft.description !== undefined) patch.description = draft.description.trim();
+  if (draft.frequency !== undefined) patch.frequency = draft.frequency;
+  if (draft.due_time !== undefined) patch.due_time = draft.due_time || null;
+  if (draft.alert_limit !== undefined) patch.alert_limit = draft.alert_limit;
+  if (draft.action_limit !== undefined) patch.action_limit = draft.action_limit;
+  if (draft.result_unit !== undefined) patch.result_unit = draft.result_unit?.trim() || null;
+  if (draft.owner_id !== undefined) patch.owner_id = draft.owner_id;
+  if (draft.is_active !== undefined) patch.is_active = draft.is_active;
+
+  const { data, error } = await supabase
+    .from('facility_zone_schedules')
+    .update(patch)
+    .eq('id', scheduleId)
+    .eq('company_id', companyId)
+    .select(SCHEDULE_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not update a schedule', { error: error.message });
+    throw new Error(describeFacilityError(error.message).message);
+  }
+  return data as unknown as FacilitySchedule;
+}
+
+/**
+ *  Retire rather than delete, for the same reason as a zone:
+ *  `facility_log_entries.schedule_id` is ON DELETE SET NULL, so a
+ *  delete would strand every past reading with no record of which
+ *  test produced it. 20261204000000 says so at the column.
+ */
+export async function setScheduleActive(
+  companyId: string,
+  scheduleId: string,
+  isActive: boolean,
+): Promise<FacilitySchedule> {
+  return updateSchedule(companyId, scheduleId, { is_active: isActive });
 }

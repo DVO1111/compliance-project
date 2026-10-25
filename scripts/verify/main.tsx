@@ -26,6 +26,7 @@ import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
 import SettingsHomePage from '../../src/components/Settings/SettingsHomePage';
 import FacilityLogsPage from '../../src/components/Facility/FacilityLogsPage';
+import FacilityZonesSetup from '../../src/components/Facility/FacilityZonesSetup';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
@@ -57,6 +58,10 @@ const PAGES: Record<string, () => JSX.Element> = {
   //  FL-01. Renders the empty state against the empty stub and the
   //  triage table against VERIFY_FIXTURE=populated.
   'facility-logs': () => <FacilityLogsPage companyId="c1" />,
+  //  FL-02. Reached from FL-01 by a button in the product, so it is
+  //  mounted directly here: its own states (no sites, no zones, the
+  //  zone list with nested tests) are what need looking at.
+  'facility-zones': () => <FacilityZonesSetup companyId="c1" onBack={() => {}} />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */

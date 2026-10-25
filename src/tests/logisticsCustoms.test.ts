@@ -259,3 +259,55 @@ describe('the migration does not quietly widen anything', () => {
     expect(MIGRATION).not.toContain('DISABLE ROW LEVEL SECURITY');
   });
 });
+
+/*
+ *  The read-only preflight in scripts/preflight/rejection-reason-vocabulary.sql
+ *  has to hardcode the accepted values, because psql cannot import a
+ *  TypeScript constant. That makes it the one place in the repository
+ *  that can silently go stale: add a twelfth reason to the code and
+ *  the preflight would keep reporting rows against the old eleven and
+ *  call them unrecognised.
+ *
+ *  The script says so in a comment. This asserts it instead.
+ */
+describe('the rejection_reason preflight stays in step with the code', () => {
+  const PREFLIGHT = readFileSync(
+    join(process.cwd(), 'scripts/preflight/rejection-reason-vocabulary.sql'),
+    'utf8',
+  );
+
+  //  The VALUES list is the authoritative half of the script; the
+  //  header comment is prose and is not what the query uses.
+  const accepted = (() => {
+    const block = PREFLIGHT.slice(
+      PREFLIGHT.indexOf('WITH accepted(value) AS ('),
+      PREFLIGHT.indexOf(')\nSELECT r.rejection_reason'),
+    );
+    return [...block.matchAll(/\('([^']+)'\)/g)].map((m) => m[1]);
+  })();
+
+  it('finds the VALUES list in the script', () => {
+    expect(accepted.length).toBeGreaterThan(0);
+  });
+
+  it('lists exactly the reasons the application offers', () => {
+    expect([...accepted].sort()).toEqual([...REJECTION_REASONS].sort());
+  });
+
+  it('is still read-only', () => {
+    //  A preflight that writes is not a preflight. The whole point is
+    //  that it can be run against a live database.
+    for (const forbidden of [
+      /\bINSERT\s+INTO\b/i, /\bUPDATE\s+\w+\s+SET\b/i, /\bDELETE\s+FROM\b/i,
+      /\bALTER\s+TABLE\b/i, /\bDROP\s+/i, /\bCREATE\s+(TABLE|INDEX|TRIGGER|POLICY)\b/i,
+    ]) {
+      //  \echo lines quote the proposed DDL deliberately, so only the
+      //  executable half of the file is checked.
+      const executable = PREFLIGHT
+        .split('\n')
+        .filter((l) => !l.trimStart().startsWith('\\echo') && !l.trimStart().startsWith('--'))
+        .join('\n');
+      expect(executable).not.toMatch(forbidden);
+    }
+  });
+});

@@ -41,19 +41,26 @@ interface Verified {
  * Nothing else is claimed.
  */
 const VERIFIED: Partial<Record<PageId, Verified>> = {
+  'facility-logs': {
+    services: '`facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive',
+    data: '`facility_zones`, `facility_zone_schedules`, `facility_log_entries` — RLS enabled, company-isolation policies; all three carry a `company_id` FK to `companies`',
+    status: 'Working, both screens. FL-01 is the register (triage order, tabs, record, per-zone history) and FL-02 sets zones and scheduled tests up. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded.',
+    tests: 'SQL: 31 (`facility_logs_test.sql`) + 33 (`facility_zone_setup_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and the RLS-bypassing posture. Unit: 33 + 46.',
+    outstanding: 'FL-06/FL-07 trend charts and FL-13/FL-14 finding-to-task are not built; the latter needs a rule W6·29 does not state. No sign-off or automatic deviation, neither being drawn in the design.',
+  },
   'shipment-event-log': {
     services: '`shipmentEventService` — listShipments, createShipment, getShipmentEvents, addShipmentEvent',
     data: '`shipments`, `shipment_events` — RLS enabled, company-isolation policy',
     status: 'Working against real tables. No mock data.',
     tests: 'SQL: A/B/C/F (RLS, cross-tenant, anon, event_type CHECK). Unit: event-type parity with the DB constraint.',
-    outstanding: '`company_id` has no FK to `companies`; needs a production preflight before adding one.',
+    outstanding: '`company_id` has no FK to `companies`. The read-only preflight is now written — `scripts/preflight/logistics-company-id.sql` — and has been run on a local build only. It has NOT been run against production, which is what the decision needs.',
   },
   'cn-declarations': {
     services: '`customsDeclarationService` — listDeclarations, createDeclaration, resolveDeclarationFlag',
     data: '`cn_declarations` — RLS enabled; flag rule and resolution enforced by `20261203000000`',
     status: 'Working. Two rules moved out of the browser: the CN22/vague-description flag is now a BEFORE trigger, and clearing a flag is attributable and keeps its reason.',
     tests: 'SQL: A/B/C/D/E/G — 49 assertions including "a CN22 over the threshold is flagged even when filed as clean". Unit: 19 tests including TS/SQL constant parity.',
-    outstanding: 'Same missing `company_id` FK.',
+    outstanding: 'Same missing `company_id` FK; same preflight, same caveat.',
   },
   'contraband-rejection': {
     services: '`contrabandService` — listRejections, createRejection, updateRejectionStatus, listCustomerFlags, flagCustomer, clearCustomerFlag, checkSenderFlag',

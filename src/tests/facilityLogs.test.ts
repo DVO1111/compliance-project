@@ -282,7 +282,12 @@ describe('refusals keep their code', () => {
   it.each<[string, string]>([
     ['FACILITY_ZONE_WRONG_COMPANY', 'another company'],
     ['FACILITY_SCHEDULE_WRONG_ZONE', 'different zone'],
-    ['FACILITY_ZONE_NOT_FOUND', 'no longer exists'],
+    //  Reworded in 20261205000000's batch. "No longer exists" was a
+    //  guess: under the caller's own RLS a zone belonging to another
+    //  company is invisible rather than deleted, so the lookup cannot
+    //  tell the two apart and the message now says only what was
+    //  actually checked.
+    ['FACILITY_ZONE_NOT_FOUND', 'no zone of this company'],
     ['facility_schedule_limits_ordered', 'cannot be below'],
   ])('translates %s into something actionable', (raw, expected) => {
     const d = describeFacilityError(`ERROR: ${raw}: detail`);

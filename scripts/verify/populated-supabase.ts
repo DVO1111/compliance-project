@@ -172,8 +172,68 @@ const FACILITY_ENTRIES = [
   },
 ];
 
+
+//  FL-02's zones and their scheduled tests. Three zones so the list,
+//  the per-zone nesting and the retired state are all visible, and one
+//  zone with no tests at all because that is the state the register
+//  reports as "nothing from it reaches the register".
+const FACILITY_ZONES = [
+  {
+    id: 'fz-1', company_id: 'c1', site_id: 'fs-1', name: 'FIXTURE Granulation G2',
+    code: 'FX-GR-02', grade: 'Grade D', line_ref: 'TL-1',
+    equipment_refs: ['FX-MIX-07', 'FX-SIEVE-02'], cleaning_sop_ref: 'FIXTURE-SOP-CLN-014',
+    owner_id: 'u-analyst', alert_owner_after_days: 1, escalate_to_qa_after_days: 3,
+    is_active: true,
+  },
+  {
+    id: 'fz-2', company_id: 'c1', site_id: 'fs-1', name: 'FIXTURE Compression hall C1',
+    code: 'FX-CP-01', grade: 'Grade D', line_ref: null,
+    equipment_refs: [], cleaning_sop_ref: null,
+    owner_id: null, alert_owner_after_days: 0, escalate_to_qa_after_days: 1,
+    is_active: true,
+  },
+  {
+    id: 'fz-9', company_id: 'c1', site_id: 'fs-2', name: 'FIXTURE Old quarantine bay',
+    code: 'FX-QB-01', grade: 'Unclassified', line_ref: null,
+    equipment_refs: [], cleaning_sop_ref: null,
+    owner_id: null, alert_owner_after_days: 2, escalate_to_qa_after_days: 5,
+    is_active: false,
+  },
+];
+
+const FACILITY_SCHEDULES = [
+  {
+    id: 'fsc-1', company_id: 'c1', zone_id: 'fz-1',
+    log_type: 'environmental_surface', description: 'Surface swabs, 5 sites',
+    frequency: 'weekly', due_time: null,
+    alert_limit: 25, action_limit: 50, result_unit: 'CFU',
+    owner_id: null, is_active: true,
+  },
+  {
+    id: 'fsc-2', company_id: 'c1', zone_id: 'fz-1',
+    log_type: 'cleaning_deep', description: 'Deep clean after campaign',
+    frequency: 'quarterly', due_time: null,
+    alert_limit: null, action_limit: null, result_unit: null,
+    owner_id: null, is_active: true,
+  },
+  {
+    id: 'fsc-3', company_id: 'c1', zone_id: 'fz-1',
+    log_type: 'environmental_air', description: 'Retired air plate round',
+    frequency: 'daily', due_time: '09:00:00',
+    alert_limit: 50, action_limit: 100, result_unit: 'CFU',
+    owner_id: null, is_active: false,
+  },
+];
+
+const FACILITY_SITES = [
+  { id: 'fs-1', name: 'FIXTURE Oluyole plant', site_type: 'manufacturing' },
+  { id: 'fs-2', name: 'FIXTURE Ibadan warehouse', site_type: 'warehouse' },
+];
+
 const BY_TABLE: Record<string, unknown[]> = {
   facility_log_entries: FACILITY_ENTRIES,
+  facility_zones: FACILITY_ZONES,
+  facility_zone_schedules: FACILITY_SCHEDULES,
   material_lots: LOTS,
   material_certificates_of_analysis: CERTIFICATES,
   material_coa_discrepancies: DISCREPANCIES,
@@ -184,6 +244,7 @@ const BY_TABLE: Record<string, unknown[]> = {
 const BY_RPC: Record<string, unknown> = {
   operational_role_stranded_work: STRANDED,
   facility_log_register: FACILITY_REGISTER,
+  facility_site_options: FACILITY_SITES,
 };
 
 function builder(table: string): any {

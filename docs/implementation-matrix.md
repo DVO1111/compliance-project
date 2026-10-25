@@ -406,10 +406,11 @@ There is no fallback group, and `More` is not a group any more.
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
-| Services | _not assessed in this phase_ |
-| Data model / RLS | _not assessed in this phase_ |
-| Functional status | _not assessed in this phase_ |
-| Tests | _navigation only: covered by `src/tests/hs02Navigation.test.ts`_ |
+| Services | `facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive |
+| Data model / RLS | `facility_zones`, `facility_zone_schedules`, `facility_log_entries` — RLS enabled, company-isolation policies; all three carry a `company_id` FK to `companies` |
+| Functional status | Working, both screens. FL-01 is the register (triage order, tabs, record, per-zone history) and FL-02 sets zones and scheduled tests up. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded. |
+| Tests | SQL: 31 (`facility_logs_test.sql`) + 33 (`facility_zone_setup_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and the RLS-bypassing posture. Unit: 33 + 46. |
+| Outstanding | FL-06/FL-07 trend charts and FL-13/FL-14 finding-to-task are not built; the latter needs a rule W6·29 does not state. No sign-off or automatic deviation, neither being drawn in the design. |
 
 
 ### Regulatory — 10 pages
@@ -939,7 +940,7 @@ There is no fallback group, and `More` is not a group any more.
 | Data model / RLS | `shipments`, `shipment_events` — RLS enabled, company-isolation policy |
 | Functional status | Working against real tables. No mock data. |
 | Tests | SQL: A/B/C/F (RLS, cross-tenant, anon, event_type CHECK). Unit: event-type parity with the DB constraint. |
-| Outstanding | `company_id` has no FK to `companies`; needs a production preflight before adding one. |
+| Outstanding | `company_id` has no FK to `companies`. The read-only preflight is now written — `scripts/preflight/logistics-company-id.sql` — and has been run on a local build only. It has NOT been run against production, which is what the decision needs. |
 
 #### `cn-declarations`
 
@@ -953,7 +954,7 @@ There is no fallback group, and `More` is not a group any more.
 | Data model / RLS | `cn_declarations` — RLS enabled; flag rule and resolution enforced by `20261203000000` |
 | Functional status | Working. Two rules moved out of the browser: the CN22/vague-description flag is now a BEFORE trigger, and clearing a flag is attributable and keeps its reason. |
 | Tests | SQL: A/B/C/D/E/G — 49 assertions including "a CN22 over the threshold is flagged even when filed as clean". Unit: 19 tests including TS/SQL constant parity. |
-| Outstanding | Same missing `company_id` FK. |
+| Outstanding | Same missing `company_id` FK; same preflight, same caveat. |
 
 
 ### Content — 13 pages

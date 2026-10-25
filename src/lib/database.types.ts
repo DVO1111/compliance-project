@@ -6472,6 +6472,11 @@ isOneToOne: false
 "facility_log_outcome":
 { Args: { "p_performed": boolean,"p_result_value": number,"p_alert_limit": number,"p_action_limit": number }; Returns: string
                            },
+"facility_site_options":
+{ Args: { "p_company_id": string }; Returns: {
+                             "id": string,"name": string,"site_type": string
+                           }[]
+                           },
             "_cc":
 { Args: { "p_detail"?: string,"p_name": string,"p_ok": boolean,"p_section": string }; Returns: undefined
                            },

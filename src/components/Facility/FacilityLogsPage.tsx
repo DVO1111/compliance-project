@@ -27,8 +27,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ClipboardList, Loader2, AlertTriangle, Search, Plus, X, CheckCircle2,
-  ChevronRight, History,
+  ChevronRight, History, Settings2,
 } from 'lucide-react';
+import FacilityZonesSetup from './FacilityZonesSetup';
 import { useAuth } from '../../contexts/AuthContext';
 import { logger } from '../../lib/logger';
 import {
@@ -110,6 +111,11 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
   const [recording, setRecording] = useState<RegisterRow | null>(null);
   const [historyFor, setHistoryFor] = useState<RegisterRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  //  FL-01 and FL-02 are two screens of one feature, and FL-02 is
+  //  where the register gets its content, so it is reached from here
+  //  rather than given a rail entry of its own — HS-02 lists one
+  //  "Facility logs" and no second item beside it.
+  const [view, setView] = useState<'register' | 'setup'>('register');
 
   const load = useCallback(async () => {
     if (!companyId) { setLoading(false); return; }
@@ -156,6 +162,15 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
     );
   }
 
+  if (view === 'setup') {
+    return (
+      <FacilityZonesSetup
+        companyId={companyId}
+        onBack={() => { setView('register'); void load(); }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -170,6 +185,12 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
             Logs belong to the facility, not to a batch.
           </p>
         </div>
+        <button
+          onClick={() => setView('setup')}
+          className="flex items-center gap-1.5 px-4 py-2.5 min-h-[40px] rounded-xl text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] shrink-0"
+        >
+          <Settings2 className="w-4 h-4" /> Zones &amp; schedules
+        </button>
       </div>
 
       {/* FL-01's banner: only when something actually needs attention. */}
@@ -262,9 +283,16 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
         <div className="border border-[var(--color-border)] rounded-xl p-6">
           <p className="text-sm text-[var(--color-text-secondary)]">
             No zones or scheduled tests are set up for this site yet. A zone carries its
-            own tests, frequency, limits and owner — add them under Zones &amp; schedules,
-            and scheduled tests appear here on their due dates.
+            own tests, frequency, limits and owner, and scheduled tests appear here on
+            their due dates.
           </p>
+          <button
+            onClick={() => setView('setup')}
+            className="mt-3 flex items-center gap-1.5 px-4 py-2.5 min-h-[40px] rounded-xl text-sm font-medium text-white"
+            style={{ background: 'var(--color-accent)' }}
+          >
+            <Plus className="w-4 h-4" /> Set up zones &amp; schedules
+          </button>
         </div>
       ) : visible.length === 0 ? (
         <div className="border border-[var(--color-border)] rounded-xl p-6">

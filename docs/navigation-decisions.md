@@ -284,3 +284,143 @@ keys and `rejection_reason` validation (items 7A–7C) are **not** in this
 batch. The three new facility tables do each carry a `company_id`
 foreign key to `companies`, asserted in A3 of the new suite — the gap
 found on the logistics tables was not repeated.
+
+---
+
+## Phase 3, batch 2 — FL-02, and the two logistics preflights
+
+### D8 — Facility logs gets the screen that makes it usable
+
+Batch 1 built FL-01, the register, and left one thing out. The
+omission made the feature **unusable rather than incomplete**: there
+was no way to create a zone or a scheduled test, so a company that had
+never been seeded saw FL-01's empty state for ever. FL-01 itself told
+the reader to "add them under Zones & schedules" — naming a screen
+that did not exist.
+
+FL-02 is drawn in W6·29, so nothing in this batch is invented. The
+zone panel's fields, the two per-zone escalation days, and the
+scheduled tests with their frequency and two limits are all read off
+the design.
+
+**Reached from FL-01, not given a rail entry.** HS-02 lists one
+"Facility logs" and no second item beside it, so FL-02 is a view of
+the same destination rather than a new one. The matrix still reports
+112 pages.
+
+**Retire, never delete.** `facility_log_entries.zone_id` is
+`ON DELETE CASCADE`, so deleting a zone would take its GMP records
+with it, and `schedule_id` is `ON DELETE SET NULL`, so deleting a
+schedule would strand every past reading with no record of which test
+produced it. FL-02 offers no delete either. Both FK rules are now
+asserted (E1/E2 of the new suite) so the reasoning cannot go stale.
+
+### A defect this batch's own tests found
+
+The first version of `fn_facility_zone_integrity()` raised
+`FACILITY_SITE_WRONG_COMPANY` when a zone named another company's
+site. The suite reported `FACILITY_SITE_NOT_FOUND` instead, and the
+test was right.
+
+The trigger is `SECURITY INVOKER`, so its lookup on `sites` runs under
+the caller's own RLS, and another company's site is not merely wrong to
+that caller — it is **invisible**. The lookup finds nothing to compare,
+so the NOT_FOUND branch is the one that refuses the write. The refusal
+was always correct; the diagnosis was not.
+
+Two things changed rather than one:
+
+- The message now says what was actually checked — "No site of this
+  company has that id" — instead of "That site no longer exists",
+  which was a guess about which of two causes applied. The same
+  correction was made to `FACILITY_ZONE_NOT_FOUND`, and a batch-1 test
+  that pinned the old wording was updated with it.
+- `WRONG_COMPANY` is **kept**, because it is not dead code: in a
+  context that bypasses RLS — the service role, a migration, anything
+  running as the table owner — the row *is* visible and the company
+  mismatch is what has to stop the write. Section H of the new suite
+  asserts both branches in the posture where each one fires. An
+  untested branch in a refusal path is one nobody knows still works.
+
+The alternative was a `SECURITY DEFINER` helper so the trigger could
+always tell "does not exist" from "belongs to someone else". It was
+rejected: it would read every company's sites in order to improve an
+error message, and the message would then confirm to any caller
+whether an arbitrary site id exists in somebody else's company.
+
+### What is enforced, and what is deliberately not
+
+Enforced server-side: a zone's site must belong to the zone's company;
+a schedule's zone must belong to the schedule's company; neither a
+zone name nor a test description may be blank; `log_type` and
+`frequency` stay inside FL-01's vocabulary; an action limit may not sit
+below its alert limit.
+
+**Not** enforced: any ordering between "alert the owner after" and
+"escalate to QA after". FL-02 draws them as two fields and states no
+rule, and a company that wants QA told first is not obviously wrong.
+The column defaults (0 and 1) read as though escalation follows the
+alert, which is exactly why the absence of a constraint is recorded
+here and asserted by a test — so that imposing the rule later has to
+be a decision rather than a slip.
+
+### Items 7B and 7C — preflights written and run locally
+
+Both are **read-only** scripts. Neither creates, alters or writes
+anything, and a test asserts the second one contains no DDL outside
+its quoted proposal.
+
+**`scripts/preflight/logistics-company-id.sql`** (item 7B). Checked
+live rather than assumed, and it found **four** tables missing the
+foreign key, not the three reported: `shipments`, `shipment_events`,
+`cn_declarations` and **`contraband_rejection_log`**. It reports
+orphan counts, the offending company ids, nil/placeholder ids, and
+separately the child rows whose parent shipment belongs to a different
+company — which the FK would not catch but is the same class of
+defect.
+
+**`scripts/preflight/rejection-reason-vocabulary.sql`** (item 7C). The
+vocabulary is **not** invented: `REJECTION_REASONS` in
+`contrabandService.ts` holds eleven values and the page renders them as
+a `<select>`, refusing to submit without one. That is the only evidence
+that exists — W6 does not draw this screen. The script reports every
+distinct value stored, which of them fall outside the eleven, and
+whether a mismatch is merely case or spacing (normalisable) or a
+genuinely new reason (a decision). Because the script must hardcode the
+list, a unit test now asserts it equals `REJECTION_REASONS`, so the two
+cannot drift.
+
+The proposal is recorded and **not applied**: `ADD CONSTRAINT … NOT
+VALID` then `VALIDATE CONSTRAINT`, the pattern already used for
+`shipment_events_event_type_check`. The weaker option —
+`CHECK (btrim(rejection_reason) <> '')`, following
+`material_rejection_reason_chk` — is recommended if the owner has not
+decided whether the list is closed, because `Other Policy Violation`
+already exists as its tail and a closed list means every new reason
+needs a migration.
+
+> **Both preflights have been run on a LOCAL build only**, whose
+> logistics tables hold between one and four fixture rows. They
+> reported zero orphans and zero unrecognised reasons. That proves the
+> scripts work. It says **nothing** about production, and must not be
+> quoted as though it did. Neither constraint should be added until the
+> scripts have been run against the real database by someone with
+> authority to do so.
+
+### A finding about the 24 "design-owed" pages
+
+`pendingDesign` has been conflating two different things, and the
+matrix has been understating the product because of it. The kind means
+"no Figma frame", not "not built".
+
+Tracing all 24 pages' service imports to the tables they actually
+read: **22 are backed by real tables with RLS**. Two are not —
+`regulatory-library` and `legal-marketplace` have no data layer at all,
+and those are the genuine placeholder screens.
+
+This does not change any classification in `navigation-audit.md`,
+whose job was design evidence, and it is not grounds for removing
+anything. It does mean the remaining Priority 2 work is far smaller
+than 24 pages, and that the two hollow screens are where it starts.
+Facility logs was never in this set: its design existed, which is why
+batch 1 could build it from W6·29.
