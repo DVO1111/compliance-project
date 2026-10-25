@@ -30,6 +30,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import SectionNotReady from '../Common/SectionNotReady';
+import CoaVerificationPanel from './CoaVerificationPanel';
 import StateBadge from '../Common/StateBadge';
 import {
   listLots, listSampling, listTestDefinitions, listTestResults,
@@ -47,9 +48,21 @@ import { logger } from '../../lib/logger';
 export interface QcTestingPageProps {
   companyId?: string | null;
   role: WorkRole | null;
+  /**
+   *  The full set of operational roles held.
+   *
+   *  `role` is kept for the existing testing controls, but it is null
+   *  for anybody holding more than one role — `resolveWorkRole`
+   *  answers null deliberately rather than picking one. The
+   *  certificate panel must not hide its control from a QC Analyst who
+   *  is also a QA Manager, so it reads this instead.
+   */
+  roles?: WorkRole[];
 }
 
-export default function QcTestingPage({ companyId, role }: QcTestingPageProps) {
+export default function QcTestingPage({ companyId, role, roles }: QcTestingPageProps) {
+  //  Fall back to the single role so an existing caller keeps working.
+  const heldRoles: WorkRole[] = roles ?? (role ? [role] : []);
   const [lots, setLots] = useState<MaterialLotRow[]>([]);
   const [open, setOpen] = useState<MaterialLotRow | null>(null);
   const [definitions, setDefinitions] = useState<TestDefinitionRow[]>([]);
@@ -173,6 +186,20 @@ export default function QcTestingPage({ companyId, role }: QcTestingPageProps) {
           <h2 style={{ margin: 0, fontSize: 19 }}>Lot {open.lot_number}</h2>
           <span style={sub}>{testingHeadline(lines)}</span>
         </header>
+
+        {/*
+          *  The supplier's certificate comes BEFORE sampling in the
+          *  real sequence — it arrives with the delivery — so it is
+          *  shown first. It is also the one act on this screen whose
+          *  authority differs from recording a test result, which is
+          *  why it reads the role set rather than `mayRecord`.
+          */}
+        <CoaVerificationPanel
+          lotId={open.id}
+          lotNumber={open.lot_number}
+          roles={heldRoles}
+          onVerified={() => { void loadLot(open.id); }}
+        />
 
         <section style={card}>
           <h3 style={{ margin: 0, fontSize: 16 }}>Sampling</h3>

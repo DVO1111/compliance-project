@@ -158,9 +158,13 @@ Scanned for empty handlers, dead `href`, TODO markers and placeholder copy.
 | Location | Control | Current behaviour | Should do |
 |---|---|---|---|
 | `Landing/LandingPage.tsx:459,469-471` | Footer links + Twitter / LinkedIn / GitHub | `href="#"` — navigate nowhere | Point at real URLs, or remove. **Marketing page, not in the application** |
-| `ControlMonitoring/ControlHealthDashboard.tsx:225` | link | `href="#"` | Resolve or remove |
+| ~~`ControlMonitoring/ControlHealthDashboard.tsx:225`~~ | link | **Not a defect — this entry was wrong.** It has `href="#"` but also `onClick` with `preventDefault()` and a `navigate-to` event, so it works | no action |
 | `Governance/AI/AIAssetDetailPage.tsx:253` | "Audit logs coming soon" | Honest placeholder | Acceptable — labelled, not inert |
 | `integrations/providers/baseProvider.ts:70,82` | `sendEvent` / automation check | Returns a structured "not implemented for this provider" error | Acceptable — fails loudly, out of pilot scope |
+
+Corrected on re-inspection: three of the four entries above hold, and
+the `ControlHealthDashboard` one did not — it is a working control
+styled as a link.
 
 **No inert control was found in any release-path screen** (materials,
 QC, QA disposition, batch execution, release, CoA register, dispatch,

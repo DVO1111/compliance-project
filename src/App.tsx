@@ -4,7 +4,7 @@ import { appPath, appUrl, SIGN_IN_PATHS, WORKSPACE_PATH } from './lib/routing';
 import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
-import { pageRefused, resolveWorkRole } from './lib/access/roleAccess';
+import { pageRefused, resolveWorkRole, resolveWorkRoles } from './lib/access/roleAccess';
 import QaDispositionPage from './components/Materials/QaDispositionPage';
 import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QcTestingPage from './components/Materials/QcTestingPage';
@@ -1101,6 +1101,7 @@ function AppContent() {
         return <AccessPage
           companyId={profile?.company_id}
           canDecide={perms.canManageRoles || isQaAuthority((profile as any)?.company_role)}
+          roles={resolveWorkRoles(profile)}
         />;
 
       //  W4·18. Calibration is the half of the floor gates that is a
@@ -1155,6 +1156,7 @@ function AppContent() {
         return <QcTestingPage
           companyId={profile?.company_id}
           role={resolveWorkRole(profile)}
+          roles={resolveWorkRoles(profile)}
         />;
       //  Built. The gate that makes "a material does not become
       //  available because somebody changed a status" true: the
