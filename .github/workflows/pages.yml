@@ -50,10 +50,30 @@
 
 name: GitHub Pages
 
+#  MANUAL ONLY. THE `push` TRIGGER WAS REMOVED ON PURPOSE.
+#
+#  This used to publish on every push to main, which coupled "the code
+#  is merged" to "the code is live". Those are two different decisions
+#  and the pilot candidate is where that coupling became unsafe: the
+#  frontend calls operational_role_stranded_work, which comes from
+#  migration 20261124000000, and the live database does not have it.
+#  Merging would have published a frontend whose panel errors against
+#  production, without anybody choosing to deploy.
+#
+#  The database sequence cannot go first, because it is gated on a
+#  recovery sign-off that is not finished. So publishing becomes a
+#  deliberate act instead: Actions → GitHub Pages → Run workflow.
+#
+#  WHEN THE `push` TRIGGER COULD COME BACK: once the migration sequence
+#  is applied to production and the frontend no longer calls anything
+#  the live database lacks. Restoring it before then re-creates exactly
+#  the problem it was removed for. It is two lines — add
+#  `push:` / `branches: [main]` above workflow_dispatch — so there is
+#  no reason to keep it around in a comment.
+#
+#  Not a security control. Row-level security is; this only decides
+#  WHEN a build is published.
 on:
-  push:
-    branches: [main]
-  #  So it can be published on demand without waiting for a commit.
   workflow_dispatch:
 
 permissions:
