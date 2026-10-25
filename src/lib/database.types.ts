@@ -246,6 +246,30 @@ isOneToOne: false
                     "batch_id"?: string,"company_id"?: string,"created_at"?: string,"destination"?: string,"dispatched_at"?: string,"dispatched_by"?: string | null,"id"?: string,"notes"?: string | null,"quantity"?: number,"reference"?: string | null,"unit"?: string
                   }
                   Relationships: []
+                },"product_specifications": {
+                  Row: {
+                    "approved_at": string | null,"approved_by": string | null,"company_id": string,"created_at": string,"created_by": string | null,"effective_date": string | null,"id": string,"product_id": string,"reference": string | null,"status": string,"superseded_at": string | null,"updated_at": string,"version": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "approved_at"?: string | null,"approved_by"?: string | null,"company_id": string,"created_at"?: string,"created_by"?: string | null,"effective_date"?: string | null,"id"?: string,"product_id": string,"reference"?: string | null,"status"?: string,"superseded_at"?: string | null,"updated_at"?: string,"version": string
+                  }
+                  Update: {
+                    "approved_at"?: string | null,"approved_by"?: string | null,"company_id": string,"created_at"?: string,"created_by"?: string | null,"effective_date"?: string | null,"id"?: string,"product_id": string,"reference"?: string | null,"status"?: string,"superseded_at"?: string | null,"updated_at"?: string,"version": string
+                  }
+                  Relationships: []
+                },"product_specification_tests": {
+                  Row: {
+                    "created_at": string,"expected_text": string | null,"id": string,"is_critical": boolean,"is_required": boolean,"limit_type": string,"max_value": number | null,"min_value": number | null,"sort_order": number,"specification_id": string,"test_method": string | null,"test_name": string,"unit": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"expected_text"?: string | null,"id"?: string,"is_critical"?: boolean,"is_required"?: boolean,"limit_type": string,"max_value"?: number | null,"min_value"?: number | null,"sort_order"?: number,"specification_id": string,"test_method"?: string | null,"test_name": string,"unit"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"expected_text"?: string | null,"id"?: string,"is_critical"?: boolean,"is_required"?: boolean,"limit_type": string,"max_value"?: number | null,"min_value"?: number | null,"sort_order"?: number,"specification_id": string,"test_method"?: string | null,"test_name": string,"unit"?: string | null
+                  }
+                  Relationships: []
                 },"access_grants": {
                   Row: {
                     "company_id": string,"granted_at": string,"granted_by": string,"id": string,"level": string,"request_id": string | null,"revoke_reason": string | null,"revoked_at": string | null,"revoked_by": string | null,"scope": string,"section_key": string,"user_id": string,"valid_until": string | null
@@ -6556,6 +6580,75 @@ isOneToOne: false
                            },
 "access_restriction_lift":
 { Args: { "p_restriction_id": string,"p_reason": string }; Returns: undefined
+                           },
+"operational_role_assign":
+{ Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_reason": string,"p_signature_id"?: string }; Returns: string
+                           },
+"operational_role_revoke":
+{ Args: { "p_assignment_id": string,"p_reason": string,"p_signature_id"?: string }; Returns: undefined
+                           },
+"quality_verdict_sign":
+{ Args: { "p_action": string,"p_company_id": string,"p_record_id": string,"p_subject": string,"p_result": string,"p_pass": boolean,"p_password": string,"p_reason"?: string }; Returns: Json
+                           },
+"quality_action_needs_signature":
+{ Args: { "p_action": string }; Returns: boolean
+                           },
+"operational_role_stranded_work":
+{ Args: { "p_company_id": string }; Returns: {
+              "entity_type": string,"entity_id": string,"state_key": string,"section": string,"last_actor": string,"last_acted_at": string,"roles_lost": string[],"roles_remaining": string[],"reassigned_to": string,"reassigned_at": string,"still_stranded": boolean
+            }[]
+                           },
+"stranded_work_reassign":
+{ Args: { "p_company_id": string,"p_entity_type": string,"p_entity_id": string,"p_to_user": string,"p_reason": string }; Returns: string
+                           },
+"duty_decisions_outstanding":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "decision": string,"scope": string,"pair": string,"enforced": boolean,"decision_status": string,"derivable": boolean,"note": string
+            }[]
+                           },
+"operational_role_sign":
+{ Args: { "p_company_id": string,"p_user_id": string,"p_role": string,"p_action": string,"p_password": string,"p_assignment_id"?: string,"p_reason"?: string }; Returns: Json
+                           },
+"operational_role_bootstrap":
+{ Args: { "p_company_id": string,"p_role": string,"p_declaration": string,"p_signature_id": string }; Returns: string
+                           },
+"operational_role_unsigned_grants":
+{ Args: { "p_company_id": string }; Returns: {
+              "assignment_id": string,"user_id": string,"role": string,"provenance": string,"reason": string,"declaration": string,"assigned_at": string,"still_live": boolean,"finding": string
+            }[]
+                           },
+"operational_role_needs_signature":
+{ Args: { "p_role": string }; Returns: boolean
+                           },
+"material_lot_actor_duties":
+{ Args: { "p_lot_id": string,"p_user_id": string }; Returns: string[]
+                           },
+"duty_conflict":
+{ Args: { "p_scope": string,"p_entity_id": string,"p_duty": string,"p_user_id"?: string }; Returns: string
+                           },
+"app_work_roles":
+{ Args: { "p_company_id": string,"p_user_id"?: string }; Returns: string[]
+                           },
+"app_has_work_role":
+{ Args: { "p_company_id": string,"p_role": string,"p_user_id"?: string }; Returns: boolean
+                           },
+"batch_actor_duties":
+{ Args: { "p_batch_id": string,"p_user_id": string }; Returns: string[]
+                           },
+"batch_duty_conflict":
+{ Args: { "p_batch_id": string,"p_duty": string,"p_user_id"?: string }; Returns: string
+                           },
+"product_specification_approve":
+{ Args: { "p_specification_id": string,"p_effective_date"?: string,"p_signature_id"?: string }; Returns: Json
+                           },
+"product_specification_sign":
+{ Args: { "p_specification_id": string,"p_password": string,"p_reason"?: string }; Returns: Json
+                           },
+"product_specification_record_hash":
+{ Args: { "p_specification_id": string }; Returns: string
+                           },
+"batch_governing_specification":
+{ Args: { "p_batch_id": string }; Returns: string
                            },
 "batch_release_block_reason":
 { Args: { "p_batch_id": string }; Returns: string

@@ -300,6 +300,19 @@ export default function BatchReleasePage() {
                   {(conditions[record.id]?.length ?? 0) > 0 && (
                     <div className="w-full">
                       <FloorNoticeList conditions={assess(conditions[record.id]!).conditions} />
+                      {/*  WHERE TO GO, not just what is wrong. A batch
+                          blocked for want of a specification is the one
+                          refusal somebody cannot act on from this
+                          screen, so it links to the one they can. */}
+                      {conditions[record.id]!.some(c => c.key === 'no_specification') && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('navigate-to', { detail: { page: 'product-specifications' } })); }}
+                          className="mt-2 text-xs underline dash-text-secondary"
+                        >
+                          Open finished-product specifications
+                        </button>
+                      )}
                     </div>
                   )}
 

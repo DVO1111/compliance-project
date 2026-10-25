@@ -330,9 +330,19 @@ BEGIN
   --  draw on them.
   FOREACH m IN ARRAY ARRAY[current_setting('i12.m_api')::uuid, current_setting('i12.m_exc')::uuid]
   LOOP
+    --  RECEIVED BY SOMEBODY ELSE. 20261126000000 writes received_by
+    --  from the session, and 20261125000000 refuses the disposition
+    --  to whoever received the lot — so a fixture that receives and
+    --  releases as one person is refused, correctly. The INSERT runs
+    --  in service context so the receiver on the row is the one this
+    --  fixture means.
+    PERFORM set_config('role','none',true);
     INSERT INTO public.material_lots
-      (company_id,material_id,quantity_received,quantity_available,unit_of_measure,created_by)
-    VALUES (c_a,m,2000,2000,'kg',u_qa) RETURNING id INTO l;
+      (company_id,material_id,quantity_received,quantity_available,unit_of_measure,
+       created_by,received_by)
+    VALUES (c_a,m,2000,2000,'kg',u_qa,current_setting('i12.u_op')::uuid)
+    RETURNING id INTO l;
+    PERFORM set_config('role','authenticated',true);
     PERFORM public.lifecycle_transition('material_lot', l, 'sample', c_a, u_qa, 'Sampled');
     r := public.sign_electronic_record(c_a,'material_lot',l,'release','released','CorrectHorse1!');
     PERFORM public.material_lot_release(l,(r->>'signature_id')::uuid,'full');

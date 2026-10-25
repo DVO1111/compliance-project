@@ -237,9 +237,17 @@ BEGIN
   PERFORM public.master_formula_approve(current_setting('i11.f')::uuid);
   PERFORM public.master_formula_approve(current_setting('i11.f2')::uuid);
 
+  --  GOODS RECEIPT IS NOT WHAT THIS FIXTURE TESTS. 20261126000000
+  --  writes received_by from the session, and decision 1 refuses the
+  --  disposition to whoever received the lot — so creating and
+  --  releasing as one person is now refused, correctly. The lot is
+  --  created in service context, where attribution is explicit and
+  --  none is claimed.
+  PERFORM set_config('role','none',true);
   INSERT INTO public.material_lots
     (company_id,material_id,quantity_received,quantity_available,unit_of_measure,created_by)
   VALUES (c_a,current_setting('i11.m_api')::uuid,500,500,'kg',u_qa) RETURNING id INTO l;
+  PERFORM set_config('role','authenticated',true);
   PERFORM public.lifecycle_transition('material_lot', l, 'sample', c_a, u_qa, 'Sampled');
   r := public.sign_electronic_record(c_a,'material_lot',l,'release','released','CorrectHorse1!');
   PERFORM public.material_lot_release(l,(r->>'signature_id')::uuid,'full');

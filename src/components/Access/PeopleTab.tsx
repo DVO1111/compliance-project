@@ -32,7 +32,9 @@ import {
   ROLE_LABELS,
   type WorkRole, type AccessSection, type AccessLevel,
 } from '../../lib/access/permissionRequests';
-import { sectionAccess, resolveWorkRole, type PmSection } from '../../lib/access/roleAccess';
+import {
+  sectionAccess, sectionAccessFor, asWorkRoleOrNull, type PmSection,
+} from '../../lib/access/roleAccess';
 import {
   listRestrictions, liftRestriction, listAccessHistory,
   type RestrictionRow, type HistoryRow,
@@ -50,7 +52,15 @@ const SECTIONS: AccessSection[] = [
 interface Member {
   userId: string;
   name: string;
+  /**
+   * The SOLE operational role, or null when they hold none or several.
+   * `roles` below is the real answer; this is kept because the access
+   * grid beside the list is drawn per role.
+   */
   role: WorkRole | null;
+  /** Every operational role they hold, from operational_role_assignments. */
+  roles: WorkRole[];
+  /** company_members.role — their membership of the workspace, not a job. */
   rawRole: string;
 }
 
@@ -91,6 +101,31 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
     if (error) { setLoading(false); return; }
 
     const rows = (data ?? []) as unknown as { user_id: string; role?: string | null }[];
+
+    //  OPERATIONAL ROLES COME FROM THEIR OWN REGISTER. This used to
+    //  read company_members.role, which since 20261119000000 holds
+    //  membership (owner, admin, viewer) and never an operational role
+    //  — so every person in this list was showing as holding nothing.
+    //  Fetched in one go rather than per row.
+    const held = new Map<string, WorkRole[]>();
+    {
+      const { data: asg, error: aErr } = await (supabase as any)
+        .from('operational_role_assignments')
+        .select('user_id, role')
+        .eq('company_id', companyId)
+        .is('revoked_at', null);
+      if (aErr) {
+        //  Before the migration is applied the table is absent. Logged
+        //  and read as "nobody holds anything", which is the inert
+        //  state rather than a broken screen.
+        logger.warn('[people] operational roles unavailable', { error: aErr });
+      }
+      for (const a of ((asg ?? []) as { user_id: string; role: string }[])) {
+        const r = asWorkRoleOrNull(a.role);
+        if (!r) continue;
+        held.set(a.user_id, [...(held.get(a.user_id) ?? []), r].sort());
+      }
+    }
     //  Names live on profiles, which is a separate table; asked for in
     //  one go rather than per row.
     const ids = rows.map((r) => r.user_id);
@@ -107,7 +142,8 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
     setMembers(rows.map((r) => ({
       userId: r.user_id,
       name: names.get(r.user_id) ?? 'Unnamed person',
-      role: resolveWorkRole({ company_role: r.role }),
+      role: (held.get(r.user_id) ?? []).length === 1 ? held.get(r.user_id)![0] : null,
+      roles: held.get(r.user_id) ?? [],
       rawRole: r.role ?? '',
     })));
     setLoading(false);
@@ -132,7 +168,7 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
   const roleAccess: RoleAccessLine[] = useMemo(() => {
     if (!open) return [];
     return SECTIONS.map((s) => {
-      const held = sectionAccess(open.role, s as unknown as PmSection);
+      const held = sectionAccessFor(open.roles, s as unknown as PmSection);
       //  Undefined where the role gives nothing, which is how the panel
       //  draws "no access" — the same convention as the matrix.
       return { section: s, level: held === 'none' ? undefined : (held as AccessLevel) };
@@ -156,7 +192,7 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
       //  What it was before is the role's own cell — the restriction
       //  table records what it was lowered TO, and the grid is where
       //  the other end of that sentence lives.
-      from: (open ? sectionAccess(open.role, r.sectionKey as PmSection) : 'none') as AccessLevel,
+      from: (open ? sectionAccessFor(open.roles, r.sectionKey as PmSection) : 'none') as AccessLevel,
       to: r.toLevel as AccessLevel,
       until: r.until,
       reason: r.reason,
@@ -270,7 +306,7 @@ export default function PeopleTab({ companyId, canManage }: PeopleTabProps) {
               </span>
               <span style={{ fontSize: 12.5, color: '#5b6472' }}>
                 {m.role
-                  ? `${SECTIONS.filter((s) => sectionAccess(m.role, s as unknown as PmSection) !== 'none').length} of ${SECTIONS.length} sections`
+                  ? `${SECTIONS.filter((s) => sectionAccessFor(m.roles, s as unknown as PmSection) !== 'none').length} of ${SECTIONS.length} sections`
                   : 'no sections'}
               </span>
             </button>

@@ -302,6 +302,97 @@ END
 $f$;
 
 
+
+-- =====================================================================
+--  G — pre-sealing entries are marked, and nothing is fabricated
+--
+--  The decision: preserve existing entries and timestamps; mark those
+--  whose integrity cannot be verified as legacy/unverified and record
+--  the reason; never fabricate hashes or retroactively claim
+--  verification.
+--
+--  Section F's legacy entry is the subject. 20261115000000 marks rows
+--  of its shape, but F inserted this one AFTER that migration ran, so
+--  it is marked here the same way the migration marks the rows it
+--  found — which also demonstrates that the marker is what the
+--  verifier reads, rather than an inference from a NULL.
+-- =====================================================================
+DO $g$
+DECLARE
+  c_b uuid; v_hash_before text; v_at_before timestamptz; r json; v_legacy_id uuid;
+BEGIN
+  --  Scoped by id, not by action name: a database that has had this
+  --  suite run against it more than once holds several legacy_action
+  --  rows, and an unscoped subquery would fail on "more than one row"
+  --  rather than on anything the section is about.
+  SELECT id, company_id, integrity_hash, created_at
+    INTO v_legacy_id, c_b, v_hash_before, v_at_before
+    FROM public.audit_logs WHERE action = 'legacy_action'
+    ORDER BY created_at DESC LIMIT 1;
+
+  PERFORM _ack('G','G1 the legacy convention is recorded with a reason',
+    EXISTS (SELECT 1 FROM public.audit_hash_conventions
+             WHERE algo = 'legacy-client-v0' AND verifiable = false
+               AND btrim(coalesce(reason,'')) <> ''));
+
+  PERFORM _ack('G','G2 and the sealed one is recorded as verifiable',
+    (SELECT verifiable FROM public.audit_hash_conventions
+      WHERE algo = 'sha256-auditlog-v1'));
+
+  ALTER TABLE public.audit_logs DISABLE TRIGGER trg_block_audit_update;
+  UPDATE public.audit_logs SET hash_algo = 'legacy-client-v0'
+   WHERE id = v_legacy_id AND hash_algo IS NULL;
+  ALTER TABLE public.audit_logs ENABLE TRIGGER trg_block_audit_update;
+
+  --  NOTHING FABRICATED. The hash it arrived with is the hash it has,
+  --  and its timestamp is untouched. A hash computed now over content
+  --  nobody can vouch for would turn an unverifiable entry into one
+  --  that looks verified, which is the worst thing this could do.
+  PERFORM _ack('G','G3 marking it did not change its hash',
+    (SELECT integrity_hash FROM public.audit_logs WHERE id = v_legacy_id)
+      = v_hash_before,
+    (SELECT integrity_hash FROM public.audit_logs WHERE id = v_legacy_id));
+
+  PERFORM _ack('G','G4 nor its timestamp',
+    (SELECT created_at FROM public.audit_logs WHERE id = v_legacy_id)
+      = v_at_before);
+
+  r := public.verify_audit_chain(c_b);
+  PERFORM _ack('G','G5 it counts as unsealed, not sealed',
+    (r->>'unsealed')::int >= 1, r::text);
+
+  --  THE REASON COMES FROM THE DATABASE, so a screen does not have to
+  --  carry that sentence and cannot drift from it.
+  PERFORM _ack('G','G6 and the verdict carries the reason it cannot be verified',
+    (r->>'legacy_reason') LIKE '%nothing to recompute it against%',
+    left(coalesce(r->>'legacy_reason','<null>'), 120));
+
+  --  A chain with nothing unsealed does not carry the sentence at all,
+  --  so it is not shown where it does not apply.
+  PERFORM _ack('G','G7 a fully sealed chain carries no legacy reason',
+    (public.verify_audit_chain(current_setting('ac.c_a')::uuid)->>'legacy_reason') IS NULL,
+    coalesce(public.verify_audit_chain(current_setting('ac.c_a')::uuid)->>'legacy_reason','<null>'));
+
+  --  AND THE AMBIGUITY THE MARKER EXISTS TO REMOVE: a row with no hash
+  --  is NOT marked legacy. It is a finding, and conflating the two
+  --  would hide it.
+  PERFORM _ack('G','G8 an entry with no hash is not marked legacy',
+    NOT EXISTS (SELECT 1 FROM public.audit_logs
+                 WHERE hash_algo = 'legacy-client-v0' AND integrity_hash IS NULL));
+
+  PERFORM _ack('G','G9 and is still reported as unhashed',
+    (public.verify_audit_chain(current_setting('ac.c_a')::uuid)->>'unhashed')::int = 1,
+    public.verify_audit_chain(current_setting('ac.c_a')::uuid)::text);
+
+  --  The immutability guard is back on after the marking statement.
+  PERFORM _ack('G','G10 the update guard is enabled again',
+    NOT EXISTS (SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+                 WHERE c.relname='audit_logs' AND t.tgname='trg_block_audit_update'
+                   AND t.tgenabled='D'));
+END
+$g$;
+
+
 -- =====================================================================
 --  Results
 --

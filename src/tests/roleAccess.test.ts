@@ -21,6 +21,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sectionAccess, canView, canAct, canOpenPage, resolveWorkRole,
+  resolveWorkRoles, sectionAccessFor, pageRefused,
   PM_SECTIONS, PM_SECTION_LABELS, PAGE_SECTION, ROLES_NOT_IN_PM03,
   type PmSection, type Access,
 } from '../lib/access/roleAccess';
@@ -175,7 +176,21 @@ describe('resolving the role off a profile', () => {
     expect(resolveWorkRole({ role: 'QA Manager' })).toBe('qa_manager');
     expect(resolveWorkRole({ role: 'quality_manager' })).toBe('qa_manager');
     expect(resolveWorkRole({ company_role: 'Store-Keeper' })).toBe('storekeeper');
-    expect(resolveWorkRole({ role: 'admin' })).toBe('compliance_admin');
+  });
+
+  //  CHANGED DELIBERATELY. This used to assert that `admin` resolved to
+  //  compliance_admin, and `owner` did too. That is a conversion, not a
+  //  spelling, and it is the one the operational role model exists to
+  //  undo: on the live project every member holds `owner`, so the whole
+  //  workspace was being shown a compliance admin's screens while the
+  //  server granted them nothing.
+  it('does not turn a membership role into an operational one', () => {
+    expect(resolveWorkRole({ role: 'owner' })).toBeNull();
+    expect(resolveWorkRole({ role: 'admin' })).toBeNull();
+    expect(resolveWorkRole({ company_role: 'owner' })).toBeNull();
+    expect(resolveWorkRole({ company_role: 'viewer' })).toBeNull();
+    expect(resolveWorkRole({ company_role: 'legal' })).toBeNull();
+    expect(resolveWorkRole({ company_role: 'marketing' })).toBeNull();
   });
 
   it('returns null rather than guessing', () => {
@@ -189,6 +204,57 @@ describe('resolving the role off a profile', () => {
   it('leaves an unrecognised job title holding nothing', () => {
     const r = resolveWorkRole({ role: 'wizard' });
     for (const s of PM_SECTIONS) expect(sectionAccess(r, s), s).toBe('none');
+  });
+});
+
+//  The client's reading of app_work_roles and app_section_access. The
+//  two must agree, because the screen deciding one thing and the
+//  database another is how a control becomes decoration.
+describe('several operational roles at once', () => {
+  it('reads the assignments, not the membership column', () => {
+    expect(resolveWorkRoles({ company_role: 'owner', operational_roles: ['qa_manager'] }))
+      .toEqual(['qa_manager']);
+  });
+
+  it('returns them sorted, and deduplicated against the bridge', () => {
+    expect(resolveWorkRoles({
+      company_role: 'qc_analyst',
+      operational_roles: ['storekeeper', 'qc_analyst'],
+    })).toEqual(['qc_analyst', 'storekeeper']);
+  });
+
+  it('gives no answer for the sole role when there are two', () => {
+    expect(resolveWorkRole({ operational_roles: ['qc_analyst', 'storekeeper'] })).toBeNull();
+    expect(resolveWorkRole({ operational_roles: ['qc_analyst'] })).toBe('qc_analyst');
+  });
+
+  //  THE UNION, matching app_section_access: two roles granted on
+  //  purpose grant both columns.
+  it('takes the most permissive cell any held role has', () => {
+    const roles: WorkRole[] = ['qc_analyst', 'storekeeper'];
+    expect(sectionAccessFor(roles, 'qc_testing')).toBe('act');
+    expect(sectionAccessFor(roles, 'goods_receipt')).toBe('act');
+    expect(sectionAccessFor(roles, 'batch_release')).not.toBe('act');
+  });
+
+  it('holds nothing when no role is held', () => {
+    for (const s of PM_SECTIONS) expect(sectionAccessFor([], s), s).toBe('none');
+  });
+
+  //  Holding no operational role abstains rather than refuses, exactly
+  //  as app_assert_section_act does: an owner is not locked out of the
+  //  application, they are simply not granted anything by PM-03.
+  it('does not refuse a page to somebody holding no operational role', () => {
+    expect(pageRefused({ company_role: 'owner' }, 'batch-release')).toBe(false);
+  });
+
+  it('refuses a page none of the held roles opens', () => {
+    expect(pageRefused({ operational_roles: ['storekeeper'] }, 'batch-release')).toBe(true);
+  });
+
+  it('allows a page either held role opens', () => {
+    expect(pageRefused({ operational_roles: ['storekeeper', 'qa_manager'] }, 'batch-release'))
+      .toBe(false);
   });
 });
 

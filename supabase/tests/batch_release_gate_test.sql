@@ -82,7 +82,7 @@ DECLARE
   u_qo uuid := gen_random_uuid();   -- qa_officer: Act on the section, not the step
   u_ow uuid := gen_random_uuid();
   tag  text := substr(replace(gen_random_uuid()::text,'-',''),1,8);
-  p_a uuid; f uuid; m_api uuid;
+  p_a uuid; f uuid; m_api uuid; spec_p uuid := gen_random_uuid();
 BEGIN
   PERFORM set_config('br.c_a', c_a::text, false);
   PERFORM set_config('br.u_ps', u_ps::text, false);
@@ -136,6 +136,23 @@ BEGIN
   INSERT INTO public.master_formula_stages(formula_id,sequence_no,stage_code,name,requires_signoff)
   VALUES (f,1,'MIX','Mixing',false);
   PERFORM set_config('br.f', f::text, false);
+
+  --  A FINISHED-PRODUCT SPECIFICATION, which 20261113000000 requires
+  --  before any batch of this product can be released. One required
+  --  test, Assay, 98.0 to 102.0 % — so sections B to E are about the
+  --  RESULTS, with the specification satisfied and out of the way.
+  --  Section I tests the specification itself.
+  INSERT INTO public.product_specifications
+    (id,company_id,product_id,version,status,created_by)
+  VALUES (spec_p,c_a,p_a,'1.0','draft',u_ow);
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,test_method,limit_type,min_value,max_value,unit,is_required)
+  VALUES (spec_p,'Assay','HPLC','range',98,102,'%',true);
+  UPDATE public.product_specifications
+     SET status='effective', approved_by=u_qm, approved_at=now(),
+         approved_by_role='service', effective_date=current_date - 1
+   WHERE id = spec_p;
+  PERFORM set_config('br.spec', spec_p::text, false);
 END
 $fx$;
 
@@ -189,13 +206,30 @@ SELECT set_config('request.jwt.claims',
   json_build_object('sub', current_setting('br.u_qc'), 'role','authenticated')::text, false);
 SET ROLE authenticated;
 DO $results$
-DECLARE u_qc uuid := current_setting('br.u_qc')::uuid;
+DECLARE
+  u_qc uuid := current_setting('br.u_qc')::uuid;
+  c_a  uuid := current_setting('br.c_a')::uuid;
+  b_f  uuid := current_setting('br.b_fail')::uuid;
+  b_p  uuid := current_setting('br.b_pass')::uuid;
+  r jsonb;
 BEGIN
+  --  SIGNED, since 20261127000000. The release gate reads `pass` and
+  --  the value, so the analyst attests to them as they are recorded.
+  --  The signature is taken over the verdict rather than the row, so
+  --  the suite cannot sign one result and write another.
+  r := public.quality_verdict_sign('batch_qc_result', c_a, b_f,
+         'Assay', '88.1 %', false, 'CorrectHorse1!');
   INSERT INTO public.batch_qc_results
-    (batch_id, test_name, test_method, specification, result, pass, tested_by)
-  VALUES
-    (current_setting('br.b_fail')::uuid,'Assay','HPLC','98.0 - 102.0 %','88.1 %', false, u_qc),
-    (current_setting('br.b_pass')::uuid,'Assay','HPLC','98.0 - 102.0 %','99.4 %', true,  u_qc);
+    (batch_id, test_name, test_method, specification, result, pass, tested_by, signature_id)
+  VALUES (b_f,'Assay','HPLC','98.0 - 102.0 %','88.1 %', false, u_qc,
+          (r->>'signature_id')::uuid);
+
+  r := public.quality_verdict_sign('batch_qc_result', c_a, b_p,
+         'Assay', '99.4 %', true, 'CorrectHorse1!');
+  INSERT INTO public.batch_qc_results
+    (batch_id, test_name, test_method, specification, result, pass, tested_by, signature_id)
+  VALUES (b_p,'Assay','HPLC','98.0 - 102.0 %','99.4 %', true, u_qc,
+          (r->>'signature_id')::uuid);
 END
 $results$;
 RESET ROLE;
@@ -296,8 +330,11 @@ DECLARE
 BEGIN
   -- ── B. no results at all ──
   b := current_setting('br.b_none')::uuid;
-  PERFORM _brk('B','B1 the block reason names the missing results',
-    public.batch_release_block_reason(b) LIKE 'no finished-product test results%',
+  --  NAMED, not counted. "no results have been recorded" told somebody
+  --  nothing about what to do; the specification knows which test is
+  --  missing and the sentence says which.
+  PERFORM _brk('B','B1 the block reason names the test the specification requires',
+    public.batch_release_block_reason(b) LIKE '%requires Assay, and no result has been recorded%',
     public.batch_release_block_reason(b));
 
   v_ok := false;
@@ -318,7 +355,7 @@ BEGIN
   --  The same answer as a row a screen can draw, from the same facts.
   PERFORM _brk('B','B4 the condition rows say the same thing',
     EXISTS (SELECT 1 FROM public.batch_release_conditions(b)
-             WHERE condition_key='qc_none' AND severity='blocked'));
+             WHERE condition_key='qc_missing' AND severity='blocked'));
 
   --  A blocked condition carries no "continue with" — there is nobody
   --  to authorise past it. floorConditions treats a blocked row with a
@@ -376,8 +413,8 @@ BEGIN
   --  So a batch sitting in qc_in_progress with nothing recorded is
   --  indistinguishable from one nobody has started testing, and is
   --  refused by B's rule rather than by a rule of its own.
-  PERFORM _brk('D','D2 so an untested batch falls to the no-results rule',
-    public.batch_release_block_reason(b) LIKE 'no finished-product test results%',
+  PERFORM _brk('D','D2 so an untested batch falls to the missing-required-test rule',
+    public.batch_release_block_reason(b) LIKE '%requires Assay%',
     public.batch_release_block_reason(b));
 
   -- ── E. the positive path ──
@@ -392,6 +429,33 @@ BEGIN
 
   PERFORM _brk('E','E2 and it draws no conditions',
     NOT EXISTS (SELECT 1 FROM public.batch_release_conditions(b)));
+
+  --  ── THE NEGATIVE TEST FOR THE SIGNATURE REQUIREMENT ──
+  --
+  --  Run HERE, on this batch, at this moment, because this is the only
+  --  point in the suite where the signature is the ONLY thing left
+  --  standing between a caller and a released batch: the gate has no
+  --  objection (E1), the batch draws no conditions (E2), the caller is
+  --  the QA Manager who holds `batch_release` Act, and the batch has
+  --  not been released yet.
+  --
+  --  Anywhere else a refusal would be ambiguous — B2 is refused by the
+  --  gate and F2 by the role — so neither proves the signature
+  --  requirement bites. This does.
+  v_ok := false;
+  BEGIN
+    PERFORM public.lifecycle_transition('batch_record', b, 'release', c_a,
+      current_setting('br.u_qm')::uuid, NULL, '{}'::jsonb, NULL);
+    v_msg := 'RELEASED WITH NO SIGNATURE';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'LIFECYCLE_SIGNATURE_REQUIRED%'; v_msg := SQLERRM;
+  END;
+  PERFORM _brk('E','E2b an unsigned release is refused though nothing else objects',
+    v_ok, left(v_msg,160));
+
+  PERFORM _brk('E','E2c and the refused batch did not move',
+    (SELECT status FROM public.batch_records WHERE id=b) = 'qc_in_progress',
+    (SELECT status FROM public.batch_records WHERE id=b));
 
   v_ok := false;
   BEGIN
@@ -638,13 +702,20 @@ DO $i3$
 DECLARE v_msg text; v_ok boolean := false;
 BEGIN
   BEGIN
-    INSERT INTO public.batch_qc_results(batch_id, test_name, result, pass, tested_by)
+    --  WITH A SIGNATURE, since 20261127000000. The point of I3 is that
+    --  the analyst is the one who may record a verdict; what they now
+    --  do is attest to it as they record it.
+    INSERT INTO public.batch_qc_results
+      (batch_id, test_name, result, pass, tested_by, signature_id)
     VALUES (current_setting('br.b_none')::uuid,'Dissolution','82 %', true,
-            current_setting('br.u_qc')::uuid);
+            current_setting('br.u_qc')::uuid,
+            (public.quality_verdict_sign('batch_qc_result',
+               current_setting('br.c_a')::uuid, current_setting('br.b_none')::uuid,
+               'Dissolution', '82 %', true, 'CorrectHorse1!')->>'signature_id')::uuid);
     v_ok := true; v_msg := 'recorded';
   EXCEPTION WHEN OTHERS THEN v_msg := SQLERRM;
   END;
-  PERFORM _brk('I','I3 the QC analyst can', v_ok, left(v_msg,160));
+  PERFORM _brk('I','I3 the QC analyst can, with a signature', v_ok, left(v_msg,160));
 END
 $i3$;
 RESET ROLE;
@@ -654,6 +725,119 @@ SELECT set_config('request.jwt.claims','', false);
 -- =====================================================================
 --  Results
 --
+-- =====================================================================
+--  J — THE POSTCONDITION, AND THAT A MISMATCH FAILS RATHER THAN PASSES
+--
+--  20261107000000 installs the signature requirement with an UPDATE
+--  matched on four values: entity_type `batch_record`, from_state
+--  `qc_in_progress`, to_state `released`, action `release`. If the
+--  target database differs in any of them the UPDATE matches zero
+--  rows, REPORTS SUCCESS, and the requirement is silently absent.
+--
+--  20261201000000 turns that silence into a failure, and exposes the
+--  same logic read-only for the operator checklist. These assertions
+--  are about the detection, not the requirement: they break the
+--  transition four different ways and confirm each is caught.
+--
+--  Every mutation below is reverted in the same block, and J9 proves
+--  the schema was left as it was found.
+-- =====================================================================
+RESET ROLE;
+
+DO $j$
+DECLARE
+  v_tid uuid; v_from uuid; v_to uuid; v_other uuid; v_defn uuid;
+BEGIN
+  --  The postcondition holds as the migrations leave it.
+  PERFORM _brk('J','J1 the postcondition passes on this schema',
+    public.batch_release_signature_postcondition() IS NULL,
+    coalesce(public.batch_release_signature_postcondition(),'(pass)'));
+
+  SELECT t.id, t.from_state_id, t.to_state_id, t.definition_id
+    INTO v_tid, v_from, v_to, v_defn
+    FROM public.lifecycle_transitions t
+    JOIN public.lifecycle_definitions d ON d.id = t.definition_id
+    JOIN public.lifecycle_states s      ON s.id = t.to_state_id
+   WHERE d.entity_type = 'batch_record' AND s.state_key = 'released';
+
+  PERFORM _brk('J','J2 exactly one transition reaches released',
+    v_tid IS NOT NULL
+    AND (SELECT count(*) FROM public.lifecycle_transitions t
+           JOIN public.lifecycle_definitions d ON d.id = t.definition_id
+           JOIN public.lifecycle_states s ON s.id = t.to_state_id
+          WHERE d.entity_type='batch_record' AND s.state_key='released') = 1);
+
+  --  (a) THE REQUIREMENT SWITCHED OFF. The case that matters most,
+  --  because it is the state the live database is in before this
+  --  branch deploys.
+  UPDATE public.lifecycle_transitions SET requires_signature = false WHERE id = v_tid;
+  PERFORM _brk('J','J3 requires_signature=false is caught as UNSIGNED',
+    public.batch_release_signature_postcondition() LIKE 'UNSIGNED:%',
+    left(coalesce(public.batch_release_signature_postcondition(),'(pass)'), 90));
+  UPDATE public.lifecycle_transitions SET requires_signature = true WHERE id = v_tid;
+
+  --  (b) A DIFFERENT ACTION KEY. 20261107000000's UPDATE would match
+  --  zero rows against this schema.
+  UPDATE public.lifecycle_transitions SET action_key = 'release_batch' WHERE id = v_tid;
+  PERFORM _brk('J','J4 a renamed action is caught as MISMATCHED',
+    public.batch_release_signature_postcondition() LIKE 'MISMATCHED:%',
+    left(coalesce(public.batch_release_signature_postcondition(),'(pass)'), 90));
+  UPDATE public.lifecycle_transitions SET action_key = 'release' WHERE id = v_tid;
+
+  --  (c) A DIFFERENT FROM-STATE.
+  SELECT id INTO v_other FROM public.lifecycle_states
+   WHERE definition_id = v_defn AND state_key = 'qc_pending';
+  UPDATE public.lifecycle_transitions SET from_state_id = v_other WHERE id = v_tid;
+  PERFORM _brk('J','J5 a different from-state is caught as MISMATCHED',
+    public.batch_release_signature_postcondition() LIKE 'MISMATCHED:%',
+    left(coalesce(public.batch_release_signature_postcondition(),'(pass)'), 90));
+  UPDATE public.lifecycle_transitions SET from_state_id = v_from WHERE id = v_tid;
+
+  --  (d) NO TRANSITION REACHES `released` AT ALL. Redirected rather
+  --  than deleted: a transition that has been used is protected by a
+  --  foreign key from entity_state_history, which is itself worth
+  --  knowing — history cannot be orphaned by tidying the rules.
+  SELECT id INTO v_other FROM public.lifecycle_states
+   WHERE definition_id = v_defn AND state_key = 'rejected';
+  UPDATE public.lifecycle_transitions SET to_state_id = v_other WHERE id = v_tid;
+  PERFORM _brk('J','J6 no route into released is caught as MISSING, not as a pass',
+    public.batch_release_signature_postcondition() LIKE 'MISSING:%',
+    left(coalesce(public.batch_release_signature_postcondition(),'(pass)'), 90));
+  UPDATE public.lifecycle_transitions SET to_state_id = v_to WHERE id = v_tid;
+
+  --  THE POINT OF J6, SAID SEPARATELY. The obvious verification query
+  --  returns ZERO ROWS in that state, and an operator reading
+  --  "(0 rows)" can tick the box. The function cannot be misread.
+  PERFORM _brk('J','J7 and the naive query would have returned an empty result there',
+    (SELECT count(*) FROM public.lifecycle_transitions t
+       JOIN public.lifecycle_definitions d ON d.id = t.definition_id
+       JOIN public.lifecycle_states s ON s.id = t.to_state_id
+      WHERE d.entity_type='batch_record' AND s.state_key='released'
+        AND t.requires_signature) = 1);
+
+  --  (e) The engine must be the only door in.
+  PERFORM _brk('J','J8 entity_current_state is not writable by an app role',
+    NOT EXISTS (SELECT 1 FROM information_schema.role_table_grants
+                 WHERE table_schema='public' AND table_name='entity_current_state'
+                   AND grantee IN ('anon','authenticated')
+                   AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE')),
+    (SELECT string_agg(DISTINCT grantee||':'||privilege_type,', ')
+       FROM information_schema.role_table_grants
+      WHERE table_schema='public' AND table_name='entity_current_state'
+        AND grantee IN ('anon','authenticated')
+        AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE')));
+
+  --  AND THE SCHEMA IS BACK AS IT WAS. A test that probes by mutating
+  --  must prove it put everything back, or it has quietly become a
+  --  migration.
+  PERFORM _brk('J','J9 every probe was reverted',
+    public.batch_release_signature_postcondition() IS NULL,
+    coalesce(public.batch_release_signature_postcondition(),'(pass)'));
+END
+$j$;
+
+
+-- =====================================================================
 --  COLUMN ORDER IS total, passed, failed — the harness reads columns 2
 --  and 3 as passed and failed.
 -- =====================================================================

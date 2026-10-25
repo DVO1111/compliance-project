@@ -205,9 +205,11 @@ export default function ResetPasswordPage({
           marginTop: 22,
           background: 'transparent',
           border: 'none',
-          padding: 0,
           color: 'var(--lp-accent)',
           fontSize: 14,
+          //  Was 22px tall at 390px — under the 24px AA floor.
+          padding: '4px 0',
+          minHeight: 24,
           cursor: 'pointer',
         }}
       >

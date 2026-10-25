@@ -1,6 +1,6 @@
 import { getPermissions } from '../../lib/permissions';
 import { getIndustryCategory } from '../../lib/regulatoryProfile';
-import { resolveWorkRole, canOpenPage, PAGE_SECTION } from '../../lib/access/roleAccess';
+import { resolveWorkRoles, pageOpenableBy, PAGE_SECTION } from '../../lib/access/roleAccess';
 import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
@@ -44,7 +44,6 @@ import {
   FileSearch,
   ChevronDown,
   Zap,
-  Search,
   FileEdit,
   ListChecks,
   ClipboardCheck,
@@ -131,6 +130,7 @@ export type PageId =
   | 'dispatch'
   | 'batch-execution'
   | 'master-formulas'
+  | 'product-specifications'
   | 'training-simulation'
   | 'claim-extraction'
   | 'pharma-integrations'
@@ -249,6 +249,7 @@ export const PAGE_IDS = [
   'regulatory-affairs', 'son-compliance', 'ctd-dossier', 'contraband-rejection',
   'shipment-event-log', 'cn-declarations', 'compliance-alerting', 'audit-prep',
   'coa',
+  'product-specifications',
 ] as const;
 
 /**
@@ -387,6 +388,11 @@ const DB01_NAV: Record<string, { group: string; label?: string; order: number }>
   //  DB-02 draws Dispatch on the Storekeeper's rail. It is PM-03's
   //  `Distribution` column, which had no page until 20261111000000.
   'dispatch':               { group: 'Traceability', label: 'Dispatch', order: 0 },
+  //  Beyond DB-01: the design has no frame for a specification screen,
+  //  and 20261113000000 made one necessary — a batch cannot be
+  //  released without an approved specification, so there has to be
+  //  somewhere to write one.
+  'product-specifications': { group: 'Quality', label: 'Specifications', order: BEYOND_DESIGN + 3 },
   'traceability':           { group: 'Traceability', label: 'Traceability', order: 1 },
   'audit-trail':            { group: 'Traceability', label: 'Audit trail', order: 2 },
 
@@ -532,6 +538,7 @@ export default function MainLayout({
       { id: 'instruments', label: 'Instruments', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'in-process', label: 'In-Process Checks', icon: Gauge, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'batch-execution', label: 'Batch Execution', icon: FlaskConical, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      { id: 'product-specifications', label: 'Specifications', icon: ClipboardCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'master-formulas', label: 'Master Formulas', icon: BookMarked, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
 
       //  Deviations and CAPA are two registers, not one. This item
@@ -699,15 +706,22 @@ export default function MainLayout({
   //  — whether this workspace does manufacturing at all — and PM-03 says
   //  nothing about it. A logistics or finance workspace still has no
   //  batch to release, whoever is asking.
-  const workRole = resolveWorkRole(profile);
+  //  THE SET, NOT THE SOLE ROLE. 20261119000000 lets one person hold
+  //  several operational roles, and resolveWorkRole answers NULL for
+  //  anybody who does — which here meant the PM-03 branch was skipped
+  //  for exactly those people and the legacy model got the second vote
+  //  the comment above says it must not have. Found by auditing the
+  //  callers after the model changed, not by a failing test.
+  const workRoles = resolveWorkRoles(profile);
+  const hasWorkRole = workRoles.length > 0;
   const industryAllowsQuality = usesManufacturingQuality && !isLogisticsProfile;
   const visibleNavItems = regrouped.filter((item) => {
     if (item.category === 'Hidden') return false;
-    if (workRole && PAGE_SECTION[item.id]) {
-      return industryAllowsQuality && canOpenPage(workRole, item.id);
+    if (hasWorkRole && PAGE_SECTION[item.id]) {
+      return industryAllowsQuality && pageOpenableBy(workRoles, item.id);
     }
     if (item.hidden) return false;
-    if (workRole && !canOpenPage(workRole, item.id)) return false;
+    if (hasWorkRole && !pageOpenableBy(workRoles, item.id)) return false;
     return true;
   });
 
@@ -840,7 +854,7 @@ export default function MainLayout({
                   <button
                     onClick={() => toggleCategory(category)}
                     aria-expanded={!isCollapsed}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 rounded-lg hover:dash-surface-alt transition-colors group/cat"
+                    className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 min-h-[28px] rounded-lg hover:dash-surface-alt transition-colors group/cat"
                   >
                     <h4 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary text-left">{category}</h4>
                     <span className="flex items-center gap-1.5 dash-text-tertiary">
@@ -957,21 +971,20 @@ export default function MainLayout({
             <OfflineBadge />
           </div>
 
-          {/* Global Search Bar */}
-          <div className="flex-1 max-w-xl">
-            <div className="relative group">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 dash-text-tertiary transition-colors" />
-              <input
-                type="text"
-                placeholder="Search batches, lots, records…"
-                className="w-full bg-[var(--color-surface)] border dash-border rounded-xl pl-10 pr-4 py-2.5 text-sm dash-text placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 transition-all shadow-sm"
-                style={{ '--tw-ring-color': 'var(--color-accent)' } as any}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-focus-within:opacity-100 transition-opacity">
-                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-medium dash-text-tertiary bg-[var(--color-surface-alt)] border dash-border rounded">Esc</kbd>
-              </div>
-            </div>
-          </div>
+          {/*  Global search: REMOVED, ON THE DESIGN'S OWN INSTRUCTION.
+                 HS-01 row 2 of the dead-end register: the field took
+                 typing and did nothing, in the old product and here —
+                 no value, no onChange, no handler. The register's
+                 decision is "number lookup only … if it isn't ready,
+                 remove the field", and it is not ready: a lookup across
+                 lots, batches, deviations, certificates and licences is
+                 its own piece of work.
+
+                 A search box that silently discards what somebody types
+                 is worse than no search box, because they believe they
+                 have searched. Restoring it means building the lookup,
+                 not re-adding the input. */}
+          <div className="flex-1" />
 
           {/* Right Action Items */}
           <div className="flex items-center gap-3 shrink-0 overflow-visible">

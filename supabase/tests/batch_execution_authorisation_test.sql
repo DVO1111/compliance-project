@@ -245,7 +245,13 @@ END $$;
 
 SELECT set_config('request.jwt.claims',
   json_build_object('sub', current_setting('bx.u_qm'), 'role','authenticated')::text, false);
-SET ROLE authenticated;
+--  RESET ROLE, deliberately: these lots are scaffolding for the batch
+--  under test, not the subject. Built in service context so nobody is
+--  recorded as having received them — since 20261126000000 that is
+--  written from the session, and decision 1 then refuses the
+--  disposition to whoever received it. _bx_lot is SECURITY DEFINER and
+--  cannot change role itself.
+RESET ROLE;
 DO $lots$
 BEGIN
   PERFORM set_config('bx.lot_ok', _bx_lot(100,'approved')::text, false);

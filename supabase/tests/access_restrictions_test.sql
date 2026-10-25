@@ -415,12 +415,43 @@ DO $gfx$
 DECLARE
   c_a uuid := current_setting('ar.c_a')::uuid;
   b uuid := gen_random_uuid();
+  p_id uuid := gen_random_uuid();
+  s_id uuid := gen_random_uuid();
   tag text := substr(replace(gen_random_uuid()::text,'-',''),1,6);
 BEGIN
+  --  A PRODUCT AND AN APPROVED SPECIFICATION, because 20261113000000
+  --  judges a batch against the specification in force when it was
+  --  made and refuses one that names no product. Section H is about
+  --  dispatch, so the release has to be reachable for the dispatch
+  --  gate to be the thing under test.
+  INSERT INTO public.products(id,company_id,product_code,trade_name,generic_name,category,created_by)
+  VALUES (p_id,c_a,'ARP-'||tag,'Tablet R','Paracetamol','drug_pharmaceutical',
+          current_setting('ar.u_qm')::uuid);
+
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,manufacturing_date,expiry_date,batch_size,unit)
-  VALUES (b,c_a,'ARB-'||tag,'Tablet R',current_date,current_date+365,100,'kg');
+    (id,company_id,batch_number,product_name,product_id,manufacturing_date,expiry_date,batch_size,unit)
+  VALUES (b,c_a,'ARB-'||tag,'Tablet R',p_id,current_date,current_date+365,100,'kg');
   PERFORM set_config('ar.b', b::text, false);
+
+  INSERT INTO public.product_specifications
+    (id,company_id,product_id,version,status,created_by)
+  VALUES (s_id,c_a,p_id,'1.0','draft',current_setting('ar.u_qm')::uuid);
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,limit_type,min_value,max_value,unit,is_required)
+  VALUES (s_id,'Assay','range',98,102,'%',true);
+  UPDATE public.product_specifications
+     SET status='effective', approved_by=current_setting('ar.u_qm')::uuid,
+         approved_at=now(), approved_by_role='service', effective_date=current_date - 1
+   WHERE id = s_id;
+
+  --  And the product registered, because D05's gate refuses a release
+  --  against a product still in concept. Walked through the real
+  --  lifecycle rather than by setting a status column, which a trigger
+  --  refuses anyway.
+  PERFORM public.lifecycle_transition('product', p_id, 'start_regulatory_prep', c_a);
+  PERFORM public.lifecycle_transition('product', p_id, 'submit_to_regulator',   c_a);
+  PERFORM public.lifecycle_transition('product', p_id, 'record_registration',   c_a,
+                                      NULL, 'NAFDAC listing granted');
 
   INSERT INTO public.certificate_of_analysis
     (company_id,batch_id,coa_number,product_name,batch_number,results,status)
@@ -727,6 +758,194 @@ BEGIN
     NOT EXISTS (SELECT 1 FROM public.batch_dispatches WHERE quantity <= 0));
 END
 $h3$;
+RESET ROLE;
+SELECT set_config('request.jwt.claims','', false);
+
+
+
+-- =====================================================================
+--  I — a restriction reaches the STEPS, not only the sections
+--
+--  20261110000000 made a restriction real by having app_section_access
+--  apply it, so every guard reaching the grid through
+--  app_assert_section_act honours one. Five guards do not go that way:
+--  batch release, material disposition, deviation close, CAPA close
+--  and supplier approval all call app_assert_step, which read
+--  step_permissions and app_work_role and had never heard of a
+--  restriction.
+--
+--  Those five are PM-03's named steps — the most consequential actions
+--  in the system — and they were the ones a restriction could not
+--  touch. A compliance admin who restricted a QA Manager's QA
+--  disposition would have watched them release material anyway.
+-- =====================================================================
+DO $ifx$
+DECLARE
+  c_a uuid := current_setting('ar.c_a')::uuid;
+  u_qm uuid := current_setting('ar.u_qm')::uuid;
+BEGIN
+  --  Every named step must say which column governs it, or a
+  --  restriction on that column cannot reach it.
+  PERFORM _ark('I','I1 every step but roles_change names a section',
+    NOT EXISTS (SELECT 1 FROM public.step_permissions
+                 WHERE section IS NULL AND step <> 'roles_change'),
+    (SELECT string_agg(step, ', ') FROM public.step_permissions
+      WHERE section IS NULL));
+
+  PERFORM _ark('I','I2 and material disposition names QA disposition',
+    (SELECT section FROM public.step_permissions WHERE step='material_disposition')
+      = 'qa_disposition',
+    (SELECT coalesce(section,'<null>') FROM public.step_permissions
+      WHERE step='material_disposition'));
+
+  --  A section every one of them names must exist as a column, or the
+  --  restriction lookup is inert while looking installed.
+  PERFORM _ark('I','I3 every named section is a real column',
+    NOT EXISTS (SELECT 1 FROM public.step_permissions sp
+                 WHERE sp.section IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM public.section_permissions g
+                                    WHERE g.section = sp.section)));
+END
+$ifx$;
+
+--  The QA Manager holds the material_disposition step. Unrestricted,
+--  the assertion passes; restricted, it does not — and the refusal
+--  names the restriction rather than the role, because their role is
+--  not the problem.
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_qm'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $i$
+DECLARE c_a uuid := current_setting('ar.c_a')::uuid; v_ok boolean := false; v_msg text;
+BEGIN
+  BEGIN
+    PERFORM public.app_assert_step(c_a, 'material_disposition');
+    PERFORM _ark('I','I4 an unrestricted QA manager holds the disposition step', true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM _ark('I','I4 an unrestricted QA manager holds the disposition step', false, SQLERRM);
+  END;
+END
+$i$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_ca'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+DO $i2$
+BEGIN
+  PERFORM public.access_restrict(current_setting('ar.c_a')::uuid,
+    current_setting('ar.u_qm')::uuid, 'qa_disposition', 'none',
+    'Under review after a disposition error');
+END
+$i2$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_qm'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+
+DO $i3$
+DECLARE
+  c_a uuid := current_setting('ar.c_a')::uuid;
+  v_ok boolean := false; v_msg text;
+BEGIN
+  BEGIN
+    PERFORM public.app_assert_step(c_a, 'material_disposition');
+    v_msg := 'A RESTRICTED QA MANAGER STILL HELD THE DISPOSITION STEP';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'STEP_RESTRICTED%'; v_msg := SQLERRM;
+  END;
+  PERFORM _ark('I','I5 and a restricted one does not', v_ok, left(v_msg,160));
+
+  --  THE REFUSAL NAMES THE RESTRICTION, not the role. Somebody who
+  --  knows they are a QA Manager and is told "qa_manager may not
+  --  dispose of material" will report it as a bug.
+  PERFORM _ark('I','I6 and the refusal says it is a restriction',
+    v_msg LIKE '%restricted to none%' AND v_msg NOT LIKE 'STEP_FORBIDDEN%', left(v_msg,160));
+
+  --  A DIFFERENT STEP IS UNAFFECTED. The restriction is on one
+  --  section, and a restriction that quietly widened would be worse
+  --  than one that did nothing.
+  BEGIN
+    PERFORM public.app_assert_step(c_a, 'batch_release');
+    PERFORM _ark('I','I7 a step in another section is untouched', true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM _ark('I','I7 a step in another section is untouched', false, SQLERRM);
+  END;
+END
+$i3$;
+RESET ROLE;
+
+--  Lifting it restores the step.
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_ca'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+DO $i4$
+DECLARE v_id uuid;
+BEGIN
+  SELECT id INTO v_id FROM public.access_restrictions
+   WHERE company_id = current_setting('ar.c_a')::uuid
+     AND user_id = current_setting('ar.u_qm')::uuid
+     AND section_key = 'qa_disposition' AND lifted_at IS NULL
+   ORDER BY set_at DESC LIMIT 1;
+  PERFORM public.access_restriction_lift(v_id, 'Review closed');
+END
+$i4$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_qm'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+DO $i5$
+BEGIN
+  BEGIN
+    PERFORM public.app_assert_step(current_setting('ar.c_a')::uuid, 'material_disposition');
+    PERFORM _ark('I','I8 lifting it restores the step', true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM _ark('I','I8 lifting it restores the step', false, SQLERRM);
+  END;
+END
+$i5$;
+RESET ROLE;
+
+--  AN EXPLICIT RESTRICTION BITES EVEN WHERE THE GRID ABSTAINS.
+--  app_assert_step abstains for a role PM-03 does not tabulate, and
+--  that abstention is the design declining to rule. A restriction is
+--  not a silence — it is a named person, a named section and a reason,
+--  entered deliberately — so it applies regardless.
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_ca'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+DO $i6$
+BEGIN
+  PERFORM public.access_restrict(current_setting('ar.c_a')::uuid,
+    current_setting('ar.u_un')::uuid, 'qa_disposition', 'none',
+    'Restricted though their role is not tabulated');
+END
+$i6$;
+RESET ROLE;
+
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('ar.u_un'), 'role','authenticated')::text, false);
+SET ROLE authenticated;
+DO $i7$
+DECLARE c_a uuid := current_setting('ar.c_a')::uuid; v_ok boolean := false; v_msg text;
+BEGIN
+  PERFORM _ark('I','I9 the untabulated role still has no cell',
+    public.app_section_access(c_a,'qa_disposition') IS NULL,
+    coalesce(public.app_section_access(c_a,'qa_disposition'),'<null>'));
+
+  BEGIN
+    PERFORM public.app_assert_step(c_a, 'material_disposition');
+    v_msg := 'AN EXPLICIT RESTRICTION DID NOT APPLY TO AN UNTABULATED ROLE';
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := SQLERRM LIKE 'STEP_RESTRICTED%'; v_msg := SQLERRM;
+  END;
+  PERFORM _ark('I','I10 but the explicit restriction still applies to them',
+    v_ok, left(v_msg,160));
+END
+$i7$;
 RESET ROLE;
 SELECT set_config('request.jwt.claims','', false);
 

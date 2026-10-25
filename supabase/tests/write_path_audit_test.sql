@@ -42,6 +42,8 @@ DECLARE
   u_qc uuid := gen_random_uuid();   -- qc_analyst
   u_sk uuid := gen_random_uuid();   -- storekeeper
   b uuid := gen_random_uuid();
+  p_id uuid := gen_random_uuid();
+  s_id uuid := gen_random_uuid();
   tag text := substr(replace(gen_random_uuid()::text,'-',''),1,8);
 BEGIN
   PERFORM set_config('wp.c_a', c_a::text, false);
@@ -53,6 +55,12 @@ BEGIN
   INSERT INTO public.companies(id,name) VALUES (c_a,'Write Path Works '||tag);
   INSERT INTO auth.users(id,email) VALUES
     (u_qm,'qm-'||tag||'@wp.test'), (u_qc,'qc-'||tag||'@wp.test'), (u_sk,'sk-'||tag||'@wp.test');
+  --  A real password, because 20261127000000 makes recording a
+  --  finished-product verdict a signed act and there is no test-only
+  --  signing path. The suite signs the way the application will.
+  UPDATE auth.users
+     SET encrypted_password = extensions.crypt('CorrectHorse1!', extensions.gen_salt('bf'))
+   WHERE id IN (u_qm,u_qc,u_sk);
   INSERT INTO public.profiles(id,email,full_name,company_id,role) VALUES
     (u_qm,'qm-'||tag||'@wp.test','Ngozi Quality', c_a,'compliance_officer'),
     (u_qc,'qc-'||tag||'@wp.test','Amaka Analyst', c_a,'content_creator'),
@@ -62,9 +70,34 @@ BEGIN
     (c_a,u_qc,'qc_analyst','active'),
     (c_a,u_sk,'storekeeper','active');
 
+  --  A PRODUCT AND A SPECIFICATION, because 20261113000000 judges a
+  --  batch against the specification in force when it was made and
+  --  refuses one that names no product. Section E is about which
+  --  RESULTS the gate counts, so the specification has to be out of
+  --  the way for that question to be the one being asked.
+  INSERT INTO public.products(id,company_id,product_code,trade_name,generic_name,category,created_by)
+  VALUES (p_id,c_a,'WP-'||tag,'Tablet W','Paracetamol','drug_pharmaceutical',u_qm);
+
   INSERT INTO public.batch_records
-    (id,company_id,batch_number,product_name,manufacturing_date,expiry_date,batch_size,unit)
-  VALUES (b,c_a,'WP-'||tag,'Tablet W',current_date,current_date+365,100,'kg');
+    (id,company_id,batch_number,product_name,product_id,manufacturing_date,expiry_date,batch_size,unit)
+  VALUES (b,c_a,'WP-'||tag,'Tablet W',p_id,current_date,current_date+365,100,'kg');
+
+  INSERT INTO public.product_specifications
+    (id,company_id,product_id,version,status,created_by)
+  VALUES (s_id,c_a,p_id,'1.0','draft',u_qm);
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,limit_type,min_value,max_value,unit,is_required)
+  VALUES (s_id,'Assay','range',98,102,'%',true);
+  --  Dissolution is declared but NOT required, so section E's second
+  --  failure is a test somebody chose to run — which still blocks,
+  --  and the assertion says why.
+  INSERT INTO public.product_specification_tests
+    (specification_id,test_name,limit_type,min_value,unit,is_required)
+  VALUES (s_id,'Dissolution','min',80,'%',false);
+  UPDATE public.product_specifications
+     SET status='effective', approved_by=u_qm, approved_at=now(),
+         approved_by_role='service', effective_date=current_date - 1
+   WHERE id = s_id;
 END
 $fx$;
 
@@ -191,10 +224,15 @@ DECLARE
   b uuid := current_setting('wp.b')::uuid;
   v_id uuid;
 BEGIN
+  --  SIGNED, since 20261127000000: the release gate reads this verdict,
+  --  so the analyst attests to it as it is recorded.
   INSERT INTO public.batch_qc_results
-    (batch_id,test_name,test_method,specification,result,pass,tested_by)
+    (batch_id,test_name,test_method,specification,result,pass,tested_by,signature_id)
   VALUES (b,'Assay','HPLC','98.0 - 102.0 %','88.1 %', false,
-          current_setting('wp.u_qc')::uuid)
+          current_setting('wp.u_qc')::uuid,
+          (public.quality_verdict_sign('batch_qc_result',
+             current_setting('wp.c_a')::uuid, b, 'Assay', '88.1 %', false,
+             'CorrectHorse1!')->>'signature_id')::uuid)
   RETURNING id INTO v_id;
   PERFORM set_config('wp.r_fail', v_id::text, false);
 END
@@ -274,8 +312,11 @@ DECLARE
 BEGIN
   BEGIN
     INSERT INTO public.batch_qc_results
-      (batch_id,test_name,result,pass,tested_by,corrected_from_id)
-    VALUES (b,'Assay','99.4 %',true,current_setting('wp.u_qc')::uuid,r);
+      (batch_id,test_name,result,pass,tested_by,corrected_from_id,signature_id)
+    VALUES (b,'Assay','99.4 %',true,current_setting('wp.u_qc')::uuid,r,
+            (public.quality_verdict_sign('batch_qc_result',
+               current_setting('wp.c_a')::uuid, b, 'Assay', '99.4 %', true,
+               'CorrectHorse1!')->>'signature_id')::uuid);
     v_msg := 'A CORRECTION WITH NO REASON WAS ACCEPTED';
   EXCEPTION WHEN OTHERS THEN
     v_ok := SQLERRM LIKE 'BATCH_QC_CORRECTION_NO_REASON%'; v_msg := SQLERRM;
@@ -283,9 +324,12 @@ BEGIN
   PERFORM _wpk('D','D1 a correction requires a reason', v_ok, left(v_msg,140));
 
   INSERT INTO public.batch_qc_results
-    (batch_id,test_name,result,pass,tested_by,corrected_from_id,correction_reason)
+    (batch_id,test_name,result,pass,tested_by,corrected_from_id,correction_reason,signature_id)
   VALUES (b,'Assay','99.4 %',true,current_setting('wp.u_qc')::uuid,r,
-          'Transcribed from the wrong column of the chromatogram')
+          'Transcribed from the wrong column of the chromatogram',
+          (public.quality_verdict_sign('batch_qc_result',
+             current_setting('wp.c_a')::uuid, b, 'Assay', '99.4 %', true,
+             'CorrectHorse1!')->>'signature_id')::uuid)
   RETURNING id INTO v_id;
   PERFORM set_config('wp.r_corr', v_id::text, false);
   PERFORM _wpk('D','D2 a correction with one is recorded', v_id IS NOT NULL);
@@ -343,6 +387,10 @@ BEGIN
   INSERT INTO public.batch_qc_results
     (batch_id,test_name,result,pass,tested_by)
   VALUES (b,'Dissolution','54 %',false,current_setting('wp.u_qc')::uuid);
+  --  54 is below the declared minimum of 80, so the recorded failure
+  --  and the specification agree. A fixture whose verdict contradicted
+  --  its own criterion would be caught by a different rule and this
+  --  assertion would pass for the wrong reason.
 
   PERFORM _wpk('E','E3 an uncorrected failure still blocks',
     public.batch_release_block_reason(b) LIKE '%failed%',

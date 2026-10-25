@@ -14,9 +14,20 @@
  *
  * Never built into the application or published.
  */
-const ROLE = new URLSearchParams(
+const PARAMS = new URLSearchParams(
   typeof location === 'undefined' ? '' : location.search,
-).get('role') ?? 'qa_manager';
+);
+const ROLE = PARAMS.get('role') ?? 'qa_manager';
+
+/**
+ * ?roles=qc_analyst,qa_manager renders somebody holding SEVERAL
+ * operational roles — the case 20261119000000 made possible and the
+ * one that broke the rail filter, because resolveWorkRole answers null
+ * for them and the PM-03 branch was being skipped. Rendering it is the
+ * only way to see that the union is what the sidebar is drawn from.
+ */
+const ROLES = (PARAMS.get('roles') ?? '')
+  .split(',').map((r) => r.trim()).filter(Boolean);
 
 export function useAuth() {
   return {
@@ -27,8 +38,12 @@ export function useAuth() {
       //  company_role is the workspace job PM-03 is about; role is the
       //  platform account type. Set both to the same thing so the
       //  harness cannot accidentally pass through an admin fallback.
-      company_role: ROLE,
-      role: ROLE,
+      //  The authoritative register since 20261119000000. company_role
+      //  below is the workspace membership and is only bridged while
+      //  it happens to hold one of the eight.
+      operational_roles: ROLES.length > 0 ? ROLES : [ROLE],
+      company_role: ROLES.length > 0 ? 'viewer' : ROLE,
+      role: ROLES.length > 0 ? 'viewer' : ROLE,
       job_title: '',
       company_id: 'c1',
       organization_id: null,

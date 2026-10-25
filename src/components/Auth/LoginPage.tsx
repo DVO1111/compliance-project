@@ -223,7 +223,10 @@ export default function LoginPage({ onRequestAccess, onBackToLanding }: LoginPag
                 color: 'var(--lp-accent)',
                 background: 'transparent',
                 border: 'none',
-                padding: 0,
+                //  Was 21px tall at 390px — under the 24px AA floor,
+                //  on the one control somebody locked out needs.
+                padding: '4px 0',
+                minHeight: 24,
                 cursor: 'pointer',
               }}
             >

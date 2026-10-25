@@ -48,8 +48,36 @@ SET client_min_messages = warning;
 --  not here to walk into that.
 CREATE OR REPLACE FUNCTION _release_batch(p_batch uuid, p_company uuid, p_actor uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_sig uuid;
+DECLARE v_sig uuid; v_prod uuid; v_spec uuid; v_mfg date;
 BEGIN
+  --  A GOVERNING SPECIFICATION, because 20261113000000 refuses to
+  --  release a batch without one. Built the way the product does —
+  --  draft, tests, then effective — so the freeze and immutability
+  --  triggers are met rather than side-stepped. Dated the day before
+  --  manufacture so it is in force when the batch was made.
+  SELECT product_id, manufacturing_date INTO v_prod, v_mfg
+    FROM public.batch_records WHERE id = p_batch;
+
+  IF v_prod IS NOT NULL AND public.batch_governing_specification(p_batch) IS NULL THEN
+    INSERT INTO public.product_specifications
+      (company_id, product_id, version, status, created_by)
+    VALUES (p_company, v_prod, 'FIX-' || substr(md5(random()::text), 1, 8), 'draft', p_actor)
+    RETURNING id INTO v_spec;
+
+    INSERT INTO public.product_specification_tests
+      (specification_id, test_name, limit_type, min_value, max_value, unit, is_required)
+    VALUES (v_spec, 'Assay', 'range', 98, 102, '%', true);
+
+    UPDATE public.product_specifications
+       SET status = 'effective', approved_by = p_actor, approved_at = now(),
+           --  No signer: this is a service-context fixture, and
+           --  20261117000000 demands either a signature or an explicit
+           --  statement that there was nobody to take one from.
+           approved_by_role = 'service',
+           effective_date = v_mfg - 1
+     WHERE id = v_spec;
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM public.batch_qc_results WHERE batch_id = p_batch) THEN
     INSERT INTO public.batch_qc_results
       (batch_id, test_name, test_method, specification, result, pass, tested_by)
@@ -385,6 +413,14 @@ $a$;
 --  — the dossier NAFDAC registers is built from batches already made — so
 --  a pre-registration batch has to be recordable. What must NOT be
 --  possible is releasing it, and that control is in the database.
+--
+--  IN SERVICE CONTEXT, deliberately. Since 20261126000000 the QC
+--  result _release_batch creates is attributed to the session, and the
+--  same session then attempts the release — so a person's session now
+--  meets BATCH_RELEASE_SELF_TESTED first and A16 would pass on the
+--  wrong refusal. Product eligibility has no service exemption, which
+--  is the point of this section, so it still fires here.
+RESET ROLE;
 DO $a2$
 DECLARE
   c_a uuid := current_setting('b7.c_a')::uuid;
@@ -436,6 +472,8 @@ BEGIN
     ok, left(coalesce(msg,''),140));
 END
 $a2$;
+--  Back to the session the sections below expect.
+SET ROLE authenticated;
 
 
 -- =====================================================================

@@ -14,6 +14,11 @@ import { StrictMode, useState } from 'react';
 import MainLayout from '../../src/components/Layout/MainLayout';
 import AccessDenied from '../../src/components/Common/AccessDenied';
 import { pageRefused } from '../../src/lib/access/roleAccess';
+//  The two auth screens. They render OUTSIDE MainLayout — there is no
+//  navigation rail before sign-in — so they are special-cased below
+//  rather than added to PAGES.
+import LoginPage from '../../src/components/Auth/LoginPage';
+import ResetPasswordPage from '../../src/components/Auth/ResetPasswordPage';
 import { useAuth } from '../../src/contexts/AuthContext';
 import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
@@ -26,14 +31,19 @@ import TraceabilityPage from '../../src/components/Materials/TraceabilityPage';
 import BatchExecutionPage from '../../src/components/Batch/BatchExecutionPage';
 import MyTasksPage from '../../src/components/Tasks/MyTasksPage';
 import DispatchPage from '../../src/components/Distribution/DispatchPage';
+import ProductSpecificationsPage from '../../src/components/Specifications/ProductSpecificationsPage';
+import BatchReleasePage from '../../src/components/BatchRelease/BatchReleasePage';
+import CoaRegisterPage from '../../src/components/Coa/CoaRegisterPage';
+import DeviationsPage from '../../src/components/Deviations/DeviationsPage';
+import MasterFormulaPage from '../../src/components/Formula/MasterFormulaPage';
 import QaManagerDashboard from '../../src/components/Dashboard/QaManagerDashboard';
 import StorekeeperDashboard from '../../src/components/Dashboard/StorekeeperDashboard';
 import DerivedRoleDashboard from '../../src/components/Dashboard/DerivedRoleDashboard';
-import { resolveWorkRole } from '../../src/lib/access/roleAccess';
+import { resolveWorkRole, resolveWorkRoles } from '../../src/lib/access/roleAccess';
 import '../../src/index.css';
 
 const PAGES: Record<string, () => JSX.Element> = {
-  'access-control': () => <AccessPage companyId="c1" canDecide />,
+  'access-control': () => <AccessPage companyId="c1" canDecide roles={['compliance_admin']} />,
   'materials': () => <MaterialsPage companyId="c1" />,
   'in-process': () => <InprocessPage companyId="c1" userId="u1" canDecide />,
   'instruments': () => <InstrumentsPage companyId="c1" />,
@@ -43,11 +53,20 @@ const PAGES: Record<string, () => JSX.Element> = {
 const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
   'qa-disposition': (role) => <QaDispositionPage companyId="c1" role={role} />,
   'goods-receipt': (role) => <GoodsReceiptPage companyId="c1" role={role} />,
-  'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} />,
+  'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} roles={role ? [role] : []} />,
   'traceability': () => <TraceabilityPage companyId="c1" />,
   'batch-execution': (role) => <BatchExecutionPage companyId="c1" userId="u1" role={role} />,
   'my-tasks': (role) => <MyTasksPage companyId="c1" role={role} />,
   'dispatch': (role) => <DispatchPage companyId="c1" userId="u1" role={role} />,
+  'product-specifications': () => <ProductSpecificationsPage companyId="c1" userId="u1" />,
+  //  Added so the screen audit covers them: each was rendering the
+  //  harness's "no fixture wired" placeholder, which proves nothing
+  //  about the page. BatchReleasePage and CoaRegisterPage read the
+  //  auth context themselves rather than taking props.
+  'batch-release': () => <BatchReleasePage />,
+  'coa': () => <CoaRegisterPage />,
+  'deviations': (role) => <DeviationsPage companyId="c1" isQa={role === 'qa_manager'} />,
+  'master-formulas': () => <MasterFormulaPage companyId="c1" />,
 };
 
 /** The same role-to-dashboard choice App.tsx makes. */
@@ -70,6 +89,15 @@ function Harness() {
   const initial = new URLSearchParams(location.search).get('page') ?? 'materials';
   const [page, setPage] = useState<any>(initial);
   const render = PAGES[page as string];
+
+  //  Auth screens have no rail and no route guard, so they short-circuit
+  //  the whole shell.
+  if (page === 'login') {
+    return <LoginPage onRequestAccess={() => {}} onBackToLanding={() => {}} />;
+  }
+  if (page === 'reset-password') {
+    return <ResetPasswordPage />;
+  }
   //  THE SAME GUARD App.tsx USES, not a copy of it. Rendering the page
   //  components directly was how this harness reported a Storekeeper
   //  reaching QA disposition as a pass: it never ran the route check,

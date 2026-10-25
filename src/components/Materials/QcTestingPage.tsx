@@ -30,6 +30,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import SectionNotReady from '../Common/SectionNotReady';
+import CoaVerificationPanel from './CoaVerificationPanel';
 import StateBadge from '../Common/StateBadge';
 import {
   listLots, listSampling, listTestDefinitions, listTestResults,
@@ -42,13 +43,26 @@ import {
 } from '../../lib/materials/qcRules';
 import type { WorkRole } from '../../lib/access/permissionRequests';
 import { supabase } from '../../lib/supabase';
+import { logger } from '../../lib/logger';
 
 export interface QcTestingPageProps {
   companyId?: string | null;
   role: WorkRole | null;
+  /**
+   *  The full set of operational roles held.
+   *
+   *  `role` is kept for the existing testing controls, but it is null
+   *  for anybody holding more than one role — `resolveWorkRole`
+   *  answers null deliberately rather than picking one. The
+   *  certificate panel must not hide its control from a QC Analyst who
+   *  is also a QA Manager, so it reads this instead.
+   */
+  roles?: WorkRole[];
 }
 
-export default function QcTestingPage({ companyId, role }: QcTestingPageProps) {
+export default function QcTestingPage({ companyId, role, roles }: QcTestingPageProps) {
+  //  Fall back to the single role so an existing caller keeps working.
+  const heldRoles: WorkRole[] = roles ?? (role ? [role] : []);
   const [lots, setLots] = useState<MaterialLotRow[]>([]);
   const [open, setOpen] = useState<MaterialLotRow | null>(null);
   const [definitions, setDefinitions] = useState<TestDefinitionRow[]>([]);
@@ -68,19 +82,30 @@ export default function QcTestingPage({ companyId, role }: QcTestingPageProps) {
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
-    const { error } = await supabase.from('material_lots').select('id').limit(1);
-    setReady(!error);
-    if (!error) {
-      const [all, defs] = await Promise.all([
-        listLots(companyId, { limit: 100 }),
-        listTestDefinitions(companyId),
-      ]);
-      //  Quarantine is the testing window: received, not yet
-      //  dispositioned. A released or rejected lot has been decided.
-      setLots(all.filter((l) => l.status === 'quarantine'));
-      setDefinitions(defs);
+    try {
+      const { error } = await supabase.from('material_lots').select('id').limit(1);
+      setReady(!error);
+      if (!error) {
+        const [all, defs] = await Promise.all([
+          listLots(companyId, { limit: 100 }),
+          listTestDefinitions(companyId),
+        ]);
+        //  Quarantine is the testing window: received, not yet
+        //  dispositioned. A released or rejected lot has been decided.
+        setLots(all.filter((l) => l.status === 'quarantine'));
+        setDefinitions(defs);
+      }
+    } catch (err) {
+      //  HS-07. A load that fails for any reason other than the table
+      //  being absent — a refused policy, a dropped connection — used
+      //  to leave the page on its spinner with nothing said. Plain
+      //  words, nothing lost, and the list stays as it was.
+      logger.error('[qc-testing] load failed', err);
+      setNotice({ tone: 'bad', text:
+        'Could not load this page just now. Nothing has been lost — try again in a moment.' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [companyId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -161,6 +186,20 @@ export default function QcTestingPage({ companyId, role }: QcTestingPageProps) {
           <h2 style={{ margin: 0, fontSize: 19 }}>Lot {open.lot_number}</h2>
           <span style={sub}>{testingHeadline(lines)}</span>
         </header>
+
+        {/*
+          *  The supplier's certificate comes BEFORE sampling in the
+          *  real sequence — it arrives with the delivery — so it is
+          *  shown first. It is also the one act on this screen whose
+          *  authority differs from recording a test result, which is
+          *  why it reads the role set rather than `mayRecord`.
+          */}
+        <CoaVerificationPanel
+          lotId={open.id}
+          lotNumber={open.lot_number}
+          roles={heldRoles}
+          onVerified={() => { void loadLot(open.id); }}
+        />
 
         <section style={card}>
           <h3 style={{ margin: 0, fontSize: 16 }}>Sampling</h3>
@@ -308,7 +347,10 @@ const empty: React.CSSProperties = {
   margin: 0, padding: '18px 0', fontSize: 15, lineHeight: '23px', color: '#5b6472',
 };
 const back: React.CSSProperties = {
-  border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+  //  padding + a 24px floor: measured at 390px this was under the WCAG
+  //  2.5.8 AA minimum, and it is the only way out of the lot detail.
+  border: 'none', background: 'transparent', padding: '4px 0', minHeight: 24,
+  cursor: 'pointer',
   fontSize: 14, color: '#2b3038', fontWeight: 600, alignSelf: 'flex-start',
 };
 const card: React.CSSProperties = {

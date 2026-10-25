@@ -22,6 +22,11 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type Profile = ProfileRow & {
   company_role?: string | null;        // 'owner' | 'admin' | 'member' | etc
   module_access?: string[] | null;     // module keys assigned at invite time
+  //  PM-03's operational roles, from operational_role_assignments — a
+  //  different register from company_role above, and the only one the
+  //  permission grid reads. Several, because one person may hold more
+  //  than one. Empty means they hold none, which abstains.
+  operational_roles?: string[];
   customPermissions?: Partial<Permissions> | null; // from custom_roles JSONB
 };
 
@@ -269,12 +274,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     //  Several rows come back for someone in more than one company, which
     //  is why the profile's company_id still decides which one counts
     //  rather than "the first one".
-    const [profileRes, memberRes] = await Promise.all([
+    //  operational_role_assignments is fetched in the same round as the
+    //  other two. It is a different register from company_members: that
+    //  one says what somebody is to the workspace (owner, admin,
+    //  viewer), this one says what they may do on the floor. Since
+    //  20261119000000 the second is the only one PM-03 reads.
+    const [profileRes, memberRes, roleRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       (supabase as any)
         .from('company_members')
         .select('company_id, role, module_access')
         .eq('user_id', userId),
+      (supabase as any)
+        .from('operational_role_assignments')
+        .select('company_id, role')
+        .eq('user_id', userId)
+        .is('revoked_at', null),
     ]);
 
     if (profileRes.error) {
@@ -306,6 +321,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       company_role = row?.role ?? null;
       const raw = row?.module_access;
       module_access = Array.isArray(raw) && raw.length > 0 ? raw : null;
+    }
+
+    //  Empty, not null, when there are none. "Holds no operational role"
+    //  is a fact the screens act on — it abstains rather than refuses —
+    //  and it must not be confused with "we could not find out".
+    let operational_roles: string[] = [];
+    if (roleRes?.error) {
+      //  Before 20261119000000 is deployed the table does not exist, and
+      //  a workspace signing in against an older database should still
+      //  work. Logged rather than thrown, and left empty.
+      logger.warn('loadProfile operational roles lookup failed:', roleRes.error.message);
+    } else if (baseProfile.company_id) {
+      operational_roles = ((roleRes?.data as any[]) ?? [])
+        .filter((r) => r.company_id === baseProfile.company_id)
+        .map((r) => String(r.role));
     }
 
     //  The custom role is the one lookup that genuinely cannot start
@@ -340,7 +370,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     setProfileLoadError(null);
-    setProfile({ ...baseProfile, company_role, module_access, customPermissions });
+    setProfile({
+      ...baseProfile, company_role, module_access, operational_roles, customPermissions,
+    });
   };
 
   const signUp = async (
@@ -745,6 +777,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadProfile(user.id);
     }
   };
+
+  //  ── A REVOKED ROLE AND AN OPEN TAB ──
+  //
+  //  The server stops authorising a revoked role on the next
+  //  statement: app_work_roles reads the table and the session carries
+  //  no copy of the answer. The CLIENT does carry a copy — the roles
+  //  loaded at sign-in sit in React state — so a tab left open since
+  //  before a revocation keeps drawing the navigation of a role its
+  //  owner no longer holds.
+  //
+  //  Nothing is exposed by that: every write is refused server-side
+  //  and the screen was never the control. What it produces is a
+  //  person clicking something that then fails, which is a bad way to
+  //  find out. So the roles are re-read when the tab comes back to
+  //  the foreground, which is when somebody returns to a screen they
+  //  left open.
+  //
+  //  It bounds the staleness; it does not eliminate it, and it is not
+  //  a security boundary. docs/operational-role-model.md says so.
+  useEffect(() => {
+    if (!user) return;
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') {
+        loadProfile(user.id).catch(() => { /* a failed refresh keeps the last answer */ });
+      }
+    };
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [user?.id]);
 
   return (
     <AuthContext.Provider

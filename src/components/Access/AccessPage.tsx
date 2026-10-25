@@ -25,6 +25,7 @@ import AccessRequestsInbox from './AccessRequestsInbox';
 import ReviewRequestDrawer from './ReviewRequestDrawer';
 import SectionNotReady from '../Common/SectionNotReady';
 import PeopleTab from './PeopleTab';
+import StrandedWorkPanel from './StrandedWorkPanel';
 import type { RoleRow, StepPermission } from './RolesMatrix';
 import type { WaitingRequest, DecidedRequest } from './AccessRequestsInbox';
 import {
@@ -40,6 +41,12 @@ import { logger } from '../../lib/logger';
 
 export interface AccessPageProps {
   companyId?: string | null;
+  /**
+   *  The viewer's operational roles. Needed because reassigning
+   *  stranded work is authorised by role-administration OR Act in the
+   *  section, and a two-role holder must get the union.
+   */
+  roles?: WorkRole[];
   /** Whether this viewer may decide on requests. The inbox is shown to
    *  everybody — seeing who is waiting is not privileged — but the
    *  review drawer only opens for somebody who can act on it. */
@@ -148,7 +155,7 @@ function toDecided(r: PermissionRequestRow): DecidedRequest {
   };
 }
 
-export default function AccessPage({ companyId, canDecide = false }: AccessPageProps) {
+export default function AccessPage({ companyId, canDecide = false, roles: viewerRoles = [] }: AccessPageProps) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [waiting, setWaiting] = useState<WaitingRequest[]>([]);
   const [decided, setDecided] = useState<DecidedRequest[]>([]);
@@ -283,7 +290,14 @@ export default function AccessPage({ companyId, canDecide = false }: AccessPageP
       {tab === 'roles' && <RolesMatrix roles={roles} sections={SECTIONS} steps={STEPS} />}
 
       {tab === 'people' && (
-        <PeopleTab companyId={companyId} canManage={canDecide} />
+        <>
+          <PeopleTab companyId={companyId} canManage={canDecide} />
+          {/*
+            *  Sits with the people, because that is where a revocation
+            *  happens and where the consequence has to be visible.
+            */}
+          <StrandedWorkPanel companyId={companyId} roles={viewerRoles} />
+        </>
       )}
 
       {tab === 'requests' && (requestsReady === false ? (
