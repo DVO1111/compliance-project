@@ -406,26 +406,31 @@ export const DESTINATIONS: Record<PageId, Destination> = {
   //
   //  So Settings is ONE rail item and these are its sections. Phase 2
   //  turns the nesting into CF-02's actual sections.
-  'company-settings': { kind: 'rail', group: 'Settings', label: 'Settings', order: 1 },
-  'company-members': { kind: 'hosted', host: 'company-settings', label: 'Members' },
-  'company-invites': { kind: 'hosted', host: 'company-settings', label: 'Invites' },
-  'company-departments': { kind: 'hosted', host: 'company-settings', label: 'Departments' },
-  'role-management': { kind: 'hosted', host: 'company-settings', label: 'Role Management' },
-  'access-control': { kind: 'hosted', host: 'company-settings', label: 'Roles & Access' },
+  //  CF-02's home is the rail entry. The company-profile page is one
+  //  section inside it, not the gate for all of Settings — it is guarded
+  //  by canManageRoles, and routing every configuration area behind that
+  //  put Billing behind role administration.
+  'settings-home': { kind: 'rail', group: 'Settings', label: 'Settings', order: 1 },
+  'company-settings': { kind: 'hosted', host: 'settings-home', label: 'Company profile' },
+  'company-members': { kind: 'hosted', host: 'settings-home', label: 'Members' },
+  'company-invites': { kind: 'hosted', host: 'settings-home', label: 'Invites' },
+  'company-departments': { kind: 'hosted', host: 'settings-home', label: 'Departments' },
+  'role-management': { kind: 'hosted', host: 'settings-home', label: 'Role Management' },
+  'access-control': { kind: 'hosted', host: 'settings-home', label: 'Roles & Access' },
   //  HS-01 row 12 BUILD: a read-only list filtered to one record or
   //  one area, reached from Settings and from "View audit trail" on a
   //  record. It was a Traceability rail item, which HS-02 does not do.
-  'audit-trail': { kind: 'hosted', host: 'company-settings', label: 'Audit trail' },
-  'billing': { kind: 'hosted', host: 'company-settings', label: 'Billing & Plan' },
-  'org-management': { kind: 'hosted', host: 'company-settings', label: 'Org Management' },
-  'identity-providers': { kind: 'hosted', host: 'company-settings', label: 'Single Sign-On' },
-  'integrations': { kind: 'hosted', host: 'company-settings', label: 'Integrations' },
-  'pharma-integrations': { kind: 'hosted', host: 'company-settings', label: 'Pharma Integrations' },
-  'platform-webhooks': { kind: 'hosted', host: 'company-settings', label: 'Outbound Webhooks' },
-  'platform-jobs': { kind: 'hosted', host: 'company-settings', label: 'Platform Jobs' },
-  'platform-ecosystem': { kind: 'hosted', host: 'company-settings', label: 'Partner Ecosystem' },
-  'secret-vault': { kind: 'hosted', host: 'company-settings', label: 'Secret Vault' },
-  'partner-verification': { kind: 'hosted', host: 'company-settings', label: 'Partner Verification' },
+  'audit-trail': { kind: 'hosted', host: 'settings-home', label: 'Audit trail' },
+  'billing': { kind: 'hosted', host: 'settings-home', label: 'Billing & Plan' },
+  'org-management': { kind: 'hosted', host: 'settings-home', label: 'Org Management' },
+  'identity-providers': { kind: 'hosted', host: 'settings-home', label: 'Single Sign-On' },
+  'integrations': { kind: 'hosted', host: 'settings-home', label: 'Integrations' },
+  'pharma-integrations': { kind: 'hosted', host: 'settings-home', label: 'Pharma Integrations' },
+  'platform-webhooks': { kind: 'hosted', host: 'settings-home', label: 'Outbound Webhooks' },
+  'platform-jobs': { kind: 'hosted', host: 'settings-home', label: 'Platform Jobs' },
+  'platform-ecosystem': { kind: 'hosted', host: 'settings-home', label: 'Partner Ecosystem' },
+  'secret-vault': { kind: 'hosted', host: 'settings-home', label: 'Secret Vault' },
+  'partner-verification': { kind: 'hosted', host: 'settings-home', label: 'Partner Verification' },
 
   // ── STANDALONE AND EXTERNAL ───────────────────────────────────────
   'profile': { kind: 'standalone', via: 'The avatar menu in the top bar.' },

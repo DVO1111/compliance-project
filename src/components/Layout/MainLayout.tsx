@@ -4,6 +4,7 @@ import { resolveWorkRoles, pageOpenableBy, PAGE_SECTION } from '../../lib/access
 import {
   RAIL_GROUPS, BEYOND_DESIGN, DESTINATIONS, railEntryFor,
 } from '../../lib/navigation/hs02';
+import { mayOpenSettingsHome } from '../../lib/navigation/settingsSections';
 import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
@@ -72,6 +73,7 @@ import {
   Lock,
   ChevronRight,
   Boxes,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 import { appUrl } from '../../lib/routing';
@@ -87,6 +89,11 @@ export type PageId =
   | 'company-invites'
   | 'company-departments'
   | 'company-settings'
+  //  CF-02's Settings home. Added by Phase 2: the rail entry called
+  //  "Settings" used to be the company-profile page, which is guarded by
+  //  canManageRoles, so every configuration area sat behind a
+  //  role-administration permission.
+  | 'settings-home'
   | 'correction-editor'
   | 'profile'
   | 'license-vault'
@@ -253,6 +260,7 @@ export const PAGE_IDS = [
   'shipment-event-log', 'cn-declarations', 'compliance-alerting', 'audit-prep',
   'coa',
   'product-specifications',
+  'settings-home',
 ] as const;
 
 /**
@@ -598,6 +606,12 @@ export default function MainLayout({
 
       // ── 11. Administration ───────────────────────────────────────────
       { id: 'billing', label: 'Billing & Plan', icon: CreditCard, category: 'Administration', hidden: !perms.canViewBilling },
+      //  CF-02. The gate is the UNION of the sections' own existing
+      //  checks — never a permission of its own — so this entry appears
+      //  exactly when there is something behind it. See
+      //  lib/navigation/settingsSections.ts.
+      { id: 'settings-home', label: 'Settings', icon: SettingsIcon, category: 'Administration',
+        hidden: !mayOpenSettingsHome(perms, profile as never) },
       { id: 'company-settings', label: 'Company Settings', icon: Building2, category: 'Administration', hidden: !perms.canManageRoles },
       { id: 'company-members', label: 'Members', icon: User, category: 'Administration', hidden: !perms.canViewMembers },
       { id: 'company-invites', label: 'Invites', icon: User, category: 'Administration', hidden: !perms.canInvite },

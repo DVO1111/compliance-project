@@ -204,14 +204,32 @@ describe('no feature is advertised twice', () => {
     expect(hosted).toEqual(['ctd-dossier', 'license-vault', 'son-compliance']);
   });
 
-  it('puts every company-configuration page inside Settings', () => {
-    const settings = hostedUnder('company-settings').map((c) => c.id);
+  //  Phase 2 moved these under CF-02's Settings HOME rather than under
+  //  the company-profile page. The distinction matters: the profile page
+  //  is guarded by canManageRoles, so hosting Billing under it would put
+  //  Billing behind role administration.
+  it('puts every company-configuration page inside the Settings home', () => {
+    const settings = hostedUnder('settings-home').map((c) => c.id);
     for (const id of [
-      'company-members', 'company-invites', 'company-departments',
-      'role-management', 'access-control', 'audit-trail', 'billing',
+      'company-settings', 'company-members', 'company-invites',
+      'company-departments', 'role-management', 'access-control',
+      'audit-trail', 'billing',
     ] as PageId[]) {
       expect(settings, `${id} should be a Settings section`).toContain(id);
     }
+  });
+
+  it('makes the Settings home the rail entry, not the company-profile page', () => {
+    expect(DESTINATIONS['settings-home']).toMatchObject({
+      kind: 'rail', group: 'Settings', label: 'Settings',
+    });
+    expect(DESTINATIONS['company-settings']).toMatchObject({
+      kind: 'hosted', host: 'settings-home',
+    });
+  });
+
+  it('hosts nothing under the company-profile page any more', () => {
+    expect(hostedUnder('company-settings')).toEqual([]);
   });
 });
 

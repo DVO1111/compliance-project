@@ -24,6 +24,7 @@ import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
 import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
+import SettingsHomePage from '../../src/components/Settings/SettingsHomePage';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
@@ -47,6 +48,11 @@ const PAGES: Record<string, () => JSX.Element> = {
   'materials': () => <MaterialsPage companyId="c1" />,
   'in-process': () => <InprocessPage companyId="c1" userId="u1" canDecide />,
   'instruments': () => <InstrumentsPage companyId="c1" />,
+  //  CF-02's Settings home. Takes no props: it reads the signed-in
+  //  profile and derives which sections the viewer may open, which is
+  //  exactly the behaviour worth looking at here — ?role= changes what
+  //  the page lists.
+  'settings-home': () => <SettingsHomePage />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */

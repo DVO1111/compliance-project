@@ -5,6 +5,7 @@ import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { pageRefused, resolveWorkRole, resolveWorkRoles } from './lib/access/roleAccess';
+import { mayOpenSettingsHome } from './lib/navigation/settingsSections';
 import QaDispositionPage from './components/Materials/QaDispositionPage';
 import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QcTestingPage from './components/Materials/QcTestingPage';
@@ -206,6 +207,7 @@ const WebhooksPage              = lazyPage(() => import('./components/Platform/W
 const EvidenceIngestionsPage    = lazyPage(() => import('./components/Platform/EvidenceIngestionsPage'));
 const EcosystemHubPage          = lazyPage(() => import('./components/Platform/EcosystemHubPage'));
 const CompanySettingsPage       = lazyPage(() => import('./components/company/CompanySettingsPage'));
+const SettingsHomePage          = lazyPage(() => import('./components/Settings/SettingsHomePage'));
 const BillingPage               = lazyPage(() => import('./components/Billing/BillingPage'));
 const BatchReleasePage          = lazyPage(() => import('./components/BatchRelease/BatchReleasePage'));
 const ChangeControlPage         = lazyPage(() => import('./components/ChangeControl/ChangeControlPage'));
@@ -983,6 +985,12 @@ function AppContent() {
 
       case 'training-log':
         return perms.canViewTraining ? <TrainingLogPage /> : <AccessDenied />;
+
+      //  CF-02. Guarded by the UNION of the sections' own existing
+      //  checks, so it grants nothing: each card inside leads to a page
+      //  that re-checks its own permission below before rendering.
+      case 'settings-home':
+        return mayOpenSettingsHome(perms, profile as never) ? <SettingsHomePage /> : <AccessDenied />;
 
       case 'company-settings':
         return perms.canManageRoles ? <CompanySettingsPage /> : <AccessDenied />;

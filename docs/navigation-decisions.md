@@ -122,3 +122,80 @@ the resolution. The already-resolved case is now tested first.
   `legal-partner-dashboard`** are reachable outside the rail by
   statement (`kind: 'standalone'`), each with its route recorded.
 - The four `review` pages above need the owner's call.
+
+---
+
+## Phase 2 — the qa_manager gap, and Settings consolidation
+
+### D5 — `qa_manager` gets a dedicated least-privilege preset
+
+The owner refused the obvious repair (pointing `qa_manager` at the
+existing `quality` preset) because that preset carries unrelated
+capability including administration. So:
+
+| Change | Detail |
+|---|---|
+| `canonicalRole()` | `"qa_manager"`, `"qa manager"` and `"qa-manager"` now resolve to a new `qa_manager` key. `norm()` only trims and lower-cases, so each separator variant had to be listed; all three occur in this codebase. **`norm()` was not widened**, because folding separators globally would start matching other roles (`"quality manager"` → the broader `quality` preset) — a widening nobody asked for. |
+| `SYSTEM_ROLE_DEFAULTS.qa_manager` | A new preset, all eighty keys written out, **four** set true. |
+
+**Granted:** `canViewObligations`, `canViewRiskRegister`, `canViewPolicies` (D1's three) — plus `canViewMyPolicies`.
+
+That fourth key needs its justification stated, because it is beyond the
+three the instruction listed. `canViewMyPolicies` is referenced in
+**exactly one place** in the application: the `hidden` test on the My
+Policies nav item. It gates no route, no write and no service call, and
+the *route* for that page is guarded by `canViewPolicies`, which this
+role has. Withholding it would therefore deny nothing — it would leave a
+page the role is authorised to open and unable to find. Every other
+preset granting `canViewPolicies` also grants it. A test asserts the
+key's single usage, so if it ever starts gating something real, the
+grant fails and has to be re-argued.
+
+**Explicitly not granted:** `canManagePolicies`, `canPublishPolicies`,
+`canManageRoles`, `canViewMembers`, `canInvite`, `canViewBilling`,
+`canViewIntegrations`, `canManageApiKeys`, `canViewAuditTrail`,
+`canManageVendors`, `canManageAuditWorkspace`, `canViewAIDashboard`, and
+the remaining 66 keys. Asserted both by name and by count.
+
+Operational access is unaffected and does not come from here: PM-03
+governs it through `PAGE_SECTION`, and for a page the grid tabulates the
+grid is the sole authority.
+
+**Verified rather than inferred.** Rendering the three spellings before
+and after: `qa_manager` saw none of the three pages, now sees all three;
+`quality_manager` and `compliance` are unchanged.
+
+### D6 — Settings is a home, not the company-profile page
+
+`company-settings` is guarded by `canManageRoles` and *was* the rail
+entry called "Settings". Consolidating behind it would have put every
+configuration area behind role administration — a person allowed to see
+Billing and nothing else would have needed role-admin to reach Billing.
+
+So a new page, `settings-home`, is the rail entry, and
+`company-settings` becomes one section inside it. The home is gated by
+the **union of the sections' own existing checks** and lists only the
+sections the viewer holds. It has no permission of its own, and no new
+permission key was added — asserted.
+
+Rendered per role: `qa_manager` sees one card (the ungated role matrix)
+and no configuration area; `marketing` two; `executive` twelve.
+
+One behaviour preserved deliberately: `access-control` carried **no
+gate** as a sidebar entry and keeps none, so the home is never empty
+today and every viewer still reaches the role matrix exactly as before.
+Consolidating is not the place to start refusing something.
+
+### Outstanding after Phase 2
+
+- **`qa_officer` has the same defect `qa_manager` had.** PM-03 names it;
+  `canonicalRole()` does not know it, so it resolves to
+  `EMPTY_PERMISSIONS`. Out of scope here — the instruction covered
+  `qa_manager` — and asserted in a test so the gap is recorded rather
+  than merely described.
+- **`quality_manager` and `qa_manager` name one job and resolve
+  differently** (the broader `quality` preset versus the narrow one).
+  Kept on purpose: changing the former was explicitly out of scope.
+- The nesting under each host is still transitional. Settings now has a
+  real home; the other hosts (Materials tabs, Batch Release ›
+  Certificates, Registrations & Licences tabs) do not yet.

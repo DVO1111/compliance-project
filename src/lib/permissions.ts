@@ -458,6 +458,131 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
     canViewComplianceAlerts: true, canViewAuditPrep: true,
     canViewIntegrations: false, canViewBilling: false,
   },
+  /**
+   * qa_manager — LEAST PRIVILEGE, and deliberately not the `quality` preset.
+   *
+   * PM-03 names this role `qa_manager`; canonicalRole() knew only
+   * "quality_manager", so a QA Manager fell through to EMPTY_PERMISSIONS
+   * and could not see Obligations, Risk Register or Policies — the three
+   * pages decision D1 put in the pilot. Rendering the three spellings
+   * showed it plainly: qa_manager saw none of them, quality_manager and
+   * compliance saw all three.
+   *
+   * The obvious repair — point `qa_manager` at `quality` — was REFUSED by
+   * the product owner, and rightly: that preset carries canViewMembers,
+   * canManageRoles-adjacent administration and a long tail of unrelated
+   * capability. Fixing navigation is not a reason to widen authority.
+   *
+   * So this preset grants three view permissions, plus one that carries
+   * no authority at all, and nothing else. Every one of the eighty keys
+   * is written out rather than spread from EMPTY_PERMISSIONS, so that a
+   * permission added later forces an explicit decision here instead of
+   * arriving switched on.
+   *
+   * THE FOURTH KEY, AND WHY IT IS NOT A WIDENING. `canViewMyPolicies` is
+   * referenced in exactly one place in the application — the `hidden`
+   * test on the My Policies nav item — and gates no route, no write and
+   * no service call. The ROUTE for that page is guarded by
+   * `canViewPolicies`, which this preset grants. Withholding the
+   * visibility flag would therefore not deny anything; it would leave a
+   * page this role is authorised to open and unable to find, which is
+   * the inconsistency item 6 asks to remove. Every other preset that
+   * grants canViewPolicies also grants this.
+   *
+   * WHAT THIS DELIBERATELY DOES NOT GRANT:
+   *   - canManagePolicies / canPublishPolicies — viewing a policy is not
+   *     authoring or publishing one.
+   *   - canManageRoles, canViewMembers, canInvite — role administration.
+   *   - canViewBilling, canViewIntegrations, canManageApiKeys and the
+   *     rest of the administrative surface.
+   *
+   * A QA Manager's OPERATIONAL access is untouched by this and does not
+   * come from here: PM-03 governs it through PAGE_SECTION, and for a
+   * page the grid tabulates the grid is the sole authority. This preset
+   * only answers for the pages PM-03 does not tabulate.
+   */
+  qa_manager: {
+    canViewMembers: false,
+    canInvite: false,
+    canRevokeInvite: false,
+    canViewLegalReview: false,
+    canUpload: false,
+    canViewArchive: false,
+    canViewTraining: false,
+    canViewLicenseVault: false,
+    canViewAuditTrail: false,
+    canManageRoles: false,
+    canViewDriftMonitor: false,
+    canViewConsentManagement: false,
+    canViewContentBlocks: false,
+    canViewAgencyPortal: false,
+    canViewComplianceReporting: false,
+    canViewHorizonScanning: false,
+    canViewChannelRules: false,
+    canViewRegulatoryLibrary: false,
+    canViewTranslationCompliance: false,
+    canViewCrisisResponse: false,
+    canViewProgrammaticAd: false,
+    canViewWhistleblower: false,
+    canViewPredictiveRisk: false,
+    canViewSocialListening: false,
+    canViewWebsiteMonitoring: false,
+    canViewVendorScorecard: false,
+    canViewCapaManagement: false,
+    canViewTrainingSimulation: false,
+    canViewClaimExtraction: false,
+    canViewPharmaIntegrations: false,
+    canViewGrcFrameworks: false,
+    canManageGrcFrameworks: false,
+    canViewGrcControls: false,
+    canManageGrcControls: false,
+    canViewGrcDashboard: false,
+    canViewGrcAutomation: false,
+    canManageGrcAutomation: false,
+    canViewPolicies: true,
+    canManagePolicies: false,
+    canPublishPolicies: false,
+    canViewMyPolicies: true,
+    canViewVendors: false,
+    canManageVendors: false,
+    canViewAuditWorkspace: false,
+    canManageAuditWorkspace: false,
+    canViewIdentity: false,
+    canManageIdentity: false,
+    canViewAuditExports: false,
+    canManageAuditExports: false,
+    canViewPlatformJobs: false,
+    canManagePlatformJobs: false,
+    canViewRetention: false,
+    canManageRetention: false,
+    canViewLegalHold: false,
+    canManageLegalHold: false,
+    canViewGovernanceTimeline: false,
+    canViewAIGovernance: false,
+    canManageAIAssets: false,
+    canViewAIUsage: false,
+    canManageAIUsageReviews: false,
+    canViewAIIncidents: false,
+    canManageAIIncidents: false,
+    canViewAIReviews: false,
+    canManageAIReviews: false,
+    canViewAIPrompts: false,
+    canManageAIPrompts: false,
+    canViewAIDashboard: false,
+    canManageApiKeys: false,
+    canViewWebhooks: false,
+    canManageWebhooks: false,
+    canViewEvidenceIngestions: false,
+    canManageEvidenceIngestions: false,
+    canViewEcosystem: false,
+    canManageEcosystem: false,
+    canViewObligations: true,
+    canViewRiskRegister: true,
+    canViewComplianceAlerts: false,
+    canViewAuditPrep: false,
+    canViewIntegrations: false,
+    canViewBilling: false,
+  },
 };
 
 /** All-false baseline */
@@ -528,6 +653,21 @@ function canonicalRole(role: string): string {
   if (r === "agency" || r === "external" || r === "vendor") return "agency";
   if (r === "auditor") return "auditor";
   if (r === "quality" || r === "qa" || r === "quality_manager" || r === "production") return "quality";
+  //  PM-03's own spelling of the role, plus the two separator variants
+  //  that occur in this codebase ("QA Manager" in copy, "qa-manager" in
+  //  one fixture). norm() only trims and lower-cases — it does NOT fold
+  //  separators, which is precisely why "QA Manager" missed
+  //  "quality_manager" above and the role resolved to nothing. Listed
+  //  explicitly rather than by widening norm(), because folding
+  //  separators globally would silently start matching other roles
+  //  ("quality manager" -> the broader `quality` preset) and that is a
+  //  widening nobody asked for.
+  //
+  //  Note the asymmetry this leaves on purpose: "quality_manager" still
+  //  resolves to `quality` and "qa_manager" to the narrower preset,
+  //  though they name one job. Changing the former was out of scope —
+  //  it is recorded in docs/navigation-decisions.md as outstanding.
+  if (r === "qa_manager" || r === "qa manager" || r === "qa-manager") return "qa_manager";
   return r;
 }
 

@@ -16,12 +16,12 @@ that guesses reads as evidence, which is worse than one with gaps.
 | Destination kind | Pages |
 |---|---|
 | `rail` — a top-level entry | 20 |
-| `hosted` — inside another entry | 52 |
+| `hosted` — inside another entry | 53 |
 | `detail` — a record page of its list | 6 |
 | `pendingDesign` — in scope, design owed (D3) | 24 |
 | `review` — works, needs owner confirmation | 4 |
 | `standalone` — reachable outside the rail | 4 |
-| **Total** | **110** |
+| **Total** | **111** |
 
 Every page has exactly one destination, enforced by the type
 `Record<PageId, Destination>`: a page with none does not compile.
@@ -1209,13 +1209,13 @@ There is no fallback group, and `More` is not a group any more.
 | Tests | _navigation only: covered by `src/tests/hs02Navigation.test.ts`_ |
 
 
-### Settings — 17 pages
+### Settings — 18 pages
 
 #### `company-members`
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Members” |
+| Destination | Inside **settings-home** as “Members” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1228,7 +1228,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Invites” |
+| Destination | Inside **settings-home** as “Invites” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1241,7 +1241,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Departments” |
+| Destination | Inside **settings-home** as “Departments” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1254,7 +1254,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Rail: **Settings › Settings** |
+| Destination | Inside **settings-home** as “Company profile” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1267,7 +1267,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Integrations” |
+| Destination | Inside **settings-home** as “Integrations” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1280,7 +1280,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Audit trail” |
+| Destination | Inside **settings-home** as “Audit trail” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1293,7 +1293,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Role Management” |
+| Destination | Inside **settings-home** as “Role Management” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1306,7 +1306,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Org Management” |
+| Destination | Inside **settings-home** as “Org Management” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1319,7 +1319,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Roles & Access” |
+| Destination | Inside **settings-home** as “Roles & Access” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1332,7 +1332,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Pharma Integrations” |
+| Destination | Inside **settings-home** as “Pharma Integrations” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1345,7 +1345,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Secret Vault” |
+| Destination | Inside **settings-home** as “Secret Vault” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1358,7 +1358,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Partner Verification” |
+| Destination | Inside **settings-home** as “Partner Verification” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1371,7 +1371,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Single Sign-On” |
+| Destination | Inside **settings-home** as “Single Sign-On” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1384,7 +1384,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Platform Jobs” |
+| Destination | Inside **settings-home** as “Platform Jobs” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1397,7 +1397,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Outbound Webhooks” |
+| Destination | Inside **settings-home** as “Outbound Webhooks” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1410,7 +1410,7 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Partner Ecosystem” |
+| Destination | Inside **settings-home** as “Partner Ecosystem” |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
@@ -1423,7 +1423,20 @@ There is no fallback group, and `More` is not a group any more.
 
 | | |
 |---|---|
-| Destination | Inside **company-settings** as “Billing & Plan” |
+| Destination | Inside **settings-home** as “Billing & Plan” |
+| Pilot scope | In pilot |
+| Design | Approved design, or placed by HS-02’s own table |
+| Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
+| Services | _not assessed in this phase_ |
+| Data model / RLS | _not assessed in this phase_ |
+| Functional status | _not assessed in this phase_ |
+| Tests | _navigation only: covered by `src/tests/hs02Navigation.test.ts`_ |
+
+#### `settings-home`
+
+| | |
+|---|---|
+| Destination | Rail: **Settings › Settings** |
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
