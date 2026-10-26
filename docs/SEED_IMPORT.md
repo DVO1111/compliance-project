@@ -1,86 +1,37 @@
 # Seed-data import
 
-> ## Status, 26 October 2026 — the package is still not here
+> ## Status, 27 October 2026 — package received, reconciled, NOT loadable
 >
-> `seed/incoming/` **does not exist** in this workspace. A search of the
-> whole filesystem finds no `generate.py` belonging to this package (the
-> only hits are Google Cloud SDK files), and none of the named SQL or
-> workbook files.
+> The package arrived and is extracted under `seed/incoming/` (git-ignored).
+> It has been inspected and reconciled against this application's schema.
 >
-> **Not inspected, not regenerated, not reconciled, not imported:**
+> **Result: 0 of its 42 tables are compatible. 170 blockers.** The generator
+> targets `source/prd_tables_extracted.sql`, and this application's schema
+> has moved on from that extract independently — the two describe the same
+> domain, not the same database.
 >
-> | File | Status |
-> |---|---|
-> | `README.md.docx` | missing |
-> | `generate.py` | missing |
-> | `prd_tables_extracted.sql` | missing |
-> | `00_assumed_tables.sql` | missing |
-> | `10_seed_demo.sql` | missing |
-> | `20_lifecycle_state.sql` | missing |
-> | `30_reset_demo.sql` | missing |
-> | SQL archive (`.zip`) | missing |
-> | Excel exports archive (`.zip`) | missing |
+> Full findings, candidate mappings scored by column overlap, and the three
+> blockers that are not about column names (electronic-signature hashes,
+> the 11 required Auth accounts, and demo scoping) are in
+> **`docs/seed/RECONCILIATION_2026-10-27.md`**.
 >
-> The 528-row/12-table and 882-row/42-table figures, the 11 demo users and
-> the three archive formats are **quoted from the brief**, not findings. I
-> have not seen a row of this data.
+> Confirmed independently: the workbooks and the generated SQL are **one
+> dataset** — 770 + 112 = 882 INSERTs across 40 + 2 = 42 tables, matching
+> the package note exactly. They must not be loaded twice. The generator is
+> canonical; the workbooks are cross-check material.
 >
-> Place the files at exactly `seed/incoming/<filename>` and say so. The
-> directory is git-ignored, so nothing real enters the repository history.
+> The 11 `.example` demo users are **story actors, not the allowlist**, and
+> have not been added to `allowed_signins`.
 >
-> Ready and waiting for them: `docs/seed/SCHEMA_INVENTORY.md` (285 tables,
-> every column, type, nullability, default and required-column list,
-> generated from the migrations), and the validating importer below.
+> Reproduce the findings:
 >
-> **One question needs your answer before import, not after:** whether the
-> Excel workbook export and the generated SQL are the same records in two
-> formats. If they are and both are imported, every row is duplicated. The
-> validator catches duplicates *within* a file and against the database on
-> a second run; it cannot know that two different files describe one
-> dataset. Tell me which is authoritative, or I will treat the generator's
-> output as the source of truth and the workbook as a cross-check only.
-
-
-## The Drive folder could not be read — what I need from you
-
-`https://drive.google.com/drive/folders/1tzyC2WxLVfmm9CFf1PUaNYIAr6vZhMt9`
-was **not** inspected. I am not describing files I have not seen.
-
-Two independent reasons:
-
-1. The **Google Drive connector is installed but not connected** for this
-   session (`installState: not_connected`). Its tools are unavailable.
-2. This container's egress proxy **cannot resolve `drive.google.com`**, so a
-   direct fetch fails at DNS.
-
-Neither is fixable from here. To proceed, either connect the Google Drive
-connector for this workspace, or **upload the files into the repository**
-under `seed/incoming/` (git-ignored — see below) and tell me they are there.
-
-### What to send, and what I will report back
-
-Per file, once I can read them, Task 4 asks for: contents and purpose,
-target tables/columns/relationships, required fields and how foreign keys
-are matched, whether it is reference data / company records / user data /
-demo data, import order and dependencies, and any duplicates, invalid
-values, missing relationships, sensitive data or conflicts with existing
-migrations. The validator below produces most of that mechanically; the
-classification needs me to read them.
-
-### One thing to decide before you send them
-
-**The approved-user list is already settled and is not in that folder.** The
-source of truth is `public.allowed_signins` in project
-`ovxfflilbqaxedzovgmz`, which currently holds five addresses. Seed data and
-the Auth allowlist are kept separate on purpose.
-
-If the folder contains a file of email addresses, **I will not treat it as
-the allowlist** unless you tell me explicitly that it is. A file containing
-emails is far more likely to be contacts, operators or demo users, and
-quietly promoting one to "approved to register" would be the worst possible
-guess. Name the file if it is meant to be authoritative.
-
----
+> ```bash
+> PGHOST=/tmp PGPORT=5432 PGUSER=postgres npx tsx scripts/seed/reconcile.ts
+> PGHOST=/tmp PGPORT=5432 PGUSER=postgres bash scripts/seed/rehearse.sh
+> ```
+>
+> Both are read-only and operate on a throwaway database they create and
+> drop. Neither connects to the live project.
 
 ## The import process
 
