@@ -1,0 +1,6 @@
+# Real seed data never enters the repository history, where it cannot be
+# deleted. Only the manifest is tracked.
+incoming/
+*.csv
+*.json
+*.xlsx
