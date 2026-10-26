@@ -169,14 +169,31 @@ describe('every other role keeps the behaviour it had', () => {
     expect(getPermissions({ profileRole: 'wharf_inspector' })).toEqual(EMPTY_PERMISSIONS);
   });
 
-  //  qa_officer has the same defect qa_manager had — PM-03 names it and
-  //  canonicalRole does not know it. Left alone on purpose: the
-  //  instruction covered qa_manager, and changing another role's
-  //  resolution was not asked for. Asserted so the gap is recorded in a
-  //  test rather than only in prose, and so this flips visibly the day
-  //  somebody decides to close it.
-  it('qa_officer remains unresolved — a known gap, not a silent one', () => {
-    expect(getPermissions({ profileRole: 'qa_officer' })).toEqual(EMPTY_PERMISSIONS);
+  /*
+   *  qa_officer had the same defect qa_manager had — PM-03 names it and
+   *  canonicalRole did not know it. This test used to assert the gap
+   *  was still open, and said it would "flip visibly the day somebody
+   *  decides to close it". That day came: the product owner authorised
+   *  the fix, and the role now has its own preset derived from its own
+   *  PM-03 row.
+   *
+   *  The assertion is kept rather than deleted, because what it is
+   *  really guarding is that qa_manager's fix did not leak into
+   *  another role. It now checks the two are still separate.
+   *  `qaOfficerPermissions.test.ts` holds the new behaviour in full.
+   */
+  it('qa_officer resolves to its own preset, not to qa_manager’s', () => {
+    const officer = getPermissions({ profileRole: 'qa_officer' });
+    const manager = getPermissions({ profileRole: 'qa_manager' });
+
+    //  No longer the empty set.
+    expect(officer).not.toEqual(EMPTY_PERMISSIONS);
+    //  And not a copy of the QA Manager's: PM-03 gives them different
+    //  rows, so Obligations, Risk Register and Policies stay closed.
+    expect(officer).not.toEqual(manager);
+    expect(officer.canViewObligations).toBe(false);
+    expect(officer.canViewRiskRegister).toBe(false);
+    expect(officer.canViewPolicies).toBe(false);
   });
 });
 

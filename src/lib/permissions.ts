@@ -501,6 +501,134 @@ export const SYSTEM_ROLE_DEFAULTS: Record<string, Permissions> = {
    * page the grid tabulates the grid is the sole authority. This preset
    * only answers for the pages PM-03 does not tabulate.
    */
+  /**
+   * qa_officer — LEAST PRIVILEGE, and ONE key.
+   *
+   * PM-03 tabulates this role; `canonicalRole()` did not know it, so a
+   * QA Officer fell through to EMPTY_PERMISSIONS exactly as the QA
+   * Manager did. The same repair, derived the same way.
+   *
+   * ── WHY ONE KEY IS THE WHOLE FIX ──
+   *
+   * The role's PM-03 row was read from `section_permissions` rather
+   * than guessed:
+   *
+   *     act   coa_register, deviation_capa, qa_disposition
+   *     view  batch_records, batch_release, distribution,
+   *           goods_receipt, material_lots, qc_testing, suppliers,
+   *           traceability
+   *
+   * Eleven sections. Checking each one's page against its route guard
+   * and its nav entry showed that TEN of them are gated by PM-03 alone
+   * — through PAGE_SECTION and `canAct`/`canView` — plus the industry
+   * check that hides manufacturing pages from a logistics profile.
+   * None of those ten consults a `Permissions` key at all.
+   *
+   * The exception is `deviation_capa`. Both its pages, Deviations and
+   * CAPA, are guarded by `perms.canViewCapaManagement` on the route
+   * AND hidden from the rail by the same key. So that single key is
+   * the only thing standing between a QA Officer and a duty PM-03
+   * grants them `act` on.
+   *
+   * Hence one key. Granting more would not open anything PM-03 has
+   * not already opened, and would widen authority beyond the row.
+   *
+   * WHAT THIS DELIBERATELY DOES NOT GRANT:
+   *   - The `quality` preset, which carries canViewMembers, role
+   *     administration and a long tail of unrelated capability. The
+   *     product owner refused that shortcut for qa_manager and the
+   *     same reasoning applies here.
+   *   - qa_manager's four keys. A QA Officer is not a QA Manager:
+   *     PM-03 gives them different rows, and Obligations, Risk
+   *     Register and Policies are not in this one.
+   *   - Any management, publishing or administrative key.
+   *
+   * As with qa_manager, all eighty keys are written out rather than
+   * spread from EMPTY_PERMISSIONS, so a permission added later forces
+   * an explicit decision here instead of arriving switched on.
+   */
+  qa_officer: {
+    canViewMembers: false,
+    canInvite: false,
+    canRevokeInvite: false,
+    canViewLegalReview: false,
+    canUpload: false,
+    canViewArchive: false,
+    canViewTraining: false,
+    canViewLicenseVault: false,
+    canViewAuditTrail: false,
+    canManageRoles: false,
+    canViewDriftMonitor: false,
+    canViewConsentManagement: false,
+    canViewContentBlocks: false,
+    canViewAgencyPortal: false,
+    canViewComplianceReporting: false,
+    canViewHorizonScanning: false,
+    canViewChannelRules: false,
+    canViewRegulatoryLibrary: false,
+    canViewTranslationCompliance: false,
+    canViewCrisisResponse: false,
+    canViewProgrammaticAd: false,
+    canViewWhistleblower: false,
+    canViewPredictiveRisk: false,
+    canViewSocialListening: false,
+    canViewWebsiteMonitoring: false,
+    canViewVendorScorecard: false,
+    canViewCapaManagement: true,
+    canViewTrainingSimulation: false,
+    canViewClaimExtraction: false,
+    canViewPharmaIntegrations: false,
+    canViewGrcFrameworks: false,
+    canManageGrcFrameworks: false,
+    canViewGrcControls: false,
+    canManageGrcControls: false,
+    canViewGrcDashboard: false,
+    canViewGrcAutomation: false,
+    canManageGrcAutomation: false,
+    canViewPolicies: false,
+    canManagePolicies: false,
+    canPublishPolicies: false,
+    canViewMyPolicies: false,
+    canViewVendors: false,
+    canManageVendors: false,
+    canViewAuditWorkspace: false,
+    canManageAuditWorkspace: false,
+    canViewIdentity: false,
+    canManageIdentity: false,
+    canViewAuditExports: false,
+    canManageAuditExports: false,
+    canViewPlatformJobs: false,
+    canManagePlatformJobs: false,
+    canViewRetention: false,
+    canManageRetention: false,
+    canViewLegalHold: false,
+    canManageLegalHold: false,
+    canViewGovernanceTimeline: false,
+    canViewAIGovernance: false,
+    canManageAIAssets: false,
+    canViewAIUsage: false,
+    canManageAIUsageReviews: false,
+    canViewAIIncidents: false,
+    canManageAIIncidents: false,
+    canViewAIReviews: false,
+    canManageAIReviews: false,
+    canViewAIPrompts: false,
+    canManageAIPrompts: false,
+    canViewAIDashboard: false,
+    canManageApiKeys: false,
+    canViewWebhooks: false,
+    canManageWebhooks: false,
+    canViewEvidenceIngestions: false,
+    canManageEvidenceIngestions: false,
+    canViewEcosystem: false,
+    canManageEcosystem: false,
+    canViewObligations: false,
+    canViewRiskRegister: false,
+    canViewComplianceAlerts: false,
+    canViewAuditPrep: false,
+    canViewIntegrations: false,
+    canViewBilling: false,
+  },
   qa_manager: {
     canViewMembers: false,
     canInvite: false,
@@ -668,6 +796,10 @@ function canonicalRole(role: string): string {
   //  though they name one job. Changing the former was out of scope —
   //  it is recorded in docs/navigation-decisions.md as outstanding.
   if (r === "qa_manager" || r === "qa manager" || r === "qa-manager") return "qa_manager";
+  //  Same normalisation, same reason: PM-03 names the role
+  //  `qa_officer` and the three spellings all reach it. This does not
+  //  touch `quality_manager`, which still resolves to `quality`.
+  if (r === "qa_officer" || r === "qa officer" || r === "qa-officer") return "qa_officer";
   return r;
 }
 
