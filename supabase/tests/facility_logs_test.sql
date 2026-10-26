@@ -42,6 +42,21 @@ DECLARE
   za uuid := '00000000-0000-7b00-d000-000000000001';
   zb uuid := '00000000-0000-7b00-d000-000000000002';
 BEGIN
+  --  Re-runnable. The entry inserts below use fixed ids, so a second
+  --  run against the same database collided on the primary key and
+  --  aborted before asserting anything. The runner builds a fresh
+  --  database, but a suite that only works once cannot be debugged on
+  --  the spot — which is exactly what happened while 20261210000000
+  --  was being written.
+  DELETE FROM public.facility_log_entries     WHERE company_id IN (ca,cb);
+  DELETE FROM public.facility_zone_schedules  WHERE company_id IN (ca,cb);
+  DELETE FROM public.facility_zones           WHERE company_id IN (ca,cb);
+  DELETE FROM public.sites                    WHERE company_id IN (ca,cb);
+  DELETE FROM public.company_members          WHERE company_id IN (ca,cb);
+  DELETE FROM public.profiles                 WHERE id IN (ua,ub);
+  DELETE FROM auth.users                      WHERE id IN (ua,ub);
+  DELETE FROM public.companies                WHERE id IN (ca,cb);
+
   INSERT INTO public.companies(id,name) VALUES (ca,'FL Alpha'), (cb,'FL Bravo')
     ON CONFLICT (id) DO NOTHING;
   INSERT INTO auth.users(id,email) VALUES (ua,'fl-a@local.test'), (ub,'fl-b@local.test')

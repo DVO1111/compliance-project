@@ -40,9 +40,10 @@ import {
 } from 'lucide-react';
 import { logger } from '../../lib/logger';
 import {
-  listTrend, groupTrend, summariseTrend, trendToCsv,
-  TREND_RANGES, TREND_LOG_TYPES, BAND_LEGEND, LOG_TYPE_LABELS,
-  type FacilityLogType, type TrendSeries, type TrendBand,
+  listTrend, groupTrend, summariseTrend, trendToCsv, describeProtocol,
+  TREND_RANGES, BAND_LEGEND,
+  TREND_METHOD_TABS, SAMPLE_METHOD_LABELS, SAMPLE_METHOD_LOG_TYPE,
+  type TrendSeries, type TrendBand, type SampleMethod,
 } from '../../lib/facility/facilityLogService';
 
 /*
@@ -114,6 +115,16 @@ function fmtWeek(iso: string): string {
 /** One zone, one series — which is what "one series per chart" means. */
 function ZoneChart({ series, showTable }: { series: TrendSeries; showTable: boolean }) {
   const narrative = useMemo(() => summariseTrend(series), [series]);
+  //  Carried on the series, not on a point: one schedule defines one
+  //  protocol, so the denominator is a property of the whole chart.
+  const protocol = useMemo(
+    () => describeProtocol(
+      series.sampleMethod,
+      series.protocolExposureMinutes,
+      series.protocolVolumeLitres,
+    ),
+    [series],
+  );
   const unitLabel = series.unit ? `Highest count, ${series.unit}` : 'Highest count';
   const data = series.points.map((p) => ({ ...p, week: fmtWeek(p.weekStart) }));
 
@@ -145,6 +156,12 @@ function ZoneChart({ series, showTable }: { series: TrendSeries; showTable: bool
           {series.zoneName}
           {series.zoneGrade && (
             <span className="font-normal text-[var(--color-text-tertiary)]"> · {series.zoneGrade}</span>
+          )}
+          {/*  The denominator, because a count without it is not
+              interpretable: "3 CFU" means nothing until it is "per
+              plate per four hours". */}
+          {protocol && (
+            <span className="font-normal text-[var(--color-text-tertiary)]"> · {protocol}</span>
           )}
         </h3>
         <span className={`text-[11px] px-2 py-0.5 rounded-full ${BADGE_TONE[narrative.worstBand]}`}>
@@ -296,7 +313,14 @@ export default function FacilityTrendsView({
   companyId: string;
   onBack: () => void;
 }) {
-  const [logType, setLogType] = useState<FacilityLogType>('environmental_air');
+  /*
+   *  FL-06's sub-tabs are METHODS, not log types. Settle plates and
+   *  active air are both environmental_air, so a log-type tab bar
+   *  could not tell them apart — and charting them together would put
+   *  CFU per plate and CFU per cubic metre on one axis against one
+   *  limit line.
+   */
+  const [method, setMethod] = useState<SampleMethod>('settle_plate');
   const [weeks, setWeeks] = useState(12);
   const [series, setSeries] = useState<TrendSeries[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,14 +331,16 @@ export default function FacilityTrendsView({
     setLoading(true);
     setError(null);
     try {
-      setSeries(groupTrend(await listTrend(companyId, logType, weeks)));
+      setSeries(groupTrend(await listTrend(
+        companyId, SAMPLE_METHOD_LOG_TYPE[method], weeks, method,
+      )));
     } catch (err) {
       logger.error('[facility] trend load failed', { err: String(err) });
       setError(err instanceof Error ? err.message : 'The trends could not be loaded.');
     } finally {
       setLoading(false);
     }
-  }, [companyId, logType, weeks]);
+  }, [companyId, method, weeks]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -325,7 +351,7 @@ export default function FacilityTrendsView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facility-trends-${logType}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `facility-trends-${method}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.style.visibility = 'hidden';
     document.body.appendChild(a);
     a.click();
@@ -372,19 +398,19 @@ export default function FacilityTrendsView({
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-        <div className="flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Log type">
-          {TREND_LOG_TYPES.map((t) => (
+        <div className="flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Sampling method">
+          {TREND_METHOD_TABS.map((m) => (
             <button
-              key={t}
+              key={m}
               role="tab"
-              aria-selected={logType === t}
-              onClick={() => setLogType(t)}
+              aria-selected={method === m}
+              onClick={() => setMethod(m)}
               className={`px-3 py-2 min-h-[36px] rounded-lg text-sm font-medium whitespace-nowrap ${
-                logType === t ? 'text-white' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]'
+                method === m ? 'text-white' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]'
               }`}
-              style={logType === t ? { background: 'var(--color-accent)' } : undefined}
+              style={method === m ? { background: 'var(--color-accent)' } : undefined}
             >
-              {LOG_TYPE_LABELS[t]}
+              {SAMPLE_METHOD_LABELS[m]}
             </button>
           ))}
         </div>
@@ -424,9 +450,10 @@ export default function FacilityTrendsView({
       ) : series.length === 0 ? (
         <div className="border border-[var(--color-border)] rounded-xl p-6">
           <p className="text-sm text-[var(--color-text-secondary)]">
-            No measured readings of this type in the last {weeks} weeks, so there is
-            nothing to trend yet. Only tests that record a number appear here — a
-            cleaning record is done or not done rather than measured.
+            No {SAMPLE_METHOD_LABELS[method].toLowerCase()} readings in the last{' '}
+            {weeks} weeks, so there is nothing to trend yet. Each sampling method is
+            charted on its own, because a settle-plate count and an active-air count
+            are not the same measurement.
           </p>
         </div>
       ) : (

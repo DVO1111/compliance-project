@@ -5622,26 +5622,26 @@ isOneToOne: false
                   Relationships: []
                 },"facility_zone_schedules": {
                   Row: {
-                    "action_limit": number | null,"alert_limit": number | null,"company_id": string,"created_at": string,"description": string,"due_time": string | null,"frequency": string,"id": string,"is_active": boolean,"log_type": string,"owner_id": string | null,"result_unit": string | null,"updated_at": string,"zone_id": string
+                    "action_limit": number | null,"alert_limit": number | null,"company_id": string,"created_at": string,"description": string,"due_time": string | null,"frequency": string,"id": string,"is_active": boolean,"log_type": string,"owner_id": string | null,"protocol_exposure_minutes": number | null,"protocol_positions": number | null,"protocol_volume_litres": number | null,"sample_method": string | null,"result_unit": string | null,"updated_at": string,"zone_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "action_limit"?: number | null,"alert_limit"?: number | null,"company_id": string,"created_at"?: string,"description": string,"due_time"?: string | null,"frequency": string,"id"?: string,"is_active"?: boolean,"log_type": string,"owner_id"?: string | null,"result_unit"?: string | null,"updated_at"?: string,"zone_id": string
+                    "action_limit"?: number | null,"alert_limit"?: number | null,"company_id": string,"created_at"?: string,"description": string,"due_time"?: string | null,"frequency": string,"id"?: string,"is_active"?: boolean,"log_type": string,"owner_id"?: string | null,"protocol_exposure_minutes"?: number | null,"protocol_positions"?: number | null,"protocol_volume_litres"?: number | null,"sample_method"?: string | null,"result_unit"?: string | null,"updated_at"?: string,"zone_id": string
                   }
                   Update: {
-                    "action_limit"?: number | null,"alert_limit"?: number | null,"company_id"?: string,"created_at"?: string,"description"?: string,"due_time"?: string | null,"frequency"?: string,"id"?: string,"is_active"?: boolean,"log_type"?: string,"owner_id"?: string | null,"result_unit"?: string | null,"updated_at"?: string,"zone_id"?: string
+                    "action_limit"?: number | null,"alert_limit"?: number | null,"company_id"?: string,"created_at"?: string,"description"?: string,"due_time"?: string | null,"frequency"?: string,"id"?: string,"is_active"?: boolean,"log_type"?: string,"owner_id"?: string | null,"protocol_exposure_minutes"?: number | null,"protocol_positions"?: number | null,"protocol_volume_litres"?: number | null,"sample_method"?: string | null,"result_unit"?: string | null,"updated_at"?: string,"zone_id"?: string
                   }
                   Relationships: []
                 },"facility_log_entries": {
                   Row: {
-                    "company_id": string,"created_at": string,"due_at": string | null,"id": string,"linked_deviation_id": string | null,"log_type": string,"notes": string | null,"outcome": string,"performed": boolean,"recorded_at": string,"recorded_by": string | null,"reference": string | null,"result_position": string | null,"result_unit": string | null,"result_value": number | null,"schedule_id": string | null,"zone_id": string
+                    "company_id": string,"created_at": string,"due_at": string | null,"exposure_minutes": number | null,"sample_method": string | null,"volume_litres": number | null,"id": string,"linked_deviation_id": string | null,"log_type": string,"notes": string | null,"outcome": string,"performed": boolean,"recorded_at": string,"recorded_by": string | null,"reference": string | null,"result_position": string | null,"result_unit": string | null,"result_value": number | null,"schedule_id": string | null,"zone_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "company_id": string,"created_at"?: string,"due_at"?: string | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type": string,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id": string
+                    "company_id": string,"created_at"?: string,"due_at"?: string | null,"exposure_minutes"?: number | null,"sample_method"?: string | null,"volume_litres"?: number | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type": string,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id": string
                   }
                   Update: {
-                    "company_id"?: string,"created_at"?: string,"due_at"?: string | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type"?: string,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id"?: string
+                    "company_id"?: string,"created_at"?: string,"due_at"?: string | null,"exposure_minutes"?: number | null,"sample_method"?: string | null,"volume_litres"?: number | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type"?: string,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id"?: string
                   }
                   Relationships: []
                 },"sites": {
@@ -6574,7 +6574,7 @@ isOneToOne: false
           Functions: {
             "facility_log_register":
 { Args: { "p_company_id": string }; Returns: {
-                             "schedule_id": string,"zone_id": string,"zone_name": string,"zone_grade": string | null,"zone_line_ref": string | null,"log_type": string,"description": string,"frequency": string,"due_time": string | null,"alert_limit": number | null,"action_limit": number | null,"result_unit": string | null,"last_entry_id": string | null,"last_recorded_at": string | null,"last_result_value": number | null,"last_result_position": string | null,"last_outcome": string | null,"last_reference": string | null,"days_since_last": number | null
+                             "schedule_id": string,"zone_id": string,"zone_name": string,"zone_grade": string | null,"zone_line_ref": string | null,"log_type": string,"description": string,"frequency": string,"due_time": string | null,"alert_limit": number | null,"action_limit": number | null,"result_unit": string | null,"sample_method": string | null,"protocol_positions": number | null,"protocol_exposure_minutes": number | null,"protocol_volume_litres": number | null,"last_entry_id": string | null,"last_recorded_at": string | null,"last_result_value": number | null,"last_result_position": string | null,"last_outcome": string | null,"last_reference": string | null,"days_since_last": number | null
                            }[]
                            },
 "facility_log_outcome":
@@ -6609,8 +6609,8 @@ isOneToOne: false
                            }[]
                            },
 "facility_log_trend":
-{ Args: { "p_company_id": string,"p_log_type": string,"p_weeks"?: number }; Returns: {
-                             "zone_id": string,"zone_name": string,"zone_grade": string | null,"week_start": string,"max_value": number,"max_recorded_at": string,"sample_count": number,"result_unit": string | null,"alert_limit": number | null,"action_limit": number | null
+{ Args: { "p_company_id": string,"p_log_type": string,"p_weeks"?: number,"p_sample_method"?: string | null }; Returns: {
+                             "zone_id": string,"zone_name": string,"zone_grade": string | null,"week_start": string,"max_value": number,"max_recorded_at": string,"sample_count": number,"result_unit": string | null,"alert_limit": number | null,"action_limit": number | null,"sample_method": string | null,"protocol_exposure_minutes": number | null,"protocol_volume_litres": number | null
                            }[]
                            },
             "_cc":

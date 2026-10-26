@@ -230,32 +230,69 @@ const FACILITY_SITES = [
   { id: 'fs-2', name: 'FIXTURE Ibadan warehouse', site_type: 'warehouse' },
 ];
 
-//  FL-06's two charts. The first rises every week and crosses both
-//  limits, which is the narrative the design prints; the second is
-//  flat with a single excursion, which is the other one. Week starts
-//  are Mondays, as date_trunc('week') produces.
-const FACILITY_TREND = [
-  ...[
-    ['2026-08-03', 28], ['2026-08-10', 34], ['2026-08-17', 41],
-    ['2026-08-24', 55], ['2026-08-31', 68], ['2026-09-07', 84],
-    ['2026-09-14', 96], ['2026-09-21', 112],
-  ].map(([week, v]) => ({
-    zone_id: 'fz-2', zone_name: 'FIXTURE Compression hall C1', zone_grade: 'Grade D',
-    week_start: week, max_value: v,
-    max_recorded_at: `${week}T06:20:00Z`, sample_count: 4,
-    result_unit: 'CFU', alert_limit: 50, action_limit: 100,
-  })),
-  ...[
-    ['2026-08-03', 12], ['2026-08-10', 14], ['2026-08-17', 11],
-    ['2026-08-24', 13], ['2026-08-31', 52], ['2026-09-07', 12],
-    ['2026-09-14', 10], ['2026-09-21', 13],
-  ].map(([week, v]) => ({
-    zone_id: 'fz-1', zone_name: 'FIXTURE Granulation G2', zone_grade: 'Grade D',
-    week_start: week, max_value: v,
-    max_recorded_at: `${week}T07:05:00Z`, sample_count: 2,
-    result_unit: 'CFU', alert_limit: 25, action_limit: 50,
-  })),
+//  FL-06's charts, one set per sampling method. Settle plates and
+//  active air monitor the SAME Grade A room to different
+//  specifications, which is the case the three sub-tabs exist for: the
+//  plate count of 3 is a breach against 1/2 CFU/plate/4h while the
+//  active-air count of 3 is comfortable against 5/10 CFU/m³. Week
+//  starts are Mondays, as date_trunc('week') produces.
+const TREND_WEEKS = [
+  '2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24',
+  '2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21',
 ];
+
+type TrendSpec = {
+  zone_id: string; zone_name: string; zone_grade: string;
+  result_unit: string; alert_limit: number; action_limit: number;
+  sample_method: string;
+  protocol_exposure_minutes: number | null;
+  protocol_volume_litres: number | null;
+  values: number[];
+};
+
+const TREND_SPECS: TrendSpec[] = [
+  {
+    zone_id: 'fz-3', zone_name: 'FIXTURE Sterile filling A1', zone_grade: 'Grade A',
+    result_unit: 'CFU/plate/4h', alert_limit: 1, action_limit: 2,
+    sample_method: 'settle_plate',
+    protocol_exposure_minutes: 240, protocol_volume_litres: null,
+    values: [0, 0, 1, 0, 1, 2, 2, 3],
+  },
+  {
+    zone_id: 'fz-3', zone_name: 'FIXTURE Sterile filling A1', zone_grade: 'Grade A',
+    result_unit: 'CFU/m3', alert_limit: 5, action_limit: 10,
+    sample_method: 'active_air',
+    protocol_exposure_minutes: null, protocol_volume_litres: 1000,
+    values: [1, 2, 1, 3, 2, 1, 2, 3],
+  },
+  {
+    zone_id: 'fz-2', zone_name: 'FIXTURE Compression hall C1', zone_grade: 'Grade D',
+    result_unit: 'CFU/plate/4h', alert_limit: 50, action_limit: 100,
+    sample_method: 'settle_plate',
+    protocol_exposure_minutes: 240, protocol_volume_litres: null,
+    values: [28, 34, 41, 55, 68, 84, 96, 112],
+  },
+  {
+    zone_id: 'fz-1', zone_name: 'FIXTURE Granulation G2', zone_grade: 'Grade D',
+    result_unit: 'CFU/25cm2', alert_limit: 25, action_limit: 50,
+    sample_method: 'surface_swab',
+    protocol_exposure_minutes: null, protocol_volume_litres: null,
+    values: [12, 14, 11, 13, 52, 12, 10, 13],
+  },
+];
+
+const FACILITY_TREND = TREND_SPECS.flatMap((spec) =>
+  TREND_WEEKS.map((week, i) => ({
+    zone_id: spec.zone_id, zone_name: spec.zone_name, zone_grade: spec.zone_grade,
+    week_start: week, max_value: spec.values[i],
+    max_recorded_at: `${week}T06:20:00Z`, sample_count: 4,
+    result_unit: spec.result_unit,
+    alert_limit: spec.alert_limit, action_limit: spec.action_limit,
+    sample_method: spec.sample_method,
+    protocol_exposure_minutes: spec.protocol_exposure_minutes,
+    protocol_volume_litres: spec.protocol_volume_litres,
+  })),
+);
 
 //  FL-13's pest control. One visit with the five station findings the
 //  design draws — including the one marked as needing action, which is
@@ -482,7 +519,17 @@ function builder(table: string): any {
 
 export const supabase: any = {
   from: (table: string) => builder(table),
-  rpc: async (name: string): Promise<Res> => ({ data: BY_RPC[name] ?? [], error: null }),
+  rpc: async (name: string, args?: Record<string, unknown>): Promise<Res> => {
+    let rows = BY_RPC[name] ?? [];
+    //  FL-06 asks for one method at a time. Ignoring the argument here
+    //  would make all three sub-tabs render the same chart, so the
+    //  screenshot would not show whether the filter works at all.
+    if (name === 'facility_log_trend' && args?.p_sample_method) {
+      rows = (rows as { sample_method?: string }[])
+        .filter((r) => r.sample_method === args.p_sample_method);
+    }
+    return { data: rows, error: null };
+  },
   auth: {
     getUser: async () => ({ data: { user: { id: 'u1' } }, error: null }),
     getSession: async () => ({ data: { session: null }, error: null }),

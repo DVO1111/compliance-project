@@ -733,6 +733,66 @@ export async function setScheduleActive(
 //  reinforcement.
 // ───────────────────────────────────────────────────────────────────────
 
+/**
+ *  FL-06's three sub-tabs, as sampling METHODS.
+ *
+ *  Batch 3 reported that the design offers "Settle plates", "Surface
+ *  swabs" and "Active air" while `log_type` has only two
+ *  environmental values, because settle plates and active air are
+ *  both AIR methods. Phase 2 decision 4 settled it: they are distinct
+ *  methods, each with its own protocol metadata and its own limits.
+ *
+ *  THEY MEASURE DIFFERENT QUANTITIES. A settle plate counts CFU per
+ *  plate over an exposure period; an active-air sampler counts them
+ *  per cubic metre of air drawn. So they are never charted on one
+ *  axis and never share a limit — which is what "do not assume
+ *  universal alert thresholds" rules out.
+ */
+export type SampleMethod = 'settle_plate' | 'active_air' | 'surface_swab';
+
+export const SAMPLE_METHOD_LABELS: Record<SampleMethod, string> = {
+  settle_plate: 'Settle plates',
+  active_air: 'Active air',
+  surface_swab: 'Surface swabs',
+};
+
+/** Which log type each method samples. Air has two; surface has one. */
+export const SAMPLE_METHOD_LOG_TYPE: Record<SampleMethod, FacilityLogType> = {
+  settle_plate: 'environmental_air',
+  active_air: 'environmental_air',
+  surface_swab: 'environmental_surface',
+};
+
+/** FL-06's sub-tabs in the order the design draws them. */
+export const TREND_METHOD_TABS: SampleMethod[] =
+  ['settle_plate', 'surface_swab', 'active_air'];
+
+/**
+ *  The denominator that makes a count interpretable, in words.
+ *  Returns null for a swab, which has neither an exposure nor a
+ *  volume — it samples a defined area instead.
+ */
+export function describeProtocol(
+  method: SampleMethod | null,
+  exposureMinutes: number | null,
+  volumeLitres: number | null,
+): string | null {
+  if (method === 'settle_plate' && exposureMinutes != null) {
+    const hours = exposureMinutes / 60;
+    return Number.isInteger(hours)
+      ? `${hours} h exposure`
+      : `${exposureMinutes} min exposure`;
+  }
+  if (method === 'active_air' && volumeLitres != null) {
+    //  A cubic metre is a thousand litres, and samplers are specified
+    //  either way, so the larger unit is used once it is whole.
+    return volumeLitres >= 1000 && volumeLitres % 1000 === 0
+      ? `${volumeLitres / 1000} m³ sampled`
+      : `${volumeLitres} L sampled`;
+  }
+  return null;
+}
+
 /** The log types that trend. A cleaning record has no number to plot. */
 export const TREND_LOG_TYPES: FacilityLogType[] = [
   'environmental_air',
@@ -757,6 +817,9 @@ export interface TrendRow {
   result_unit: string | null;
   alert_limit: number | null;
   action_limit: number | null;
+  sample_method: SampleMethod | null;
+  protocol_exposure_minutes: number | null;
+  protocol_volume_litres: number | null;
 }
 
 export interface TrendSeries {
@@ -766,6 +829,10 @@ export interface TrendSeries {
   unit: string | null;
   alertLimit: number | null;
   actionLimit: number | null;
+  sampleMethod: SampleMethod | null;
+  /** The denominator the count is read against; null for a swab. */
+  protocolExposureMinutes: number | null;
+  protocolVolumeLitres: number | null;
   points: {
     weekStart: string;
     value: number;
@@ -806,11 +873,18 @@ export async function listTrend(
   companyId: string,
   logType: FacilityLogType,
   weeks: number,
+  /**
+   *  Null charts every method, which is what callers written before
+   *  20261210000000 get. Naming one keeps the series — and its limit
+   *  lines — to that method alone.
+   */
+  sampleMethod: SampleMethod | null = null,
 ): Promise<TrendRow[]> {
   const { data, error } = await supabase.rpc('facility_log_trend', {
     p_company_id: companyId,
     p_log_type: logType,
     p_weeks: weeks,
+    p_sample_method: sampleMethod,
   });
   if (error) {
     logger.error('[facility] could not load the trend', { error: error.message });
@@ -819,18 +893,33 @@ export async function listTrend(
   return (data ?? []) as unknown as TrendRow[];
 }
 
-/** One chart per zone, which is what "one series per chart" means. */
+/**
+ * One chart per zone AND METHOD, which is what "one series per chart"
+ * means once a zone is monitored by more than one method.
+ *
+ * Keying on the zone alone would be wrong, and silently so. A Grade A
+ * room monitored by settle plates (limit 2 CFU/plate/4h) and by active
+ * air (limit 10 CFU/m³) returns two rows per week from an unfiltered
+ * `facility_log_trend`. Merged, a plate reading of 3 — a breach — would
+ * be plotted on an axis carrying the active-air limits and read as
+ * comfortable. The two counts are not the same quantity and share
+ * neither a denominator nor a threshold.
+ */
 export function groupTrend(rows: TrendRow[]): TrendSeries[] {
   const byZone = new Map<string, TrendSeries>();
   for (const r of rows) {
-    let s = byZone.get(r.zone_id);
+    const key = `${r.zone_id}\u0000${r.sample_method ?? ''}`;
+    let s = byZone.get(key);
     if (!s) {
       s = {
         zoneId: r.zone_id, zoneName: r.zone_name, zoneGrade: r.zone_grade,
         unit: r.result_unit, alertLimit: r.alert_limit, actionLimit: r.action_limit,
+        sampleMethod: r.sample_method ?? null,
+        protocolExposureMinutes: r.protocol_exposure_minutes ?? null,
+        protocolVolumeLitres: r.protocol_volume_litres ?? null,
         points: [],
       };
-      byZone.set(r.zone_id, s);
+      byZone.set(key, s);
     }
     s.points.push({
       weekStart: r.week_start,

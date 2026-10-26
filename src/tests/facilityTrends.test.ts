@@ -34,6 +34,8 @@ vi.mock('../lib/supabase', () => {
 import {
   bandFor, groupTrend, summariseTrend, trendToCsv, listTrend,
   BAND_LEGEND, TREND_RANGES, TREND_LOG_TYPES, RISING_RUN_MIN_POINTS,
+  describeProtocol, SAMPLE_METHOD_LABELS, SAMPLE_METHOD_LOG_TYPE,
+  TREND_METHOD_TABS,
   type TrendRow, type TrendSeries,
 } from '../lib/facility/facilityLogService';
 
@@ -53,6 +55,14 @@ function row(over: Partial<TrendRow> = {}): TrendRow {
     zone_id: 'z1', zone_name: 'Compression hall C1', zone_grade: 'Grade D',
     week_start: '2026-09-07', max_value: 20, max_recorded_at: '2026-09-09T06:00:00Z',
     sample_count: 1, result_unit: 'CFU', alert_limit: 50, action_limit: 100,
+    //  Added with 20261210000000: a trend row now says which sampling
+    //  method it charted, because settle plates and active air measure
+    //  different quantities and must never share an axis.
+    sample_method: 'settle_plate',
+    //  And the denominator it was read against, so a chart can print
+    //  "per plate per 4h" instead of a bare count.
+    protocol_exposure_minutes: 240,
+    protocol_volume_litres: null,
     ...over,
   };
 }
@@ -231,7 +241,8 @@ describe('summariseTrend — the sentence FL-06 prints', () => {
   it('says so when there are no readings rather than drawing nothing', () => {
     const s = summariseTrend({
       zoneId: 'z', zoneName: 'Empty', zoneGrade: null, unit: null,
-      alertLimit: null, actionLimit: null, points: [],
+      alertLimit: null, actionLimit: null, sampleMethod: null,
+      protocolExposureMinutes: null, protocolVolumeLitres: null, points: [],
     });
     expect(s.sentence).toMatch(/No measured readings/);
     expect(s.badge).toBe('No readings');
@@ -277,6 +288,20 @@ describe('listTrend', () => {
     await listTrend('c1', 'environmental_air', 4);
     expect(rpc).toHaveBeenCalledWith('facility_log_trend', {
       p_company_id: 'c1', p_log_type: 'environmental_air', p_weeks: 4,
+      //  Null means every method, which is what this three-argument
+      //  call meant before 20261210000000 added the filter.
+      p_sample_method: null,
+    });
+  });
+
+  it('passes a named method through, so a tab charts only its own', async () => {
+    //  The whole reason the filter exists: a settle-plate chart must
+    //  not include active-air readings, because the two measure
+    //  different quantities and would share one axis and one limit.
+    await listTrend('c1', 'environmental_air', 4, 'settle_plate');
+    expect(rpc).toHaveBeenCalledWith('facility_log_trend', {
+      p_company_id: 'c1', p_log_type: 'environmental_air', p_weeks: 4,
+      p_sample_method: 'settle_plate',
     });
   });
 
@@ -325,5 +350,85 @@ describe('what trends, and what the design fixes', () => {
     for (const forbidden of [/\bINSERT\b/i, /\bUPDATE\b/i, /\bDELETE\b/i, /CREATE TRIGGER/i]) {
       expect(MIGRATION).not.toMatch(forbidden);
     }
+  });
+});
+
+/*
+ *  Sampling methods (20261210000000). Settle plates and active air
+ *  both measure "air", and both report a count, but they are not the
+ *  same measurement: one is colonies landing on a plate over a stated
+ *  exposure, the other is colonies recovered from a stated volume
+ *  drawn through a sampler. A count without its denominator is not a
+ *  result, and the two must never share an axis or a limit.
+ */
+describe('sampling methods', () => {
+  it('keeps settle plates and active air as distinct methods', () => {
+    expect(SAMPLE_METHOD_LABELS.settle_plate).not.toBe(SAMPLE_METHOD_LABELS.active_air);
+    //  Both are air methods, which is exactly why the method filter
+    //  exists: log_type alone cannot separate them.
+    expect(SAMPLE_METHOD_LOG_TYPE.settle_plate).toBe('environmental_air');
+    expect(SAMPLE_METHOD_LOG_TYPE.active_air).toBe('environmental_air');
+    expect(SAMPLE_METHOD_LOG_TYPE.surface_swab).toBe('environmental_surface');
+  });
+
+  it('offers each method as its own FL-06 tab', () => {
+    expect(TREND_METHOD_TABS).toHaveLength(3);
+    expect(new Set(TREND_METHOD_TABS).size).toBe(3);
+    for (const m of TREND_METHOD_TABS) expect(SAMPLE_METHOD_LABELS[m]).toBeTruthy();
+  });
+
+  it('prints the denominator each method is actually read against', () => {
+    //  Exposure for a plate, volume for a sampler — never the other
+    //  way round, and never one borrowed for the other.
+    expect(describeProtocol('settle_plate', 240, null)).toMatch(/\b4\s?h\b/);
+    expect(describeProtocol('active_air', null, 1000)).toMatch(/1000|1 m/);
+    expect(describeProtocol('settle_plate', 240, null)).not.toMatch(/m³|litre/i);
+  });
+
+  it('says nothing rather than inventing a denominator it was not given', () => {
+    expect(describeProtocol('settle_plate', null, null)).toBeNull();
+    expect(describeProtocol('active_air', null, null)).toBeNull();
+    expect(describeProtocol(null, 240, 1000)).toBeNull();
+  });
+
+  it('carries the protocol on the series, so the chart can caption it', () => {
+    const [s] = groupTrend([
+      row({ sample_method: 'active_air', protocol_exposure_minutes: null,
+            protocol_volume_litres: 1000, result_unit: 'CFU/m3' }),
+    ]);
+    expect(s.sampleMethod).toBe('active_air');
+    expect(s.protocolVolumeLitres).toBe(1000);
+    expect(s.protocolExposureMinutes).toBeNull();
+    expect(describeProtocol(
+      s.sampleMethod, s.protocolExposureMinutes, s.protocolVolumeLitres,
+    )).toBeTruthy();
+  });
+
+  it('never averages two methods into one series', () => {
+    /*
+     *  The failure this guards. One zone, one week, both air methods:
+     *  3 on plates against a limit of 2, and 3 per m³ against a limit
+     *  of 10. Merged, the zone reads as one comfortable series. Kept
+     *  apart, the plate series is a breach.
+     */
+    const series = groupTrend([
+      row({ zone_id: 'zA', sample_method: 'settle_plate', max_value: 3,
+            alert_limit: 1, action_limit: 2, result_unit: 'CFU/plate/4h',
+            protocol_exposure_minutes: 240, protocol_volume_litres: null }),
+      row({ zone_id: 'zA', sample_method: 'active_air', max_value: 3,
+            alert_limit: 5, action_limit: 10, result_unit: 'CFU/m3',
+            protocol_exposure_minutes: null, protocol_volume_litres: 1000 }),
+    ]);
+    expect(series).toHaveLength(2);
+    const bands = series.map((s) => summariseTrend(s).worstBand).sort();
+    expect(bands).toEqual(['outside_action', 'within']);
+  });
+
+  it('asks the database for one method at a time', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    await listTrend('c1', 'environmental_air', 12, 'active_air');
+    expect(rpc).toHaveBeenCalledWith('facility_log_trend', expect.objectContaining({
+      p_sample_method: 'active_air',
+    }));
   });
 });

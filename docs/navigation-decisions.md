@@ -1213,3 +1213,73 @@ which had been written to flip when this day came:
   **and** the RESTRICT delete rule.
 - Its C5a stood a random uuid in that column; it now raises and
   completes a real action, which is the point of the change.
+
+---
+
+## P2-4 implemented — settle plates and active air as distinct methods
+
+### The two are not the same measurement
+
+Both report a colony count and both are "air", which is exactly why
+the previous model merged them. A settle plate counts colonies that
+land on an exposed plate over a stated exposure — 1 CFU per plate per
+4 h. An active-air sampler counts colonies recovered from a stated
+volume drawn through it — 5 CFU per m³. The numbers share a unit name
+and nothing else: not the denominator, not the limit, not the
+sampling event they belong to.
+
+So a count alone is not a result. "3 CFU" means nothing until it is
+"3 per plate over four hours" or "3 per cubic metre", and the same
+figure of 3 is a breach on the first reading and comfortable on the
+second.
+
+### What the model now carries
+
+`facility_zone_schedules` gained `sample_method` and the protocol
+columns that give the count its denominator — `protocol_positions`,
+`protocol_exposure_minutes`, `protocol_volume_litres` — with a CHECK
+that matches each method to the shape it can have: a settle plate may
+state an exposure and no volume, an active-air sample a volume and no
+exposure, a swab neither. `facility_log_entries` inherits the method
+and its protocol from the schedule the reading was taken under, so a
+recorded result carries the terms it was measured on.
+
+**No universal threshold was introduced**, which the instruction
+forbids and which is also the point: the limits already live on the
+schedule, per method, and a zone monitored by two methods carries two
+schedules with two sets of limits. `facility_log_trend` was widened
+with an optional `p_sample_method` and now returns the method and its
+protocol per series. Sections E and F of
+`supabase/tests/environmental_sample_methods_test.sql` hold the case
+this exists for: one Grade A room, both air methods, and each chart
+carrying its own limits — neither borrowed, and no average of the two.
+
+### FL-06
+
+The screen's log-type selector became three method tabs — settle
+plates, surface swabs, active air — because log type cannot separate
+the two air methods. Each chart captions its denominator next to the
+zone name ("· 4 h exposure", "· 1 m³ sampled"); a swab shows none,
+because a swab has no denominator to state.
+
+### A defect this found in the batch's own work
+
+`groupTrend` keyed its series on `zone_id` alone. With a method
+filter applied that is invisible — one method comes back, one series
+per zone. But an unfiltered call returns **both** air methods for the
+same zone, and the two row sets were being merged into one series: a
+plate reading of 3 against an action limit of 2 would have been
+plotted on an axis carrying the active-air limits of 5 and 10, and
+drawn as comfortable. A breach would have been displayed as a
+passing reading.
+
+The key is now the zone and the method. The unit test that caught it
+is kept as the regression: one zone, both methods, same figure, and
+the two series must come back with different verdicts.
+
+### Still open for the owner
+
+A limit named against an external specification document (for
+example "Per WHO drinking-water list") is still not representable;
+limits are numbers on the schedule. Raised with the water work and
+unchanged here.
