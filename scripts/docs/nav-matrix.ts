@@ -41,12 +41,19 @@ interface Verified {
  * Nothing else is claimed.
  */
 const VERIFIED: Partial<Record<PageId, Verified>> = {
+  'regulatory-library': {
+    services: '`regulatoryLibraryService` — searchLibrary, getJurisdictionStats; no database access',
+    data: 'None. `LIBRARY_DATA` is a static corpus of regulatory reference text held in the module.',
+    status: 'Working as a read-only reference library: search filters real statutory text by query, jurisdiction and document type. A library of statutes is legitimately static, so this is NOT a mock standing in for a feature. It holds no company-scoped state of any kind.',
+    tests: 'None specific to this page.',
+    outstanding: 'Whether it should stay a reference corpus or become a company-scoped register with review state is undecided, and no screen is drawn for the latter. An unused `supabase` import was removed.',
+  },
   'facility-logs': {
-    services: '`facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive',
+    services: '`facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive, listTrend, groupTrend, summariseTrend, trendToCsv',
     data: '`facility_zones`, `facility_zone_schedules`, `facility_log_entries` — RLS enabled, company-isolation policies; all three carry a `company_id` FK to `companies`',
-    status: 'Working, both screens. FL-01 is the register (triage order, tabs, record, per-zone history) and FL-02 sets zones and scheduled tests up. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded.',
-    tests: 'SQL: 31 (`facility_logs_test.sql`) + 33 (`facility_zone_setup_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and the RLS-bypassing posture. Unit: 33 + 46.',
-    outstanding: 'FL-06/FL-07 trend charts and FL-13/FL-14 finding-to-task are not built; the latter needs a rule W6·29 does not state. No sign-off or automatic deviation, neither being drawn in the design.',
+    status: 'Working, three screens. FL-01 is the register (triage order, tabs, record, per-zone history), FL-02 sets zones and scheduled tests up, and FL-06/FL-07 are the trends — weekly maxima per zone with both limits drawn as labelled lines, point shapes carrying the meaning so it survives greyscale, and a "Show as table" view of the same numbers. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded.',
+    tests: 'SQL: 31 + 33 + 24 (`facility_logs_test.sql`, `facility_zone_setup_test.sql`, `facility_log_trend_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and RLS-bypassing postures, and the weekly maximum. Unit: 33 + 46 + 36.',
+    outstanding: 'FL-13/FL-14 finding-to-task is not built; it needs a rule W6·29 does not state. FL-06 offers three sub-tabs (settle plates, surface swabs, active air) but `log_type` has two environmental values, so the settle-plate/active-air split needs a schema decision. Export is a CSV of the numbers on screen, not the formal TR-09/TR-10 evidence package. No sign-off or automatic deviation, neither being drawn in the design.',
   },
   'shipment-event-log': {
     services: '`shipmentEventService` — listShipments, createShipment, getShipmentEvents, addShipmentEvent',

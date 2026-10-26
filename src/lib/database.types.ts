@@ -6477,6 +6477,11 @@ isOneToOne: false
                              "id": string,"name": string,"site_type": string
                            }[]
                            },
+"facility_log_trend":
+{ Args: { "p_company_id": string,"p_log_type": string,"p_weeks"?: number }; Returns: {
+                             "zone_id": string,"zone_name": string,"zone_grade": string | null,"week_start": string,"max_value": number,"max_recorded_at": string,"sample_count": number,"result_unit": string | null,"alert_limit": number | null,"action_limit": number | null
+                           }[]
+                           },
             "_cc":
 { Args: { "p_detail"?: string,"p_name": string,"p_ok": boolean,"p_section": string }; Returns: undefined
                            },

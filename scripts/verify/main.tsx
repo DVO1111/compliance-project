@@ -27,6 +27,7 @@ import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
 import SettingsHomePage from '../../src/components/Settings/SettingsHomePage';
 import FacilityLogsPage from '../../src/components/Facility/FacilityLogsPage';
 import FacilityZonesSetup from '../../src/components/Facility/FacilityZonesSetup';
+import FacilityTrendsView from '../../src/components/Facility/FacilityTrendsView';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
@@ -62,6 +63,9 @@ const PAGES: Record<string, () => JSX.Element> = {
   //  mounted directly here: its own states (no sites, no zones, the
   //  zone list with nested tests) are what need looking at.
   'facility-zones': () => <FacilityZonesSetup companyId="c1" onBack={() => {}} />,
+  //  FL-06 / FL-07. The greyscale check is what FL-07 is, so this is
+  //  also the screen to look at with colour removed.
+  'facility-trends': () => <FacilityTrendsView companyId="c1" onBack={() => {}} />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */

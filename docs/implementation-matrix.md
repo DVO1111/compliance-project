@@ -406,11 +406,11 @@ There is no fallback group, and `More` is not a group any more.
 | Pilot scope | In pilot |
 | Design | Approved design, or placed by HS-02’s own table |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
-| Services | `facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive |
+| Services | `facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive, listTrend, groupTrend, summariseTrend, trendToCsv |
 | Data model / RLS | `facility_zones`, `facility_zone_schedules`, `facility_log_entries` — RLS enabled, company-isolation policies; all three carry a `company_id` FK to `companies` |
-| Functional status | Working, both screens. FL-01 is the register (triage order, tabs, record, per-zone history) and FL-02 sets zones and scheduled tests up. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded. |
-| Tests | SQL: 31 (`facility_logs_test.sql`) + 33 (`facility_zone_setup_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and the RLS-bypassing posture. Unit: 33 + 46. |
-| Outstanding | FL-06/FL-07 trend charts and FL-13/FL-14 finding-to-task are not built; the latter needs a rule W6·29 does not state. No sign-off or automatic deviation, neither being drawn in the design. |
+| Functional status | Working, three screens. FL-01 is the register (triage order, tabs, record, per-zone history), FL-02 sets zones and scheduled tests up, and FL-06/FL-07 are the trends — weekly maxima per zone with both limits drawn as labelled lines, point shapes carrying the meaning so it survives greyscale, and a "Show as table" view of the same numbers. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded. |
+| Tests | SQL: 31 + 33 + 24 (`facility_logs_test.sql`, `facility_zone_setup_test.sql`, `facility_log_trend_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and RLS-bypassing postures, and the weekly maximum. Unit: 33 + 46 + 36. |
+| Outstanding | FL-13/FL-14 finding-to-task is not built; it needs a rule W6·29 does not state. FL-06 offers three sub-tabs (settle plates, surface swabs, active air) but `log_type` has two environmental values, so the settle-plate/active-air split needs a schema decision. Export is a CSV of the numbers on screen, not the formal TR-09/TR-10 evidence package. No sign-off or automatic deviation, neither being drawn in the design. |
 
 
 ### Regulatory — 10 pages
@@ -475,10 +475,11 @@ There is no fallback group, and `More` is not a group any more.
 | Pilot scope | In pilot (D3) — design owed |
 | Design | None — No screen, and no old-product code cited for it. Distinct from the SOP Library. |
 | Authorization | Legacy `perms.*` gate only — `canOpenPage` returns true for a page PM-03 does not tabulate |
-| Services | _not assessed in this phase_ |
-| Data model / RLS | _not assessed in this phase_ |
-| Functional status | _not assessed in this phase_ |
-| Tests | _navigation only: covered by `src/tests/hs02Navigation.test.ts`_ |
+| Services | `regulatoryLibraryService` — searchLibrary, getJurisdictionStats; no database access |
+| Data model / RLS | None. `LIBRARY_DATA` is a static corpus of regulatory reference text held in the module. |
+| Functional status | Working as a read-only reference library: search filters real statutory text by query, jurisdiction and document type. A library of statutes is legitimately static, so this is NOT a mock standing in for a feature. It holds no company-scoped state of any kind. |
+| Tests | None specific to this page. |
+| Outstanding | Whether it should stay a reference corpus or become a company-scoped register with review state is undecided, and no screen is drawn for the latter. An unused `supabase` import was removed. |
 
 #### `products`
 

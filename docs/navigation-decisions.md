@@ -424,3 +424,206 @@ anything. It does mean the remaining Priority 2 work is far smaller
 than 24 pages, and that the two hollow screens are where it starts.
 Facility logs was never in this set: its design existed, which is why
 batch 1 could build it from W6·29.
+
+---
+
+## Phase 3, batch 3 — FL-06/FL-07 trends, and the review-page reassessment
+
+> **Note on provenance.** No Batch 3 brief was issued. This batch works
+> the outstanding list as restated by the owner — trends, the review
+> pages, the Regulatory Library, Legal Marketplace scope — under the
+> Batch 2 constraints. Nothing here was inferred from a prompt that
+> does not exist.
+
+### D9 — Trends are built from FL-06, including its accessibility rules
+
+FL-06 and FL-07 are drawn, and FL-06 states its own aggregation in its
+subtitle:
+
+> "Highest settle-plate count per zone per week. Each chart has its own
+> limits drawn as labelled lines."
+
+So a series is a weekly **maximum**, computed by
+`facility_log_trend()`. This is not a stylistic preference: a week of
+10, 10, 10 and 112 has a mean of 35.5, which sits under an action limit
+of 100 and would draw as comfortable. Section B of the new SQL suite
+turns on exactly that row, and the assertion was mutation-tested — a
+mean returns `35.5000000000000000` and the test fails.
+
+FL-07 is not a second feature. It is FL-06 **checked in greyscale**,
+which makes the design's note a hard constraint rather than advice:
+
+> "One series per chart, no colour-only meaning: points change shape
+> (filled circle, hollow square, solid square) and the limits differ by
+> dash pattern and are labelled at the line end. Axes are labelled.
+> 'Show as table' gives the same numbers for screen readers and print."
+
+Every clause is implemented, and the reason each is load-bearing is
+recorded at the code. The point's **shape** is the meaning and colour
+is only reinforcement; the two limit lines differ by dash pattern and
+are labelled at their right-hand end, so neither needs a legend swatch;
+the legend names the shape in words, so it reads correctly aloud; and
+"Show as table" renders a real `<table>` built from the same series the
+chart draws, so the two cannot disagree.
+
+`bandFor` tests the action limit **before** the alert limit, matching
+the order in `facility_log_outcome()`. Reversed, a reading of 112
+against 50/100 would draw as a hollow square — "above alert" — while
+the row it came from is recorded as outside the action limit, so the
+chart would contradict the record. Six tests fail if that order is
+swapped; this was mutation-tested.
+
+### Two things FL-06 does not establish, and were not guessed
+
+**Where a week starts.** FL-06's x-axis reads 04 Aug, 11 Aug, 18 Aug …
+and in 2026 the 4th of August is a **Tuesday**, so the mock's buckets
+are not Monday-aligned and no rule is stated anywhere.
+`date_trunc('week', …)` is used, which is ISO-8601 and therefore
+Monday. That is a choice, not a reading of the design, and section G
+pins it.
+
+**The three sub-tabs.** FL-06 offers "Settle plates", "Surface swabs"
+and "Active air", but `log_type` has only `environmental_air` and
+`environmental_surface`: settle plates and active air are both **air**
+methods and the schema cannot tell them apart — only the schedule's
+`description` does ("Air · settle plates, 4 positions"). Adding a third
+enum value, or a `method` column, would be deciding how a company
+classifies its own air monitoring.
+
+> **Decision needed.** Should air monitoring distinguish settle plates
+> from active air as a stored field, or is the schedule description
+> sufficient? Until that is answered, the trend screen offers two tabs
+> rather than FL-06's three.
+
+**Which limits a chart draws.** A zone may carry several schedules of
+one log type, and FL-06 draws one pair of limit lines. The **tightest**
+is used, so a reading is never drawn as comfortable against a looser
+limit than one of its own schedules imposes; the alternative — the
+newest schedule's limits — would redraw history whenever a limit was
+relaxed. Per-entry judgement is unaffected either way, because
+`outcome` was decided against that entry's own schedule when it was
+written and is never recomputed.
+
+**What counts as "rising"** is also unstated. FL-06 prints a "rising"
+narrative and a "Flat, except …" one but never says where the line
+falls. Three points (two consecutive increases) is the choice, because
+two points is only "the last reading was higher than the one before",
+which happens constantly in environmental data. `RISING_RUN_MIN_POINTS`
+names it and a test pins it.
+
+**Export.** FL-06 carries an Export button and W6·29 notes that
+"environmental logs go into evidence export". What is implemented is a
+CSV of the numbers on screen, labelled **Download CSV** rather than
+Export, because wiring this into the formal evidence package (TR-09 /
+TR-10) is a different piece of work with its own approval. Calling a
+CSV "evidence export" would overstate it.
+
+### The four review pages — reassessed, with one decisive finding
+
+This was a reassessment, and it produced a result rather than a
+restatement. The deciding evidence is PM-03 itself, queried rather than
+recalled:
+
+| Section | Role | Access |
+|---|---|---|
+| `distribution` | storekeeper | **act** |
+| `distribution` | compliance_admin, management, qa_manager, qa_officer | view |
+| `suppliers` | procurement | **act** |
+| `suppliers` | qa_manager | **act** |
+| `suppliers` | compliance_admin, management, qa_officer, storekeeper | view |
+
+And the page map: **`dispatch` is the only page serving
+`distribution`, and `supplier-qualification` is the only page serving
+`suppliers`.** Nine of PM-03's eleven sections have exactly one page,
+so for them "remove the page" and "remove the section" are the same
+act.
+
+- **`dispatch` — recommend KEEP.** HS-01 row 10 says remove, giving as
+  its reason "the storekeeper sees Materials". PM-03 contradicts that
+  directly: the Storekeeper has `act` on Distribution, not on Materials
+  alone. Removing the page leaves a tabulated permission pointing at
+  nothing. Two approved sources conflict, so the owner decides — but
+  the cost of removal is now concrete.
+
+- **`supplier-qualification` — recommend KEEP, and row 9 cannot be
+  executed as written.** HS-01 row 9 does not simply say remove; it
+  says the approved-supplier list "stays in Settings › Materials and
+  suppliers", presupposing a home. **CF-02's Settings home has
+  seventeen sections and none is suppliers or materials.** So following
+  row 9 today would delete the only supplier page and move its contents
+  to a page that has never been built, while Procurement and the QA
+  Manager hold `act` on the section. Building that Settings section is
+  a prerequisite, not a detail.
+
+- **`compliance-reporting` — recommend KEEP.** Nothing is stranded: it
+  carries no PM-03 section. Its case rests entirely on HS-01 row 11,
+  and the destination note already concedes that mapping this page to
+  that row "is an inference from its label". The brief's own rule — a
+  missing or inferred design is not grounds for deletion — settles it.
+
+- **`enterprise-dashboard` — the strongest case for removal, still a
+  recommendation.** HS-02 lists "Group-level roll-up" under "Excluded
+  from the MVP: never in navigation", which under D4 is authority.
+  Nothing is stranded. What stops this being done rather than
+  recommended is that *this page is that item* remains an
+  identification: the page is labelled "Group Overview". The owner
+  should confirm the identification, after which removing it from the
+  rail follows from D4 without further decision.
+
+All four stay `kind: 'review'` and all four still render as top-level
+rail entries, so nothing was hidden while the question is open.
+`src/tests/reviewPages.test.ts` holds the facts the reassessment rests
+on — including an invariant that **every PM-03 section has at least one
+page**, which fails if either load-bearing page is deleted.
+
+### The Regulatory Library — a correction to batch 2's shorthand
+
+Batch 2 reported `regulatory-library` and `legal-marketplace` as "the
+two genuinely hollow screens". That is accurate for
+`legal-marketplace` and **not accurate** for the library, so the
+earlier wording is withdrawn.
+
+`regulatoryLibraryService` holds a corpus of **real regulatory
+reference text** — the NAFDAC Act (Cap N1 LFN 2004) among others, with
+summaries, full text, source URLs and jurisdictions — and the page's
+search genuinely filters it by query, jurisdiction and document type.
+A library of statutes is legitimately static content; it is not mock
+operational data standing in for a feature.
+
+What it lacks is any company-scoped state: no way to record that a
+document has been reviewed, to bookmark one, to link one to an
+obligation, or to add a circular the company has received. None of that
+is drawn anywhere, and inventing a regulatory review workflow is
+exactly the kind of regulated procedure this project does not invent.
+
+One real defect was found and fixed: the service imported `supabase`
+and never used it, which ESLint reported as an error. Removing it is
+the whole change.
+
+> **Decision needed.** Is the Regulatory Library meant to stay a
+> read-only reference corpus, or to become a company-scoped register
+> with review state? The first needs nothing; the second needs its
+> rules stated before a table is designed.
+
+### Legal Marketplace — still unresolved, and still untouched
+
+HS-02 excludes a "Regulator portal" and does not mention a marketplace
+either way. There is no design, no backing table, and no approved
+statement of what it is for. Nothing was built.
+
+> **Decision needed.** Is a legal marketplace in the pilot at all? If
+> yes, what does it list and who may act in it?
+
+### `qa_officer` — unchanged, and one new data point
+
+Still unresolved, and deliberately untouched during this batch. One
+observation from the PM-03 query above that bears on it: `qa_officer`
+**does** appear in `section_permissions`, with `view` on both
+`distribution` and `suppliers`. So the role is tabulated in the
+database matrix while resolving to the empty permission set on the
+TypeScript side — which is further evidence that the gap is a mapping
+defect rather than a deliberate absence, but still does not state what
+its permission keys should be.
+
+> **Decision needed, unchanged.** The PM-03 row for `qa_officer`, or a
+> statement that it mirrors another role's cell.

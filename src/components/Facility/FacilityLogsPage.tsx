@@ -27,9 +27,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ClipboardList, Loader2, AlertTriangle, Search, Plus, X, CheckCircle2,
-  ChevronRight, History, Settings2,
+  ChevronRight, History, Settings2, TrendingUp,
 } from 'lucide-react';
 import FacilityZonesSetup from './FacilityZonesSetup';
+import FacilityTrendsView from './FacilityTrendsView';
 import { useAuth } from '../../contexts/AuthContext';
 import { logger } from '../../lib/logger';
 import {
@@ -115,7 +116,7 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
   //  where the register gets its content, so it is reached from here
   //  rather than given a rail entry of its own — HS-02 lists one
   //  "Facility logs" and no second item beside it.
-  const [view, setView] = useState<'register' | 'setup'>('register');
+  const [view, setView] = useState<'register' | 'setup' | 'trends'>('register');
 
   const load = useCallback(async () => {
     if (!companyId) { setLoading(false); return; }
@@ -171,6 +172,14 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
     );
   }
 
+  //  FL-06. Reached from the register, like FL-02: HS-02 lists one
+  //  "Facility logs" and no second item beside it.
+  if (view === 'trends') {
+    return (
+      <FacilityTrendsView companyId={companyId} onBack={() => setView('register')} />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -185,12 +194,20 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
             Logs belong to the facility, not to a batch.
           </p>
         </div>
-        <button
-          onClick={() => setView('setup')}
-          className="flex items-center gap-1.5 px-4 py-2.5 min-h-[40px] rounded-xl text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] shrink-0"
-        >
-          <Settings2 className="w-4 h-4" /> Zones &amp; schedules
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setView('trends')}
+            className="flex items-center gap-1.5 px-4 py-2.5 min-h-[40px] rounded-xl text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+          >
+            <TrendingUp className="w-4 h-4" /> Trends
+          </button>
+          <button
+            onClick={() => setView('setup')}
+            className="flex items-center gap-1.5 px-4 py-2.5 min-h-[40px] rounded-xl text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)]"
+          >
+            <Settings2 className="w-4 h-4" /> Zones &amp; schedules
+          </button>
+        </div>
       </div>
 
       {/* FL-01's banner: only when something actually needs attention. */}

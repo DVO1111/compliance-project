@@ -230,6 +230,33 @@ const FACILITY_SITES = [
   { id: 'fs-2', name: 'FIXTURE Ibadan warehouse', site_type: 'warehouse' },
 ];
 
+//  FL-06's two charts. The first rises every week and crosses both
+//  limits, which is the narrative the design prints; the second is
+//  flat with a single excursion, which is the other one. Week starts
+//  are Mondays, as date_trunc('week') produces.
+const FACILITY_TREND = [
+  ...[
+    ['2026-08-03', 28], ['2026-08-10', 34], ['2026-08-17', 41],
+    ['2026-08-24', 55], ['2026-08-31', 68], ['2026-09-07', 84],
+    ['2026-09-14', 96], ['2026-09-21', 112],
+  ].map(([week, v]) => ({
+    zone_id: 'fz-2', zone_name: 'FIXTURE Compression hall C1', zone_grade: 'Grade D',
+    week_start: week, max_value: v,
+    max_recorded_at: `${week}T06:20:00Z`, sample_count: 4,
+    result_unit: 'CFU', alert_limit: 50, action_limit: 100,
+  })),
+  ...[
+    ['2026-08-03', 12], ['2026-08-10', 14], ['2026-08-17', 11],
+    ['2026-08-24', 13], ['2026-08-31', 52], ['2026-09-07', 12],
+    ['2026-09-14', 10], ['2026-09-21', 13],
+  ].map(([week, v]) => ({
+    zone_id: 'fz-1', zone_name: 'FIXTURE Granulation G2', zone_grade: 'Grade D',
+    week_start: week, max_value: v,
+    max_recorded_at: `${week}T07:05:00Z`, sample_count: 2,
+    result_unit: 'CFU', alert_limit: 25, action_limit: 50,
+  })),
+];
+
 const BY_TABLE: Record<string, unknown[]> = {
   facility_log_entries: FACILITY_ENTRIES,
   facility_zones: FACILITY_ZONES,
@@ -245,6 +272,7 @@ const BY_RPC: Record<string, unknown> = {
   operational_role_stranded_work: STRANDED,
   facility_log_register: FACILITY_REGISTER,
   facility_site_options: FACILITY_SITES,
+  facility_log_trend: FACILITY_TREND,
 };
 
 function builder(table: string): any {

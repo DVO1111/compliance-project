@@ -711,3 +711,279 @@ export async function setScheduleActive(
 ): Promise<FacilitySchedule> {
   return updateSchedule(companyId, scheduleId, { is_active: isActive });
 }
+
+// ───────────────────────────────────────────────────────────────────────
+//  FL-06 / FL-07 — trends
+//
+//  FL-06 states its own aggregation in its subtitle: "Highest
+//  settle-plate count per zone per week." So a series is a weekly
+//  MAXIMUM, which `facility_log_trend()` computes in the database.
+//
+//  FL-07 is the same screen in greyscale, and the design's note on
+//  both is the constraint that shapes everything here:
+//
+//      "One series per chart, no colour-only meaning: points change
+//       shape (filled circle, hollow square, solid square) and the
+//       limits differ by dash pattern and are labelled at the line
+//       end. Axes are labelled. 'Show as table' gives the same
+//       numbers for screen readers and print."
+//
+//  That is why `bandFor` exists and returns a band rather than a
+//  colour: the mark's SHAPE is the meaning, and colour is only ever
+//  reinforcement.
+// ───────────────────────────────────────────────────────────────────────
+
+/** The log types that trend. A cleaning record has no number to plot. */
+export const TREND_LOG_TYPES: FacilityLogType[] = [
+  'environmental_air',
+  'environmental_surface',
+];
+
+/** FL-06's range selector. */
+export const TREND_RANGES: { label: string; weeks: number }[] = [
+  { label: '4 weeks', weeks: 4 },
+  { label: '12 weeks', weeks: 12 },
+  { label: '6 months', weeks: 26 },
+];
+
+export interface TrendRow {
+  zone_id: string;
+  zone_name: string;
+  zone_grade: string | null;
+  week_start: string;
+  max_value: number;
+  max_recorded_at: string;
+  sample_count: number;
+  result_unit: string | null;
+  alert_limit: number | null;
+  action_limit: number | null;
+}
+
+export interface TrendSeries {
+  zoneId: string;
+  zoneName: string;
+  zoneGrade: string | null;
+  unit: string | null;
+  alertLimit: number | null;
+  actionLimit: number | null;
+  points: {
+    weekStart: string;
+    value: number;
+    recordedAt: string;
+    samples: number;
+    band: TrendBand;
+  }[];
+}
+
+export type TrendBand = 'within' | 'above_alert' | 'outside_action';
+
+/**
+ *  Which of FL-06's three point shapes a reading takes.
+ *
+ *  Deliberately the SAME order of tests as `facility_log_outcome()` in
+ *  the database — action first, then alert — so a point cannot be
+ *  drawn as merely "above alert" while the row it came from is
+ *  recorded as outside the action limit.
+ */
+export function bandFor(
+  value: number,
+  alertLimit: number | null,
+  actionLimit: number | null,
+): TrendBand {
+  if (actionLimit != null && value > actionLimit) return 'outside_action';
+  if (alertLimit != null && value > alertLimit) return 'above_alert';
+  return 'within';
+}
+
+/** FL-06's legend. The shape is named in the text, not just drawn. */
+export const BAND_LEGEND: Record<TrendBand, string> = {
+  within: 'Within limit (filled circle)',
+  above_alert: 'Above alert (hollow square)',
+  outside_action: 'Outside action (solid square)',
+};
+
+export async function listTrend(
+  companyId: string,
+  logType: FacilityLogType,
+  weeks: number,
+): Promise<TrendRow[]> {
+  const { data, error } = await supabase.rpc('facility_log_trend', {
+    p_company_id: companyId,
+    p_log_type: logType,
+    p_weeks: weeks,
+  });
+  if (error) {
+    logger.error('[facility] could not load the trend', { error: error.message });
+    throw new Error(describeFacilityError(error.message).message);
+  }
+  return (data ?? []) as unknown as TrendRow[];
+}
+
+/** One chart per zone, which is what "one series per chart" means. */
+export function groupTrend(rows: TrendRow[]): TrendSeries[] {
+  const byZone = new Map<string, TrendSeries>();
+  for (const r of rows) {
+    let s = byZone.get(r.zone_id);
+    if (!s) {
+      s = {
+        zoneId: r.zone_id, zoneName: r.zone_name, zoneGrade: r.zone_grade,
+        unit: r.result_unit, alertLimit: r.alert_limit, actionLimit: r.action_limit,
+        points: [],
+      };
+      byZone.set(r.zone_id, s);
+    }
+    s.points.push({
+      weekStart: r.week_start,
+      value: Number(r.max_value),
+      recordedAt: r.max_recorded_at,
+      samples: Number(r.sample_count),
+      band: bandFor(Number(r.max_value), r.alert_limit, r.action_limit),
+    });
+  }
+  for (const s of byZone.values()) {
+    s.points.sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  }
+  //  Worst first: a chart that breached an action limit is the one to
+  //  read, which is the same triage reasoning FL-01's table uses.
+  const rank = (s: TrendSeries): number => {
+    if (s.points.some((p) => p.band === 'outside_action')) return 0;
+    if (s.points.some((p) => p.band === 'above_alert')) return 1;
+    return 2;
+  };
+  return [...byZone.values()].sort(
+    (a, b) => rank(a) - rank(b) || a.zoneName.localeCompare(b.zoneName),
+  );
+}
+
+/**
+ *  HOW LONG A RUN COUNTS AS "RISING" IS NOT STATED BY THE DESIGN.
+ *
+ *  FL-06 shows two narratives — "rising" for a series that climbed
+ *  every week, and "Flat, except week of 13 Oct" for one that did not
+ *  — but never says where the line between them falls.
+ *
+ *  Three points (two consecutive increases) is the choice made here,
+ *  because two points is just the last reading being higher than the
+ *  one before it, which happens constantly in environmental data and
+ *  would label almost every series rising.
+ *
+ *  It is a choice, not a reading of the design, so it is named here
+ *  and pinned by a test. Changing it should be a decision.
+ */
+export const RISING_RUN_MIN_POINTS = 3;
+
+export interface TrendNarrative {
+  direction: 'rising' | 'flat';
+  /** The badge: "Rising · outside action limit". */
+  badge: string;
+  /** The sentence FL-06 prints under the zone name. */
+  sentence: string;
+  worstBand: TrendBand;
+}
+
+function fmtDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+/**
+ *  The narrative FL-06 prints. Pure, so it is tested directly rather
+ *  than through a rendered chart.
+ */
+export function summariseTrend(series: TrendSeries): TrendNarrative {
+  const pts = series.points;
+  const unit = series.unit ? ` ${series.unit}` : '';
+
+  if (pts.length === 0) {
+    return {
+      direction: 'flat', badge: 'No readings', worstBand: 'within',
+      sentence: 'No measured readings in this period.',
+    };
+  }
+
+  const worstBand: TrendBand = pts.some((p) => p.band === 'outside_action')
+    ? 'outside_action'
+    : pts.some((p) => p.band === 'above_alert') ? 'above_alert' : 'within';
+
+  //  The trailing strictly-increasing run, walked back from the end.
+  let runStart = pts.length - 1;
+  while (runStart > 0 && pts[runStart].value > pts[runStart - 1].value) runStart--;
+  const runLength = pts.length - runStart;
+  const rising = runLength >= RISING_RUN_MIN_POINTS;
+
+  const bandWord: Record<TrendBand, string> = {
+    within: 'within limits',
+    above_alert: 'above alert limit',
+    outside_action: 'outside action limit',
+  };
+
+  if (rising) {
+    const from = pts[runStart];
+    const to = pts[pts.length - 1];
+    //  The first week in this run that crossed each limit — reported
+    //  separately because crossing the alert and crossing the action
+    //  limit are different events with different consequences.
+    const run = pts.slice(runStart);
+    const crossedAlert = run.find((p) => p.band !== 'within');
+    const crossedAction = run.find((p) => p.band === 'outside_action');
+    const crossings = [
+      crossedAlert && `the alert limit on ${fmtDay(crossedAlert.recordedAt)}`,
+      crossedAction && `the action limit on ${fmtDay(crossedAction.recordedAt)}`,
+    ].filter(Boolean) as string[];
+
+    return {
+      direction: 'rising',
+      badge: `Rising · ${bandWord[worstBand]}`,
+      worstBand,
+      sentence:
+        `Weekly maximum has risen every week since ${fmtDay(from.weekStart)}: `
+        + `${from.value} → ${to.value}${unit}.`
+        + (crossings.length ? ` Crossed ${crossings.join(' and ')}.` : ''),
+    };
+  }
+
+  //  Flat. The design names the exceptions rather than the average,
+  //  because the excursion is the thing worth reading.
+  const breaches = pts.filter((p) => p.band !== 'within');
+  if (breaches.length === 0) {
+    return {
+      direction: 'flat', badge: `Flat · ${bandWord.within}`, worstBand,
+      sentence: `Flat, and every weekly maximum stayed within limits.`,
+    };
+  }
+  const named = breaches
+    .slice(0, 3)
+    .map((p) => `week of ${fmtDay(p.weekStart)}: ${p.value}${unit} on ${fmtDay(p.recordedAt)}`);
+  return {
+    direction: 'flat',
+    badge: `Flat · ${bandWord[worstBand]}`,
+    worstBand,
+    sentence: `Flat, except ${named.join('; ')}`
+      + (breaches.length > 3 ? ` and ${breaches.length - 3} more.` : '.'),
+  };
+}
+
+/**
+ *  "Show as table gives the same numbers" — so the CSV is built from
+ *  the same series the chart draws, not from a second query that
+ *  could disagree with it.
+ */
+export function trendToCsv(seriesList: TrendSeries[]): string {
+  const head = [
+    'Zone', 'Grade', 'Week starting', 'Highest result', 'Unit',
+    'Readings in week', 'Peak reading taken', 'Alert limit', 'Action limit', 'Standing',
+  ];
+  const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [head.join(',')];
+  for (const s of seriesList) {
+    for (const p of s.points) {
+      lines.push([
+        s.zoneName, s.zoneGrade ?? '', p.weekStart, p.value, s.unit ?? '',
+        p.samples, p.recordedAt, s.alertLimit ?? '', s.actionLimit ?? '',
+        BAND_LEGEND[p.band],
+      ].map(cell).join(','));
+    }
+  }
+  return lines.join('\n');
+}
