@@ -1116,3 +1116,100 @@ What bringing it into a future phase would require, in order:
 
 Until step 1 exists the rest cannot be estimated, which is why this is
 recorded as deferred rather than scheduled.
+
+---
+
+## P2-1 implemented — the action register
+
+### The criteria are a table, which is the whole design
+
+"Define the escalation criteria explicitly rather than inventing
+hidden rules" is why `facility_escalation_criteria` is a table and not
+a `CASE` expression. A threshold compiled into a trigger is a rule
+nobody can list, nobody can show an inspector and nobody can change
+without a migration.
+
+Each row is one rule the company has adopted: a `code` they quote, a
+`description` in their own words, a `basis` (one of the three the
+instruction names), its own values, and `requires_capa`. Every
+evaluation returns the rows that fired with the detail of why — so
+"why does this need a CAPA?" is answered with the company's own rule,
+quoted, and the refusal itself names the criterion:
+
+```
+ERROR:  ACTION_NEEDS_CAPA: ESC-SEV
+```
+
+**The migration seeds no criteria at all**, and a test asserts that. A
+shipped default would be a hidden rule by another route: the company
+would be escalating on a threshold somebody else chose.
+
+**No severity scale was invented.** `match_values` is `text[]` and the
+migration names no labels. W6·29 draws no severity scale and the
+instruction states none, so "1 to 5" or "minor/major/critical" would
+be deciding how a company grades its own findings. They enumerate
+their own labels; a test asserts the migration mentions none.
+
+### The three closure gates
+
+A finding marked as needing action may be closed only when:
+
+1. an action exists in the register for it;
+2. that action is **completed and carries closure evidence**;
+3. if any matching criterion requires a CAPA, the action **links to
+   one**.
+
+(2) is the instruction's "required action and closure evidence", and
+the register's own CHECK ties evidence to the completed status, so an
+action cannot be completed without it. (3) is the escalation half.
+Mutation-tested: disabling the escalation gate fails D5 and D6.
+
+A **Minor** finding closes with an action and evidence and **no CAPA**,
+because no matching criterion requires one. The rule escalates where
+the criteria say so and not everywhere — which is what "link OR
+escalate … when the criteria require it" means.
+
+### Two defects the tests found in this batch's own work
+
+**The integrity trigger re-validated the source on every UPDATE.**
+Deleting a profile sets `completed_by` to NULL through its foreign
+key, which fired the trigger, which then failed because the source
+finding had been deleted earlier in the same cascade. That is not a
+test artefact: in production the same shape would make removing a user
+fail whenever one of their completed actions pointed at a source that
+had since gone. The source is now validated only when it is written,
+which is the only time it can become wrong.
+
+**`ON DELETE SET NULL` was the wrong rule** on the finding's link to
+its action. It let an action be deleted out from under a *closed*
+finding, silently stripping the evidence it was closed on — and then
+the closure invariant refused the cascade anyway, with an error from
+two tables away. It is `ON DELETE RESTRICT` now, which states the real
+rule: the completed action **is** the closure evidence, so it cannot be
+removed while the finding relies on it.
+
+### What was not widened
+
+> **Observation, not a change.** `capa_records.source` is constrained
+> to six values — `audit_finding`, `compliance_failure`, `near_miss`,
+> `customer_complaint`, `regulatory_action`, `internal_review` — and
+> **none of them names facility or pest monitoring.** So escalating a
+> pest finding means classifying it as one of the six;
+> `internal_review` is the closest honest fit, since the finding came
+> from the company's own contracted inspection.
+>
+> A seventh value was **not** added. That vocabulary governs a
+> regulated record, and widening it so a link reads better would be a
+> quality decision taken in a migration. **If the owner wants a
+> facility source on CAPA records, that is a decision to take
+> deliberately.**
+
+Two superseded assertions were updated rather than deleted, both of
+which had been written to flip when this day came:
+
+- `facility_pest_control_test.sql` A5 said `corrective_task_id` had no
+  foreign key "because no task register exists", and added that it
+  "should be revisited" if one were added. It now pins the reference
+  **and** the RESTRICT delete rule.
+- Its C5a stood a random uuid in that column; it now raises and
+  completes a real action, which is the point of the change.

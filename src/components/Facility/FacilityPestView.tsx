@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { logger } from '../../lib/logger';
+import FacilityActionPanel from './FacilityActionPanel';
 import {
   listPestVisits, listPestFindings, createPestFinding, resolveFinding,
   setFindingNeedsAction, validatePestFinding, canCloseWithNote, whyNotCloseable,
@@ -76,12 +77,13 @@ function ActionCell({ f }: { f: PestFinding }) {
 }
 
 function FindingsTable({
-  findings, busy, onClose, onMark,
+  findings, busy, onClose, onMark, onAction,
 }: {
   findings: PestFinding[];
   busy: boolean;
   onClose: (f: PestFinding) => void;
   onMark: (f: PestFinding, needs: boolean) => void;
+  onAction: (f: PestFinding) => void;
 }) {
   if (findings.length === 0) {
     return (
@@ -131,21 +133,35 @@ function FindingsTable({
                         >
                           {f.needs_action ? 'Not an action' : 'Needs action'}
                         </button>
-                        <button
-                          onClick={() => onClose(f)}
-                          disabled={busy || !closeable}
-                          title={why ?? undefined}
-                          className="text-xs px-2 py-1 min-h-[28px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Close
-                        </button>
+                        {/*  A finding needing action no longer gets a
+                            disabled Close with an apology. It gets the
+                            workflow: raise the action, complete it with
+                            evidence, link the CAPA the company's own
+                            criteria require, then close. */}
+                        {f.needs_action ? (
+                          <button
+                            onClick={() => onAction(f)}
+                            disabled={busy}
+                            className="text-xs px-2 py-1 min-h-[28px] rounded-lg text-white"
+                            style={{ background: 'var(--color-accent)' }}
+                          >
+                            Corrective action
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => onClose(f)}
+                            disabled={busy || !closeable}
+                            title={why ?? undefined}
+                            className="text-xs px-2 py-1 min-h-[28px] rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Close
+                          </button>
+                        )}
                       </div>
-                      {/*  The reason, in words. A disabled control with
-                          no explanation is how somebody concludes the
-                          product is broken. */}
-                      {why && f.needs_action && (
+                      {why && f.needs_action && !canCloseWithNote(f) && (
                         <span className="text-[11px] text-[var(--color-text-tertiary)] max-w-xs text-right">
-                          {why}
+                          Needs a corrective action with an owner, a due date and closure
+                          evidence before it can be closed.
                         </span>
                       )}
                     </div>
@@ -156,6 +172,7 @@ function FindingsTable({
           })}
         </tbody>
       </table>
+
     </div>
   );
 }
@@ -310,6 +327,7 @@ export default function FacilityPestView({ companyId }: { companyId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [addingFor, setAddingFor] = useState<string | null>(null);
+  const [actionFor, setActionFor] = useState<PestFinding | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -515,6 +533,7 @@ export default function FacilityPestView({ companyId }: { companyId: string }) {
                       <FindingsTable
                         findings={rows}
                         busy={busy}
+                        onAction={(f) => setActionFor(f)}
                         onMark={(f, needs) => void run(
                           needs ? 'Marked as needing action.' : 'No longer marked as needing action.',
                           () => setFindingNeedsAction(companyId, f.id, needs),
@@ -557,6 +576,15 @@ export default function FacilityPestView({ companyId }: { companyId: string }) {
             })}
           </div>
         </>
+      )}
+
+      {actionFor && (
+        <FacilityActionPanel
+          companyId={companyId}
+          finding={actionFor}
+          onClose={() => setActionFor(null)}
+          onChanged={() => { void load(); void loadFindings(actionFor.visit_id); }}
+        />
       )}
     </div>
   );

@@ -5526,14 +5526,14 @@ isOneToOne: false
                   Relationships: []
                 },"facility_pest_findings": {
                   Row: {
-                    "company_id": string,"corrective_task_id": string | null,"created_at": string,"created_by": string | null,"disposition_note": string | null,"finding": string,"id": string,"location_ref": string | null,"method_used": string | null,"needs_action": boolean,"resolution_note": string | null,"resolved_at": string | null,"resolved_by": string | null,"station_code": string,"updated_at": string,"visit_id": string,"zone_id": string | null
+                    "affects_product": boolean,"company_id": string,"corrective_task_id": string | null,"created_at": string,"created_by": string | null,"disposition_note": string | null,"finding": string,"severity": string | null,"id": string,"location_ref": string | null,"method_used": string | null,"needs_action": boolean,"resolution_note": string | null,"resolved_at": string | null,"resolved_by": string | null,"station_code": string,"updated_at": string,"visit_id": string,"zone_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "company_id": string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding": string,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code": string,"updated_at"?: string,"visit_id": string,"zone_id"?: string | null
+                    "affects_product"?: boolean,"company_id": string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding": string,"severity"?: string | null,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code": string,"updated_at"?: string,"visit_id": string,"zone_id"?: string | null
                   }
                   Update: {
-                    "company_id"?: string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding"?: string,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code"?: string,"updated_at"?: string,"visit_id"?: string,"zone_id"?: string | null
+                    "affects_product"?: boolean,"company_id"?: string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding"?: string,"severity"?: string | null,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code"?: string,"updated_at"?: string,"visit_id"?: string,"zone_id"?: string | null
                   }
                   Relationships: []
                 },"facility_water_sources": {
@@ -5582,6 +5582,30 @@ isOneToOne: false
                   }
                   Update: {
                     "analyst_name"?: string | null,"company_id"?: string,"created_at"?: string,"due_on"?: string | null,"id"?: string,"laboratory_name"?: string | null,"notes"?: string | null,"outcome"?: string,"received"?: boolean,"recorded_by"?: string | null,"report_ref"?: string | null,"result_text"?: string | null,"result_value"?: number | null,"sampled_on"?: string,"test_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: []
+                },"facility_escalation_criteria": {
+                  Row: {
+                    "basis": string,"code": string,"company_id": string,"created_at": string,"created_by": string | null,"description": string,"id": string,"is_active": boolean,"match_values": (string)[] | null,"min_count": number | null,"requires_capa": boolean,"updated_at": string,"window_days": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "basis": string,"code": string,"company_id": string,"created_at"?: string,"created_by"?: string | null,"description": string,"id"?: string,"is_active"?: boolean,"match_values"?: (string)[] | null,"min_count"?: number | null,"requires_capa"?: boolean,"updated_at"?: string,"window_days"?: number | null
+                  }
+                  Update: {
+                    "basis"?: string,"code"?: string,"company_id"?: string,"created_at"?: string,"created_by"?: string | null,"description"?: string,"id"?: string,"is_active"?: boolean,"match_values"?: (string)[] | null,"min_count"?: number | null,"requires_capa"?: boolean,"updated_at"?: string,"window_days"?: number | null
+                  }
+                  Relationships: []
+                },"facility_action_register": {
+                  Row: {
+                    "cancelled_reason": string | null,"closure_evidence": string | null,"closure_ref": string | null,"company_id": string,"completed_at": string | null,"completed_by": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_on": string | null,"id": string,"linked_capa_id": string | null,"owner_id": string | null,"source_id": string,"source_kind": string,"status": string,"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cancelled_reason"?: string | null,"closure_evidence"?: string | null,"closure_ref"?: string | null,"company_id": string,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"id"?: string,"linked_capa_id"?: string | null,"owner_id"?: string | null,"source_id": string,"source_kind": string,"status"?: string,"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "cancelled_reason"?: string | null,"closure_evidence"?: string | null,"closure_ref"?: string | null,"company_id"?: string,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"id"?: string,"linked_capa_id"?: string | null,"owner_id"?: string | null,"source_id"?: string,"source_kind"?: string,"status"?: string,"title"?: string,"updated_at"?: string
                   }
                   Relationships: []
                 },"facility_zones": {
@@ -6573,6 +6597,16 @@ isOneToOne: false
                            },
 "facility_water_outcome":
 { Args: { "p_limit_kind": string,"p_limit_min": number,"p_limit_max": number,"p_expected_text": string,"p_result_value": number,"p_result_text": string,"p_received": boolean }; Returns: string
+                           },
+"facility_action_list":
+{ Args: { "p_company_id": string }; Returns: {
+                             "action_id": string,"source_kind": string,"source_id": string,"title": string,"description": string | null,"owner_id": string | null,"due_on": string | null,"status": string,"closure_evidence": string | null,"closure_ref": string | null,"completed_at": string | null,"linked_capa_id": string | null,"capa_number": string | null,"station_code": string | null,"visit_reference": string | null,"is_overdue": boolean
+                           }[]
+                           },
+"facility_escalation_matches":
+{ Args: { "p_finding_id": string }; Returns: {
+                             "criterion_id": string,"code": string,"description": string,"basis": string,"requires_capa": boolean,"detail": string
+                           }[]
                            },
 "facility_log_trend":
 { Args: { "p_company_id": string,"p_log_type": string,"p_weeks"?: number }; Returns: {

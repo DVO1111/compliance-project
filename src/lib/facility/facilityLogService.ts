@@ -1185,6 +1185,16 @@ export async function resolveFinding(
   findingId: string,
   resolvedBy: string,
   note: string,
+  /**
+   *  The completed action that closes it, where one is required.
+   *
+   *  Added with 20261209000000. The closure is a SINGLE UPDATE that
+   *  sets the link and the resolution together, because the trigger
+   *  checks them as one state: setting `resolved_at` first and the
+   *  link afterwards would be refused, and setting the link first
+   *  would leave a closed-looking row for the moment in between.
+   */
+  correctiveTaskId?: string | null,
 ): Promise<PestFinding> {
   const { data, error } = await supabase
     .from('facility_pest_findings')
@@ -1192,6 +1202,7 @@ export async function resolveFinding(
       resolved_at: new Date().toISOString(),
       resolved_by: resolvedBy,
       resolution_note: note.trim() || null,
+      ...(correctiveTaskId ? { corrective_task_id: correctiveTaskId } : {}),
     })
     .eq('id', findingId)
     .eq('company_id', companyId)

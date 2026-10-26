@@ -49,7 +49,11 @@ DECLARE
   va uuid := '00000000-0000-7b03-f000-000000000001';
   vb uuid := '00000000-0000-7b03-f000-000000000002';
 BEGIN
+  --  Findings first: they REFERENCE the register, and the FK is
+  --  RESTRICT because a completed action is a closed finding's
+  --  evidence and must not be removable while it is relied on.
   DELETE FROM public.facility_pest_findings  WHERE company_id IN (ca,cb);
+  DELETE FROM public.facility_action_register WHERE company_id IN (ca,cb);
   DELETE FROM public.facility_pest_visits    WHERE company_id IN (ca,cb);
   DELETE FROM public.facility_pest_providers WHERE company_id IN (ca,cb);
   DELETE FROM public.facility_zones   WHERE company_id IN (ca,cb);
@@ -117,12 +121,27 @@ BEGIN
       WHERE tgrelid='public.facility_pest_findings'::regclass
         AND tgname='trg_facility_pest_finding_integrity' AND NOT tgisinternal));
 
-  --  corrective_task_id deliberately has NO foreign key: there is no
-  --  task register to point at. If one is ever added this assertion
-  --  should be revisited, which is why it is stated rather than left
-  --  as an absence.
-  PERFORM _sk('A','A5 corrective_task_id has no FK, because no task register exists',
-    (SELECT count(*) = 0 FROM pg_constraint k
+  /*
+   *  This assertion used to say corrective_task_id had NO foreign key,
+   *  because there was no task register to point at, and added that it
+   *  "should be revisited" if one were ever added. 20261209000000
+   *  added one, so it was revisited.
+   *
+   *  It now pins the delete rule, which is the part that carries
+   *  meaning: RESTRICT, because a completed action is the closure
+   *  evidence for the finding that points at it and must not be
+   *  removable while it is relied on. SET NULL would strip the
+   *  evidence from a closed record.
+   */
+  PERFORM _sk('A','A5 corrective_task_id references the action register',
+    (SELECT count(*) = 1 FROM pg_constraint k
+      JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = ANY (k.conkey)
+      WHERE k.conrelid='public.facility_pest_findings'::regclass
+        AND k.contype='f' AND a.attname='corrective_task_id'
+        AND k.confrelid='public.facility_action_register'::regclass));
+
+  PERFORM _sk('A','A5b and it RESTRICTs, so closure evidence cannot be deleted away',
+    (SELECT confdeltype = 'r' FROM pg_constraint k
       JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = ANY (k.conkey)
       WHERE k.conrelid='public.facility_pest_findings'::regclass
         AND k.contype='f' AND a.attname='corrective_task_id'));
@@ -220,7 +239,7 @@ $b$;
 --  "A finding marked as needing action can't be closed by a note."
 -- =====================================================================
 DO $c$
-DECLARE v_err text; v_id uuid; n integer;
+DECLARE v_err text; v_id uuid; v_action uuid; n integer;
 BEGIN
   --  The FL-13 row that needs action: rodent droppings at BS-07.
   INSERT INTO public.facility_pest_findings
@@ -282,14 +301,35 @@ BEGIN
 
   --  C5: a finding that WAS actioned and closed cannot have its
   --  needs_action flag cleared afterwards.
+  /*
+   *  20261209000000 turned `corrective_task_id` into a real reference
+   *  to `facility_action_register`, and the closure rule now also
+   *  requires that action to be COMPLETED and to carry closure
+   *  evidence. This block used to stand a random uuid in that column;
+   *  it now has to raise and complete an actual action, which is the
+   *  point of the change.
+   */
   INSERT INTO public.facility_pest_findings
-    (company_id,visit_id,station_code,finding,needs_action,
-     corrective_task_id,resolved_at,resolved_by,resolution_note,created_by)
+    (company_id,visit_id,station_code,finding,needs_action,created_by)
   VALUES ('00000000-0000-7b03-a000-000000000001','00000000-0000-7b03-f000-000000000001',
-          'BS-22','Cockroach activity, canteen drain', true,
-          gen_random_uuid(), now(), auth.uid(), 'drain cover replaced', auth.uid())
+          'BS-22','Cockroach activity, canteen drain', true, auth.uid())
   RETURNING id INTO v_id;
-  PERFORM _sk('C','C5a a finding WITH a corrective task can be closed', v_id IS NOT NULL);
+
+  INSERT INTO public.facility_action_register
+    (company_id,source_kind,source_id,title,status,
+     closure_evidence,completed_at,completed_by,created_by)
+  VALUES ('00000000-0000-7b03-a000-000000000001','pest_finding',v_id,
+          'Replace the canteen drain cover','completed',
+          'Drain cover replaced; photograph on file.',now(),auth.uid(),auth.uid())
+  RETURNING id INTO v_action;
+
+  UPDATE public.facility_pest_findings
+     SET corrective_task_id = v_action, resolved_at = now(),
+         resolved_by = auth.uid(), resolution_note = 'drain cover replaced'
+   WHERE id = v_id;
+
+  PERFORM _sk('C','C5a a finding with a COMPLETED action and evidence can be closed',
+    (SELECT resolved_at IS NOT NULL FROM public.facility_pest_findings WHERE id = v_id));
 
   BEGIN
     UPDATE public.facility_pest_findings SET needs_action = false WHERE id = v_id;
