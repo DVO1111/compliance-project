@@ -5634,14 +5634,14 @@ isOneToOne: false
                   Relationships: []
                 },"facility_log_entries": {
                   Row: {
-                    "company_id": string,"created_at": string,"due_at": string | null,"exposure_minutes": number | null,"sample_method": string | null,"volume_litres": number | null,"id": string,"linked_deviation_id": string | null,"log_type": string,"notes": string | null,"outcome": string,"performed": boolean,"recorded_at": string,"recorded_by": string | null,"reference": string | null,"result_position": string | null,"result_unit": string | null,"result_value": number | null,"schedule_id": string | null,"zone_id": string
+                    "company_id": string,"created_at": string,"due_at": string | null,"exposure_minutes": number | null,"sample_method": string | null,"volume_litres": number | null,"id": string,"linked_deviation_id": string | null,"log_type": string,"cleaning_method": string | null,"cleaning_agents": (string)[] | null,"contact_minutes": number | null,"line_ref": string | null,"started_at": string | null,"finished_at": string | null,"verified_by": string | null,"verified_at": string | null,"notes": string | null,"outcome": string,"performed": boolean,"recorded_at": string,"recorded_by": string | null,"reference": string | null,"result_position": string | null,"result_unit": string | null,"result_value": number | null,"schedule_id": string | null,"zone_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "company_id": string,"created_at"?: string,"due_at"?: string | null,"exposure_minutes"?: number | null,"sample_method"?: string | null,"volume_litres"?: number | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type": string,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id": string
+                    "company_id": string,"created_at"?: string,"due_at"?: string | null,"exposure_minutes"?: number | null,"sample_method"?: string | null,"volume_litres"?: number | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type": string,"cleaning_method"?: string | null,"cleaning_agents"?: (string)[] | null,"contact_minutes"?: number | null,"line_ref"?: string | null,"started_at"?: string | null,"finished_at"?: string | null,"verified_by"?: string | null,"verified_at"?: string | null,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id": string
                   }
                   Update: {
-                    "company_id"?: string,"created_at"?: string,"due_at"?: string | null,"exposure_minutes"?: number | null,"sample_method"?: string | null,"volume_litres"?: number | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type"?: string,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id"?: string
+                    "company_id"?: string,"created_at"?: string,"due_at"?: string | null,"exposure_minutes"?: number | null,"sample_method"?: string | null,"volume_litres"?: number | null,"id"?: string,"linked_deviation_id"?: string | null,"log_type"?: string,"cleaning_method"?: string | null,"cleaning_agents"?: (string)[] | null,"contact_minutes"?: number | null,"line_ref"?: string | null,"started_at"?: string | null,"finished_at"?: string | null,"verified_by"?: string | null,"verified_at"?: string | null,"notes"?: string | null,"outcome"?: string,"performed"?: boolean,"recorded_at"?: string,"recorded_by"?: string | null,"reference"?: string | null,"result_position"?: string | null,"result_unit"?: string | null,"result_value"?: number | null,"schedule_id"?: string | null,"zone_id"?: string
                   }
                   Relationships: []
                 },"sites": {
@@ -6588,6 +6588,16 @@ isOneToOne: false
 "facility_pest_register":
 { Args: { "p_company_id": string }; Returns: {
                              "visit_id": string,"reference": string,"visited_on": string,"technician_name": string | null,"report_file_ref": string | null,"checked_by": string | null,"checked_at": string | null,"provider_id": string,"provider_name": string,"visit_frequency": string | null,"contract_until": string | null,"methods": (string)[],"next_visit_on": string | null,"finding_count": number,"needs_action_count": number,"open_action_count": number
+                           }[]
+                           },
+"facility_deep_clean_schedule":
+{ Args: { "p_company_id": string,"p_due_soon_days"?: number }; Returns: {
+                             "schedule_id": string,"zone_id": string,"zone_name": string,"zone_grade": string | null,"frequency": string,"description": string,"last_cleaned_at": string | null,"last_reference": string | null,"last_operator": string | null,"next_due_on": string | null,"days_until_due": number | null,"status": string
+                           }[]
+                           },
+"facility_cleaning_records":
+{ Args: { "p_company_id": string,"p_limit"?: number }; Returns: {
+                             "entry_id": string,"reference": string | null,"zone_id": string,"zone_name": string,"zone_code": string | null,"line_ref": string | null,"log_type": string,"cleaning_method": string | null,"cleaning_agents": (string)[] | null,"contact_minutes": number | null,"started_at": string | null,"finished_at": string | null,"recorded_at": string,"operator_name": string | null,"verified_at": string | null,"verifier_name": string | null,"schedule_id": string | null
                            }[]
                            },
 "facility_water_register":

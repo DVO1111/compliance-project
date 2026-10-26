@@ -31,6 +31,12 @@ export type FacilityLogType =
   | 'environmental_surface'
   | 'cleaning_routine'
   | 'cleaning_deep'
+  //  Added with 20261211000000. FL-09's records table draws three
+  //  cleaning types and a changeover clean is one of them. It can be
+  //  RECORDED but never SCHEDULED: it follows a product changeover,
+  //  not a frequency, so the schedule CHECK was deliberately left at
+  //  the original six values.
+  | 'cleaning_changeover'
   | 'water'
   | 'pest_control';
 
@@ -51,7 +57,13 @@ export type FacilityOutcome =
 /** FL-01's tabs, in the order the design draws them. */
 export const LOG_TYPE_TABS: { type: FacilityLogType[]; label: string }[] = [
   { label: 'Environmental', type: ['environmental_air', 'environmental_surface'] },
-  { label: 'Cleaning', type: ['cleaning_routine', 'cleaning_deep'] },
+  //  A changeover clean belongs under Cleaning like the other two,
+  //  so every log type has exactly one tab. No register row will
+  //  carry it in practice — the register is built from schedules
+  //  and a changeover cannot be scheduled — but FL-09's records
+  //  table is reached through this tab, and a type with no tab
+  //  would have nowhere to appear.
+  { label: 'Cleaning', type: ['cleaning_routine', 'cleaning_deep', 'cleaning_changeover'] },
   { label: 'Water', type: ['water'] },
   { label: 'Pest control', type: ['pest_control'] },
 ];
@@ -61,6 +73,7 @@ export const LOG_TYPE_LABELS: Record<FacilityLogType, string> = {
   environmental_surface: 'Surface swabs',
   cleaning_routine: 'Routine clean',
   cleaning_deep: 'Deep clean',
+  cleaning_changeover: 'Changeover clean',
   water: 'Water',
   pest_control: 'Pest control',
 };

@@ -33,6 +33,9 @@ import FacilityZonesSetup from './FacilityZonesSetup';
 import FacilityTrendsView from './FacilityTrendsView';
 import FacilityPestView from './FacilityPestView';
 import FacilityWaterView from './FacilityWaterView';
+import FacilityCleaningView from './FacilityCleaningView';
+import { listDeepCleanSchedule, type DeepCleanRow }
+  from '../../lib/facility/facilityCleaningService';
 import { useAuth } from '../../contexts/AuthContext';
 import { logger } from '../../lib/logger';
 import {
@@ -119,13 +122,36 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
   //  rather than given a rail entry of its own — HS-02 lists one
   //  "Facility logs" and no second item beside it.
   const [view, setView] = useState<'register' | 'setup' | 'trends'>('register');
+  const [deepClean, setDeepClean] = useState<DeepCleanRow[]>([]);
 
   const load = useCallback(async () => {
     if (!companyId) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
-      setRows(await listRegister(companyId));
+      /*
+       *  The deep cleaning schedule is loaded here as well as in the
+       *  Cleaning tab, because the "Deep clean overdue" tile must
+       *  agree with the table FL-09 draws beneath it.
+       *
+       *  Counting it from the register instead would make this screen
+       *  contradict itself. The register's view of a deep clean is its
+       *  last ENTRY; FL-09's is its last VERIFIED entry, which is the
+       *  rule that makes the design's own two tables agree. A zone
+       *  whose deep clean has been performed and not yet verified
+       *  would show "0 deep cleans overdue" in the tile and "Overdue ·
+       *  6 days" in the table.
+       *
+       *  The rest of the register is untouched: `summarise` still
+       *  counts every other tile, and nothing else in W6·29 is
+       *  verified.
+       */
+      const [register, deep] = await Promise.all([
+        listRegister(companyId),
+        listDeepCleanSchedule(companyId),
+      ]);
+      setRows(register);
+      setDeepClean(deep);
     } catch (err) {
       logger.error('[facility] register load failed', { err: String(err) });
       setError(err instanceof Error ? err.message : 'The facility log register could not be loaded.');
@@ -136,7 +162,13 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
 
   useEffect(() => { void load(); }, [load]);
 
-  const summary = useMemo(() => summarise(rows), [rows]);
+  const summary = useMemo(() => {
+    const base = summarise(rows);
+    return {
+      ...base,
+      deepCleanOverdue: deepClean.filter((d) => d.status === 'overdue').length,
+    };
+  }, [rows, deepClean]);
 
   const visible = useMemo(() => {
     const byTab = tab === 'today'
@@ -288,6 +320,13 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
           register's one-row-per-reading table cannot show. */}
       {tab === 'Pest control' ? (
         <FacilityPestView companyId={companyId} />
+      ) : tab === 'Cleaning' ? (
+        /*  FL-09. A cleaning record carries a method, chemicals and a
+            contact time, and the deep cleaning schedule answers "when
+            is the next one due" rather than "was the last reading
+            within limits" — neither of which the register's
+            one-row-per-reading table can show. */
+        <FacilityCleaningView companyId={companyId} onOpenSetup={() => setView('setup')} />
       ) : tab === 'Water' ? (
         /*  FL-11, for the same reason as FL-13: the register's one
             limit column cannot print a range or "Absent in 100 mL",

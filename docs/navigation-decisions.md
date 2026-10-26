@@ -1283,3 +1283,130 @@ A limit named against an external specification document (for
 example "Per WHO drinking-water list") is still not representable;
 limits are numbers on the schedule. Raised with the water work and
 unchanged here.
+
+---
+
+## D13 — FL-09: the deep cleaning schedule reads verified cleans
+
+### The rule was read off the design, not chosen
+
+FL-09 draws two tables on one screen, and they contradict each other
+unless one rule holds.
+
+Its schedule says Granulation room G2 was last deep cleaned on 15 Sep,
+is next due 15 Oct, and is **"Overdue · 6 days"**. Its records table,
+directly beneath, shows CR-2026-0415 — zone G2, type **Deep**,
+finished **21 Oct 08:05** — marked **"Awaiting Grace Eze"**.
+
+So a deep clean *was* performed, two days before the "today" the
+screen is drawn at, and the schedule still reports it overdue. The
+only reading under which both tables are true at once is that **the
+schedule counts verified cleans**. FL-08 states the same rule in words
+beside its save panel: *"The overdue alert clears when Grace Eze
+verifies."*
+
+This is confined to the deep cleaning schedule. FL-01's general
+register is unchanged, because nothing else in W6·29 is verified and
+changing it would restate every environmental row.
+
+### Next due is a calendar interval
+
+`FREQUENCY_DAYS` answers "has the window passed" in whole days — 30
+for a month, 91 for a quarter. Those do not reproduce FL-09:
+
+```
+01 Oct + 30 days = 31 Oct    the design draws 01 Nov
+02 Aug + 91 days = 01 Nov    the design draws 02 Nov
+```
+
+`+ interval '1 month'` and `+ interval '3 months'` give 01 Nov and 02
+Nov exactly, and reproduce the other three rows too. A due *date* is a
+calendar question. `FREQUENCY_DAYS` was left alone: it answers a
+different one, and FL-01 depends on it.
+
+### No second schedule table
+
+FL-09's footnote is explicit: *"The deep cleaning schedule shares the
+overdue rule set in Zones & schedules (FL-02), so there is one alert
+mechanism for every facility log."* A deep clean is therefore a
+`facility_zone_schedules` row with `log_type = 'cleaning_deep'`, which
+already existed. The migration adds two read functions and the record
+detail, and no new scheduling entity.
+
+For the same reason **FL-09 does not edit the schedule**. Its only
+action is "Record a clean"; creating and retiring deep-clean schedules
+is FL-02's screen, which is built, so this page links to it rather
+than growing a second editor that could disagree with it.
+
+### A changeover clean is recorded, never scheduled
+
+FL-09's records table draws three cleaning types — Deep, Routine and
+**Changeover** — against the two in the original CHECK. So
+`cleaning_changeover` was added to the **entry** vocabulary only. A
+changeover clean follows a product changeover rather than a frequency,
+there is nothing for it to be scheduled against, and FL-09 never shows
+one in the schedule above. A test asserts the schedule's CHECK was not
+widened.
+
+### The one number the design constrains but does not state
+
+FL-09's "due soon" threshold. Against a today of 21 Oct it draws "Due
+in 3 days" for a schedule due on the 24th, and "On schedule" for ones
+due in eleven, twelve and twenty days. So the window is **at least 3
+and at most 10 days**, and the design states none.
+
+Seven is the choice. It is a named constant, passed to the database as
+a parameter rather than compiled into it, and a test asserts both that
+it sits inside the range the design constrains and that changing it
+changes the answer — so it is visibly a choice and not a rule dressed
+up as the design's.
+
+### Not invented
+
+**No four-eyes rule.** Every row FL-09 draws names two different
+people and FL-08 says "Supervisor, after you save", but the design
+states no constraint and the product has no supervisor role to bind
+one to. Imposing it would be inventing a GMP sign-off requirement, so
+section H of the suite asserts a self-verification is *accepted* —
+making its addition a decision somebody takes rather than a line that
+drifts in. **This is an open decision for the owner.**
+
+**No automatic deviation and no automatic CAPA** when a deep clean
+goes overdue. FL-09 draws an alert, not a record.
+
+**No permission key.** The page is gated by the same industry check as
+the rest of the facility logs. PM-03 does not tabulate facility logs,
+so no section check applies — and the design's "Supervisor" has no
+counterpart in the role model to bind the verify action to. Recorded
+rather than invented.
+
+### A verification is final, and why that is not a new requirement
+
+Once written, `verified_by`/`verified_at` cannot be changed or
+cleared. Nothing here says a record *must* be verified — only that a
+verification once given stands. FL-09 prints it as the evidence that a
+deep clean satisfied its schedule and FL-08 makes it the thing that
+clears an overdue alert, so a withdrawable verification would let an
+alert that had cleared come back with no record of why, and a GMP
+record would have lost a signature it once carried. The same reasoning
+stopped a closed pest finding being re-opened as a note.
+
+If the owner wants verifications withdrawable, the trigger's second
+branch is the one block to remove.
+
+### A defect this found, by rendering rather than by reading
+
+FL-01's **"Deep clean overdue" tile** read `0` while FL-09's table
+beneath it read "Overdue · 6 days" for the same zone — the two
+answering different questions, since the register's view of a deep
+clean is its last *entry* and FL-09's is its last *verified* entry.
+One screen contradicting itself about a GMP obligation.
+
+The tile now counts from the deep cleaning schedule, which is the
+authority on the question it asks. The rest of `summarise` is
+untouched.
+
+### Still open for the owner
+
+Whether a verifier must differ from the operator, and which role may
+verify at all.

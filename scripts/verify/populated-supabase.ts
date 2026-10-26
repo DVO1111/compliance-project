@@ -400,6 +400,106 @@ const SUPPLIERS = [
 //  FL-11's six rows, with all four shapes of limit — including the
 //  pH range and the coliform absence that the environmental model
 //  cannot express, and the monthly analysis awaiting its laboratory.
+//  FL-09's two tables. The arrangement the screen is drawn around:
+//  G2 is overdue, AND its deep clean from today is sitting in the
+//  records table unverified — which is exactly why it is still
+//  overdue. Dates are relative so the badges stay true whenever the
+//  harness runs.
+const DAY = 86400000;
+const atOffset = (days: number): string =>
+  new Date(Date.now() + days * DAY).toISOString();
+const dateAt = (days: number): string => atOffset(days).slice(0, 10);
+
+const DEEP_CLEAN_SCHEDULE = [
+  {
+    schedule_id: 'dcs-1', zone_id: 'fz-2', zone_name: 'FIXTURE Granulation room G2',
+    zone_grade: 'Grade D', frequency: 'monthly', description: 'Deep clean · granulation',
+    last_cleaned_at: atOffset(-36), last_reference: 'FIXTURE CR-2026-0302',
+    last_operator: 'FIXTURE Sadiq Musa', next_due_on: dateAt(-6),
+    days_until_due: -6, status: 'overdue',
+  },
+  {
+    schedule_id: 'dcs-2', zone_id: 'fz-4', zone_name: 'FIXTURE QC micro lab',
+    zone_grade: 'Grade D', frequency: 'weekly', description: 'Deep clean · micro lab',
+    last_cleaned_at: atOffset(-4), last_reference: 'FIXTURE CR-2026-0396',
+    last_operator: 'FIXTURE Ngozi Eke', next_due_on: dateAt(3),
+    days_until_due: 3, status: 'due_soon',
+  },
+  {
+    schedule_id: 'dcs-3', zone_id: 'fz-5', zone_name: 'FIXTURE Compression hall C1',
+    zone_grade: 'Grade D', frequency: 'monthly', description: 'Deep clean · compression',
+    last_cleaned_at: atOffset(-20), last_reference: 'FIXTURE CR-2026-0359',
+    last_operator: 'FIXTURE Yusuf Garba', next_due_on: dateAt(11),
+    days_until_due: 11, status: 'on_schedule',
+  },
+  {
+    schedule_id: 'dcs-4', zone_id: 'fz-6', zone_name: 'FIXTURE Packing hall P1',
+    zone_grade: 'Grade D', frequency: 'quarterly', description: 'Deep clean · packing',
+    last_cleaned_at: atOffset(-80), last_reference: 'FIXTURE CR-2026-0201',
+    last_operator: 'FIXTURE Bayo Ojo', next_due_on: dateAt(12),
+    days_until_due: 12, status: 'on_schedule',
+  },
+  {
+    schedule_id: 'dcs-5', zone_id: 'fz-7', zone_name: 'FIXTURE Dispensary D-1',
+    zone_grade: 'Grade D', frequency: 'monthly', description: 'Deep clean · dispensary',
+    last_cleaned_at: atOffset(-11), last_reference: 'FIXTURE CR-2026-0380',
+    last_operator: 'FIXTURE Kemi Afolabi', next_due_on: dateAt(20),
+    days_until_due: 20, status: 'on_schedule',
+  },
+  //  Never cleaned: the state that must not read as a pass. The
+  //  design draws no such row, but the model has one and the screen
+  //  has to say something honest about it.
+  {
+    schedule_id: 'dcs-6', zone_id: 'fz-8', zone_name: 'FIXTURE Sampling booth S-1',
+    zone_grade: 'Grade C', frequency: 'monthly', description: 'Deep clean · sampling booth',
+    last_cleaned_at: null, last_reference: null, last_operator: null,
+    next_due_on: null, days_until_due: null, status: 'never_cleaned',
+  },
+];
+
+const CLEANING_RECORDS = [
+  {
+    entry_id: 'cr-1', reference: 'FIXTURE CR-2026-0415', zone_id: 'fz-2',
+    zone_name: 'FIXTURE Granulation room G2', zone_code: 'G2', line_ref: 'TL-1',
+    log_type: 'cleaning_deep', cleaning_method: 'wipe down, top to bottom',
+    cleaning_agents: ['Hypochlorite 1%', 'IPA 70%'], contact_minutes: 15,
+    started_at: atOffset(-0.07), finished_at: atOffset(-0.01),
+    recorded_at: atOffset(-0.01), operator_name: 'FIXTURE Yusuf Garba',
+    //  Unverified, which is why dcs-1 above is still overdue.
+    verified_at: null, verifier_name: null, schedule_id: 'dcs-1',
+  },
+  {
+    entry_id: 'cr-2', reference: 'FIXTURE CR-2026-0414', zone_id: 'fz-6',
+    zone_name: 'FIXTURE Packing hall P1', zone_code: 'P1', line_ref: 'TL-3',
+    log_type: 'cleaning_routine', cleaning_method: 'mop and wipe',
+    cleaning_agents: ['Detergent'], contact_minutes: 5,
+    started_at: atOffset(-0.15), finished_at: atOffset(-0.1),
+    recorded_at: atOffset(-0.1), operator_name: 'FIXTURE Bayo Ojo',
+    verified_at: atOffset(-0.05), verifier_name: 'FIXTURE Grace Eze',
+    schedule_id: null,
+  },
+  {
+    entry_id: 'cr-3', reference: 'FIXTURE CR-2026-0409', zone_id: 'fz-7',
+    zone_name: 'FIXTURE Dispensary D-1', zone_code: 'D-1', line_ref: 'BAL-03',
+    log_type: 'cleaning_routine', cleaning_method: 'wipe down',
+    cleaning_agents: ['IPA 70%'], contact_minutes: 5,
+    started_at: atOffset(-0.2), finished_at: atOffset(-0.18),
+    recorded_at: atOffset(-0.18), operator_name: 'FIXTURE Kemi Afolabi',
+    verified_at: atOffset(-0.12), verifier_name: 'FIXTURE Grace Eze',
+    schedule_id: null,
+  },
+  {
+    entry_id: 'cr-4', reference: 'FIXTURE CR-2026-0402', zone_id: 'fz-5',
+    zone_name: 'FIXTURE Compression hall C1', zone_code: 'C1', line_ref: 'TL-1',
+    log_type: 'cleaning_changeover', cleaning_method: 'foam and rinse',
+    cleaning_agents: ['Detergent', 'Hypochlorite 1%'], contact_minutes: 12,
+    started_at: atOffset(-1.1), finished_at: atOffset(-1.05),
+    recorded_at: atOffset(-1.05), operator_name: 'FIXTURE Sadiq Musa',
+    verified_at: atOffset(-1.0), verifier_name: 'FIXTURE Grace Eze',
+    schedule_id: null,
+  },
+];
+
 const WATER_REGISTER = [
   {
     test_id: 'wt-1', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
@@ -497,6 +597,8 @@ const BY_RPC: Record<string, unknown> = {
   facility_log_trend: FACILITY_TREND,
   facility_pest_register: PEST_REGISTER,
   facility_water_register: WATER_REGISTER,
+  facility_deep_clean_schedule: DEEP_CLEAN_SCHEDULE,
+  facility_cleaning_records: CLEANING_RECORDS,
 };
 
 function builder(table: string): any {
