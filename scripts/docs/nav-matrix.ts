@@ -41,6 +41,13 @@ interface Verified {
  * Nothing else is claimed.
  */
 const VERIFIED: Partial<Record<PageId, Verified>> = {
+  'supplier-qualification': {
+    services: '`supplierRegisterService` — listSuppliers, updateQualification, hasLapsed, daysUntilLapse, isUsable, summarise, triage, search',
+    data: '`suppliers` — RLS enabled with company-isolation policies on select, insert, update and delete; `qualification_status` constrained by `suppliers_qualification_chk` to five values',
+    status: 'The approved-supplier register. Replaced a `ComingSoonPage`: the table, its policies and the PM-03 grants all already existed, so two roles held `act` on a section whose only page was a stub. A lapsed approval is reported as its own fact and does NOT rewrite the standing, because a date passing is not a decision to disqualify.',
+    tests: 'Unit: 33, including that a qualified-but-lapsed supplier is not usable while its standing still reads Qualified. Rendered per role: Procurement sees the standing control on every row, Storekeeper (view) and QC Analyst (no cell) see none.',
+    outstanding: 'Supplier QUALIFICATION — questionnaires, audits, CMO assessment, scoring — remains excluded from the MVP by HS-01 row 9 and is not built. The page is still `kind: review` pending the owner\'s confirmation.',
+  },
   'regulatory-library': {
     services: '`regulatoryLibraryService` — searchLibrary, getJurisdictionStats; no database access',
     data: 'None. `LIBRARY_DATA` is a static corpus of regulatory reference text held in the module.',
@@ -51,9 +58,9 @@ const VERIFIED: Partial<Record<PageId, Verified>> = {
   'facility-logs': {
     services: '`facilityLogService` — listRegister, listZones, listSchedules, listZoneHistory, recordEntry, listSiteOptions, createZone, updateZone, setZoneActive, createSchedule, updateSchedule, setScheduleActive, listTrend, groupTrend, summariseTrend, trendToCsv',
     data: '`facility_zones`, `facility_zone_schedules`, `facility_log_entries` — RLS enabled, company-isolation policies; all three carry a `company_id` FK to `companies`',
-    status: 'Working, three screens. FL-01 is the register (triage order, tabs, record, per-zone history), FL-02 sets zones and scheduled tests up, and FL-06/FL-07 are the trends — weekly maxima per zone with both limits drawn as labelled lines, point shapes carrying the meaning so it survives greyscale, and a "Show as table" view of the same numbers. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded.',
-    tests: 'SQL: 31 + 33 + 24 (`facility_logs_test.sql`, `facility_zone_setup_test.sql`, `facility_log_trend_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and RLS-bypassing postures, and the weekly maximum. Unit: 33 + 46 + 36.',
-    outstanding: 'FL-13/FL-14 finding-to-task is not built; it needs a rule W6·29 does not state. FL-06 offers three sub-tabs (settle plates, surface swabs, active air) but `log_type` has two environmental values, so the settle-plate/active-air split needs a schema decision. Export is a CSV of the numbers on screen, not the formal TR-09/TR-10 evidence package. No sign-off or automatic deviation, neither being drawn in the design.',
+    status: 'Working, four screens. FL-01 is the register (triage order, tabs, record, per-zone history), FL-02 sets zones and scheduled tests up, FL-06/FL-07 are the trends — weekly maxima per zone with both limits drawn as labelled lines, point shapes carrying the meaning so it survives greyscale, and a "Show as table" view of the same numbers — and FL-13 is pest control: a contracted provider, its visits, and findings by station. `outcome` is derived by a BEFORE trigger and whatever a caller sends is discarded.',
+    tests: 'SQL: 31 + 33 + 24 + 38 (`facility_logs_test.sql`, `facility_zone_setup_test.sql`, `facility_log_trend_test.sql`, `facility_pest_control_test.sql`) — isolation, the outcome rule, zone/site and schedule/zone agreement in both the RLS and RLS-bypassing postures, and the weekly maximum. Unit: 33 + 46 + 36 + 40.',
+    outstanding: 'FL-13 is built and the closure rule is enforced — a finding marked as needing action cannot be closed by a note. FL-14\'s task CREATION is not built and cannot be: there is no task register in this product (see `src/lib/tasks/taskSources.ts`), so a task with an owner and a due date has nowhere to live. Needs either a task register or an explicit ruling that such a finding is a CAPA. FL-06 offers three sub-tabs (settle plates, surface swabs, active air) but `log_type` has two environmental values, so the settle-plate/active-air split needs a schema decision. Export is a CSV of the numbers on screen, not the formal TR-09/TR-10 evidence package. No sign-off or automatic deviation, neither being drawn in the design.',
   },
   'shipment-event-log': {
     services: '`shipmentEventService` — listShipments, createShipment, getShipmentEvents, addShipmentEvent',

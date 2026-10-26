@@ -143,13 +143,54 @@ describe('the two whose case rests only on reading the design', () => {
   });
 });
 
-describe('all four are still working pages, and still reachable', () => {
+describe('all four are reachable, and now all four are real', () => {
+  /*
+   *  A CORRECTION. The batch that first wrote this file said all four
+   *  were working pages. That was wrong about one of them:
+   *  `supplier-qualification` rendered a `ComingSoonPage`, so two
+   *  roles held PM-03 `act` on a section whose only page was a stub —
+   *  a permission that was ALREADY stranded, not one that would be
+   *  stranded if something were removed.
+   *
+   *  It is a real register now, and this asserts the stub is gone so
+   *  the claim cannot quietly become false again.
+   */
+  it('supplier-qualification is no longer a ComingSoonPage', () => {
+    const app = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8');
+    const route = app.slice(
+      app.indexOf("case 'supplier-qualification':"),
+      app.indexOf("case 'gmp-inspection':"),
+    );
+    expect(route).toMatch(/SupplierRegisterPage/);
+    expect(route).not.toMatch(/ComingSoonPage/);
+  });
+
   it('each has a destination and none is pendingDesign', () => {
-    //  `review` is not a synonym for unbuilt. These four work; the
-    //  question is whether they belong in the rail.
+    //  `review` is not a synonym for unbuilt. The question for these
+    //  four is whether they belong in the rail.
     for (const p of REVIEW_PAGES) {
       expect(DESTINATIONS[p].kind).toBe('review');
     }
+  });
+
+  it('dispatch gates on PM-03 inside the page, not only on the route', () => {
+    //  The route has no permission guard at all. That is correct only
+    //  because DispatchPage consults the grid itself; if that call
+    //  were removed the page would open for anyone.
+    const page = readFileSync(
+      join(process.cwd(), 'src/components/Distribution/DispatchPage.tsx'),
+      'utf8',
+    );
+    expect(page).toMatch(/canAct\(role, 'distribution'\)/);
+  });
+
+  it('the supplier register gates on PM-03 too', () => {
+    const page = readFileSync(
+      join(process.cwd(), 'src/components/Suppliers/SupplierRegisterPage.tsx'),
+      'utf8',
+    );
+    //  PM-03's own grid, via canAct — not a new permission key.
+    expect(page).toMatch(/canAct\(role, 'suppliers'\)/);
   });
 
   it('each still renders as a top-level rail entry', () => {

@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import FacilityZonesSetup from './FacilityZonesSetup';
 import FacilityTrendsView from './FacilityTrendsView';
+import FacilityPestView from './FacilityPestView';
 import { useAuth } from '../../contexts/AuthContext';
 import { logger } from '../../lib/logger';
 import {
@@ -280,8 +281,13 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
         </div>
       </div>
 
-      {/* Body */}
-      {loading ? (
+      {/*  FL-13 is the Pest control tab: the same tab bar above, a
+          different body beneath it. A pest visit is a provider, a
+          technician and many per-station findings, which the
+          register's one-row-per-reading table cannot show. */}
+      {tab === 'Pest control' ? (
+        <FacilityPestView companyId={companyId} />
+      ) : loading ? (
         <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)] p-6">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading the register…
         </div>

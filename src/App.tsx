@@ -209,6 +209,7 @@ const EcosystemHubPage          = lazyPage(() => import('./components/Platform/E
 const CompanySettingsPage       = lazyPage(() => import('./components/company/CompanySettingsPage'));
 const SettingsHomePage          = lazyPage(() => import('./components/Settings/SettingsHomePage'));
 const FacilityLogsPage          = lazyPage(() => import('./components/Facility/FacilityLogsPage'));
+const SupplierRegisterPage      = lazyPage(() => import('./components/Suppliers/SupplierRegisterPage'));
 const BillingPage               = lazyPage(() => import('./components/Billing/BillingPage'));
 const BatchReleasePage          = lazyPage(() => import('./components/BatchRelease/BatchReleasePage'));
 const ChangeControlPage         = lazyPage(() => import('./components/ChangeControl/ChangeControlPage'));
@@ -1424,9 +1425,19 @@ function AppContent() {
       case 'sop-library':
         return <SopLibraryPage />;
 
+      //  HS-01 row 9 excludes supplier QUALIFICATION from the MVP and
+      //  keeps the approved-supplier LIST. This was a ComingSoonPage
+      //  while `suppliers` held a real RLS-protected table and PM-03
+      //  granted Procurement and the QA Manager `act` on the section —
+      //  a tabulated permission with no page to use it on. The
+      //  register is that list; the qualification workflow stays out
+      //  of scope.
       case 'supplier-qualification':
         return !isLogisticsProfile
-          ? <ComingSoonPage title="Supplier Qualification" description="Manage and qualify raw material suppliers and CMOs against GMP/HACCP requirements." />
+          ? <SupplierRegisterPage
+              companyId={profile?.company_id ?? undefined}
+              role={resolveWorkRole(profile)}
+            />
           : <AccessDenied />;
 
       case 'gmp-inspection':

@@ -257,10 +257,115 @@ const FACILITY_TREND = [
   })),
 ];
 
+//  FL-13's pest control. One visit with the five station findings the
+//  design draws — including the one marked as needing action, which is
+//  the row whose Close control must be disabled with its reason shown.
+const PEST_REGISTER = [
+  {
+    visit_id: 'pv-1', reference: 'FIXTURE PC-2026-0019', visited_on: '2026-10-20',
+    technician_name: 'FIXTURE Kunle Ade',
+    report_file_ref: 'fixture-greenshield-20oct.pdf',
+    checked_by: 'u-analyst', checked_at: '2026-10-21T08:00:00Z',
+    provider_id: 'pp-1', provider_name: 'FIXTURE Greenshield Pest Services Ltd',
+    visit_frequency: 'Fortnightly visits', contract_until: '2027-03-31',
+    methods: ['Bait stations', 'Insect light traps', 'Crack-and-crevice gel'],
+    next_visit_on: '2026-11-03',
+    finding_count: 5, needs_action_count: 1, open_action_count: 1,
+  },
+  {
+    visit_id: 'pv-2', reference: 'FIXTURE PC-2026-0018', visited_on: '2026-10-06',
+    technician_name: 'FIXTURE Kunle Ade', report_file_ref: null,
+    checked_by: null, checked_at: null,
+    provider_id: 'pp-1', provider_name: 'FIXTURE Greenshield Pest Services Ltd',
+    visit_frequency: 'Fortnightly visits', contract_until: '2027-03-31',
+    methods: ['Bait stations', 'Insect light traps', 'Crack-and-crevice gel'],
+    next_visit_on: '2026-11-03',
+    finding_count: 2, needs_action_count: 0, open_action_count: 0,
+  },
+];
+
+const PEST_FINDINGS = [
+  {
+    id: 'pf-1', company_id: 'c1', visit_id: 'pv-1', station_code: 'BS-07',
+    location_ref: 'FIXTURE Warehouse W1 · dock door', zone_id: null,
+    finding: 'Rodent droppings; 60% of bait taken',
+    method_used: 'Bait replaced, entry gap under door noted',
+    needs_action: true, disposition_note: null, corrective_task_id: null,
+    resolved_at: null, resolved_by: null, resolution_note: null,
+  },
+  {
+    id: 'pf-2', company_id: 'c1', visit_id: 'pv-1', station_code: 'BS-03',
+    location_ref: 'FIXTURE Warehouse W1 · rear wall', zone_id: null,
+    finding: 'No activity', method_used: 'Bait checked',
+    needs_action: false, disposition_note: null, corrective_task_id: null,
+    resolved_at: null, resolved_by: null, resolution_note: null,
+  },
+  {
+    id: 'pf-3', company_id: 'c1', visit_id: 'pv-1', station_code: 'ILT-02',
+    location_ref: 'FIXTURE Packing hall P1', zone_id: null,
+    finding: '3 flies on glue board', method_used: 'Board replaced',
+    needs_action: false, disposition_note: 'Normal level · no action',
+    corrective_task_id: null, resolved_at: null, resolved_by: null, resolution_note: null,
+  },
+  {
+    id: 'pf-4', company_id: 'c1', visit_id: 'pv-1', station_code: 'BS-11',
+    location_ref: 'FIXTURE Canteen, outside', zone_id: null,
+    finding: 'Bait taken 20%', method_used: 'Bait replaced',
+    needs_action: false, disposition_note: 'Watch at next visit',
+    corrective_task_id: null, resolved_at: null, resolved_by: null, resolution_note: null,
+  },
+  {
+    id: 'pf-5', company_id: 'c1', visit_id: 'pv-1', station_code: 'BS-22',
+    location_ref: 'FIXTURE Canteen drain', zone_id: null,
+    finding: 'Cockroach activity, canteen drain', method_used: 'Gel applied',
+    needs_action: true, disposition_note: null,
+    corrective_task_id: 'fixture-task-0161',
+    resolved_at: '2026-09-26T10:00:00Z', resolved_by: 'u-analyst',
+    resolution_note: 'drain cover replaced',
+  },
+];
+
+//  The approved-supplier register. One lapsed-but-still-"Qualified"
+//  row, which is the silent failure the screen exists to surface.
+const SUPPLIERS = [
+  {
+    id: 'sup-1', company_id: 'c1', name: 'FIXTURE Acme Excipients',
+    code: 'FX-SUP-001', qualification_status: 'qualified',
+    qualified_until: '2027-03-31', address: null, country: 'Nigeria',
+    contact_email: 'quality@example.invalid', notes: null,
+  },
+  {
+    id: 'sup-2', company_id: 'c1', name: 'FIXTURE Baltic Chemicals',
+    code: 'FX-SUP-002', qualification_status: 'qualified',
+    qualified_until: '2026-06-30', address: null, country: 'Poland',
+    contact_email: null, notes: null,
+  },
+  {
+    id: 'sup-3', company_id: 'c1', name: 'FIXTURE Delta Packaging',
+    code: 'FX-SUP-003', qualification_status: 'conditional',
+    qualified_until: '2026-11-30', address: null, country: 'Nigeria',
+    contact_email: null, notes: null,
+  },
+  {
+    id: 'sup-4', company_id: 'c1', name: 'FIXTURE Omega Solvents',
+    code: 'FX-SUP-004', qualification_status: 'suspended',
+    qualified_until: null, address: null, country: 'India',
+    contact_email: null, notes: null,
+  },
+  {
+    id: 'sup-5', company_id: 'c1', name: 'FIXTURE Pending Traders',
+    code: 'FX-SUP-005', qualification_status: 'pending',
+    qualified_until: null, address: null, country: 'Ghana',
+    contact_email: null, notes: null,
+  },
+];
+
 const BY_TABLE: Record<string, unknown[]> = {
+  suppliers: SUPPLIERS,
   facility_log_entries: FACILITY_ENTRIES,
   facility_zones: FACILITY_ZONES,
   facility_zone_schedules: FACILITY_SCHEDULES,
+  facility_pest_findings: PEST_FINDINGS,
   material_lots: LOTS,
   material_certificates_of_analysis: CERTIFICATES,
   material_coa_discrepancies: DISCREPANCIES,
@@ -273,6 +378,7 @@ const BY_RPC: Record<string, unknown> = {
   facility_log_register: FACILITY_REGISTER,
   facility_site_options: FACILITY_SITES,
   facility_log_trend: FACILITY_TREND,
+  facility_pest_register: PEST_REGISTER,
 };
 
 function builder(table: string): any {

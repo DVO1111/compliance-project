@@ -987,3 +987,297 @@ export function trendToCsv(seriesList: TrendSeries[]): string {
   }
   return lines.join('\n');
 }
+
+// ───────────────────────────────────────────────────────────────────────
+//  FL-12 / FL-13 / FL-14 — pest control
+//
+//  `pest_control` has been one of the six log types since the first
+//  facility migration, but a pest visit is not shaped like a reading.
+//  FL-13 draws a contracted PROVIDER, a VISIT by a named technician
+//  with a report file, and MANY per-station findings inside it.
+//
+//  W6·29's note on FL-13 is the specification and also the rule:
+//
+//      "Fields are those PRD G3.9 names: provider, method, date,
+//       findings and corrective actions. A finding marked as needing
+//       action can't be closed by a note; it becomes a task with an
+//       owner and a due date, alerted through the same overdue rule
+//       as every facility log."
+//
+//  THE SECOND HALF OF THAT RULE IS NOT IMPLEMENTED, and the reason is
+//  not an oversight. There is no task register in this product —
+//  `src/lib/tasks/taskSources.ts` opens by saying so, and adds that a
+//  derived task "has no due date and no urgency ordering, because
+//  nothing records them". A task with an owner and a due date is
+//  precisely what this rule needs and precisely what does not exist.
+//
+//  So `resolveFinding` can only close a finding that does NOT need
+//  action. One that does is refused by the database until a
+//  corrective task can be named, which is the design's instruction —
+//  it may not be closed by a note — rather than a gap left open.
+// ───────────────────────────────────────────────────────────────────────
+
+export interface PestProvider {
+  id: string;
+  name: string;
+  visit_frequency: string | null;
+  contract_until: string | null;
+  methods: string[];
+  next_visit_on: string | null;
+}
+
+export interface PestVisitRow {
+  visit_id: string;
+  reference: string;
+  visited_on: string;
+  technician_name: string | null;
+  report_file_ref: string | null;
+  checked_by: string | null;
+  checked_at: string | null;
+  provider_id: string;
+  provider_name: string;
+  visit_frequency: string | null;
+  contract_until: string | null;
+  methods: string[];
+  next_visit_on: string | null;
+  finding_count: number;
+  needs_action_count: number;
+  open_action_count: number;
+}
+
+export interface PestFinding {
+  id: string;
+  company_id: string;
+  visit_id: string;
+  station_code: string;
+  location_ref: string | null;
+  zone_id: string | null;
+  finding: string;
+  method_used: string | null;
+  needs_action: boolean;
+  disposition_note: string | null;
+  corrective_task_id: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
+}
+
+const PEST_FINDING_COLUMNS =
+  'id, company_id, visit_id, station_code, location_ref, zone_id, finding, '
+  + 'method_used, needs_action, disposition_note, corrective_task_id, '
+  + 'resolved_at, resolved_by, resolution_note';
+
+/** FL-13's visit list, newest first, with the provider header. */
+export async function listPestVisits(companyId: string): Promise<PestVisitRow[]> {
+  const { data, error } = await supabase.rpc('facility_pest_register', {
+    p_company_id: companyId,
+  });
+  if (error) {
+    logger.error('[facility] could not load the pest register', { error: error.message });
+    throw new Error(describePestError(error.message).message);
+  }
+  return (data ?? []) as unknown as PestVisitRow[];
+}
+
+export async function listPestFindings(
+  companyId: string,
+  visitId: string,
+): Promise<PestFinding[]> {
+  const { data, error } = await supabase
+    .from('facility_pest_findings')
+    .select(PEST_FINDING_COLUMNS)
+    .eq('company_id', companyId)
+    .eq('visit_id', visitId)
+    .order('station_code', { ascending: true });
+  if (error) {
+    logger.error('[facility] could not load pest findings', { error: error.message });
+    throw new Error(describePestError(error.message).message);
+  }
+  return (data ?? []) as unknown as PestFinding[];
+}
+
+export interface PestFindingDraft {
+  visit_id: string;
+  station_code: string;
+  location_ref?: string | null;
+  zone_id?: string | null;
+  finding: string;
+  method_used?: string | null;
+  needs_action?: boolean;
+  disposition_note?: string | null;
+}
+
+export function validatePestFinding(draft: PestFindingDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!String(draft.station_code ?? '').trim()) {
+    errors.station_code = 'Name the station, so the finding can be placed.';
+  }
+  if (!String(draft.finding ?? '').trim()) {
+    errors.finding = 'Record what was found, even if it was no activity.';
+  }
+  return errors;
+}
+
+export async function createPestFinding(
+  companyId: string,
+  draft: PestFindingDraft,
+  createdBy: string | null,
+): Promise<PestFinding> {
+  const { data, error } = await supabase
+    .from('facility_pest_findings')
+    .insert({
+      company_id: companyId,
+      visit_id: draft.visit_id,
+      station_code: draft.station_code.trim(),
+      location_ref: draft.location_ref?.trim() || null,
+      zone_id: draft.zone_id ?? null,
+      finding: draft.finding.trim(),
+      method_used: draft.method_used?.trim() || null,
+      needs_action: draft.needs_action ?? false,
+      disposition_note: draft.disposition_note?.trim() || null,
+      created_by: createdBy,
+    })
+    .select(PEST_FINDING_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not record a pest finding', { error: error.message });
+    throw new Error(describePestError(error.message).message);
+  }
+  return data as unknown as PestFinding;
+}
+
+/**
+ *  Mark, or un-mark, a finding as needing action.
+ *
+ *  Un-marking is allowed while the finding is still open — a mistake
+ *  on the day should be correctable — and refused once it has been
+ *  closed, because that would turn a recorded corrective action into
+ *  a note after the fact. The database enforces both.
+ */
+export async function setFindingNeedsAction(
+  companyId: string,
+  findingId: string,
+  needsAction: boolean,
+): Promise<PestFinding> {
+  const { data, error } = await supabase
+    .from('facility_pest_findings')
+    .update({ needs_action: needsAction })
+    .eq('id', findingId)
+    .eq('company_id', companyId)
+    .select(PEST_FINDING_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not change needs_action', { error: error.message });
+    throw new Error(describePestError(error.message).message);
+  }
+  return data as unknown as PestFinding;
+}
+
+/**
+ *  Close a finding with a note.
+ *
+ *  Only legitimate for a finding that does NOT need action. One that
+ *  does is refused by the database, and `canCloseWithNote` below is
+ *  what the UI uses to say so before the attempt rather than after.
+ */
+export async function resolveFinding(
+  companyId: string,
+  findingId: string,
+  resolvedBy: string,
+  note: string,
+): Promise<PestFinding> {
+  const { data, error } = await supabase
+    .from('facility_pest_findings')
+    .update({
+      resolved_at: new Date().toISOString(),
+      resolved_by: resolvedBy,
+      resolution_note: note.trim() || null,
+    })
+    .eq('id', findingId)
+    .eq('company_id', companyId)
+    .select(PEST_FINDING_COLUMNS)
+    .single();
+  if (error) {
+    logger.error('[facility] could not resolve a pest finding', { error: error.message });
+    throw new Error(describePestError(error.message).message);
+  }
+  return data as unknown as PestFinding;
+}
+
+/**
+ *  THE RULE, stated once for the UI.
+ *
+ *  A finding marked as needing action may not be closed by a note.
+ *  Until a corrective task can be named it cannot be closed at all,
+ *  so the UI disables the control and explains why instead of
+ *  offering an action that the database will refuse.
+ */
+export function canCloseWithNote(f: PestFinding): boolean {
+  if (f.resolved_at) return false;
+  if (!f.needs_action) return true;
+  return f.corrective_task_id != null;
+}
+
+/** Why a finding cannot be closed, in words a reader can act on. */
+export function whyNotCloseable(f: PestFinding): string | null {
+  if (f.resolved_at) return 'This finding is already closed.';
+  if (!f.needs_action) return null;
+  if (f.corrective_task_id != null) return null;
+  return 'A finding marked as needing action cannot be closed by a note. It needs a '
+    + 'corrective action task with an owner and a due date, and this product has no '
+    + 'task register yet — so it stays open.';
+}
+
+export function describePestError(raw: string): { code: string; message: string } {
+  const text = String(raw ?? '');
+  if (text.includes('PEST_FINDING_NEEDS_CORRECTIVE_TASK')) {
+    return {
+      code: 'PEST_FINDING_NEEDS_CORRECTIVE_TASK',
+      message:
+        'A finding marked as needing action cannot be closed by a note — it needs a '
+        + 'corrective action task with an owner and a due date.',
+    };
+  }
+  if (text.includes('PEST_FINDING_ALREADY_ACTIONED')) {
+    return {
+      code: 'PEST_FINDING_ALREADY_ACTIONED',
+      message:
+        'This finding has already been closed as needing action, so that cannot now be '
+        + 'undone. Record a new finding instead.',
+    };
+  }
+  if (text.includes('PEST_VISIT_WRONG_COMPANY') || text.includes('PEST_VISIT_NOT_FOUND')) {
+    return {
+      code: 'PEST_VISIT_NOT_FOUND',
+      message: 'No visit of this company has that id.',
+    };
+  }
+  if (text.includes('PEST_PROVIDER_WRONG_COMPANY')
+      || text.includes('PEST_PROVIDER_NOT_FOUND')) {
+    return {
+      code: 'PEST_PROVIDER_NOT_FOUND',
+      message: 'No pest control provider of this company has that id.',
+    };
+  }
+  if (text.includes('facility_pest_finding_station_chk')) {
+    return { code: 'STATION_REQUIRED', message: 'Name the station the finding belongs to.' };
+  }
+  if (text.includes('facility_pest_finding_text_chk')) {
+    return { code: 'FINDING_REQUIRED', message: 'Record what was found.' };
+  }
+  if (text.includes('facility_pest_finding_resolved_pair_chk')
+      || text.includes('facility_pest_visit_checked_pair_chk')) {
+    return {
+      code: 'ATTRIBUTION_REQUIRED',
+      message: 'A date and the person it belongs to have to be recorded together.',
+    };
+  }
+  //  Falls through to the shared facility translator, then to the raw
+  //  text — an unknown code is reported rather than flattened.
+  return describeFacilityError(text);
+}
+
+/** FL-13's "needs action, still open" count, for the tab badge. */
+export function openActionCount(rows: PestVisitRow[]): number {
+  return rows.reduce((n, r) => n + Number(r.open_action_count ?? 0), 0);
+}

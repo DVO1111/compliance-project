@@ -5500,6 +5500,42 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"facility_pest_providers": {
+                  Row: {
+                    "company_id": string,"contract_until": string | null,"created_at": string,"created_by": string | null,"id": string,"is_active": boolean,"methods": (string)[],"name": string,"next_visit_on": string | null,"site_id": string | null,"updated_at": string,"visit_frequency": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "company_id": string,"contract_until"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_active"?: boolean,"methods"?: (string)[],"name": string,"next_visit_on"?: string | null,"site_id"?: string | null,"updated_at"?: string,"visit_frequency"?: string | null
+                  }
+                  Update: {
+                    "company_id"?: string,"contract_until"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_active"?: boolean,"methods"?: (string)[],"name"?: string,"next_visit_on"?: string | null,"site_id"?: string | null,"updated_at"?: string,"visit_frequency"?: string | null
+                  }
+                  Relationships: []
+                },"facility_pest_visits": {
+                  Row: {
+                    "checked_at": string | null,"checked_by": string | null,"company_id": string,"created_at": string,"created_by": string | null,"id": string,"notes": string | null,"provider_id": string,"reference": string,"report_file_ref": string | null,"technician_name": string | null,"updated_at": string,"visited_on": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "checked_at"?: string | null,"checked_by"?: string | null,"company_id": string,"created_at"?: string,"created_by"?: string | null,"id"?: string,"notes"?: string | null,"provider_id": string,"reference": string,"report_file_ref"?: string | null,"technician_name"?: string | null,"updated_at"?: string,"visited_on": string
+                  }
+                  Update: {
+                    "checked_at"?: string | null,"checked_by"?: string | null,"company_id"?: string,"created_at"?: string,"created_by"?: string | null,"id"?: string,"notes"?: string | null,"provider_id"?: string,"reference"?: string,"report_file_ref"?: string | null,"technician_name"?: string | null,"updated_at"?: string,"visited_on"?: string
+                  }
+                  Relationships: []
+                },"facility_pest_findings": {
+                  Row: {
+                    "company_id": string,"corrective_task_id": string | null,"created_at": string,"created_by": string | null,"disposition_note": string | null,"finding": string,"id": string,"location_ref": string | null,"method_used": string | null,"needs_action": boolean,"resolution_note": string | null,"resolved_at": string | null,"resolved_by": string | null,"station_code": string,"updated_at": string,"visit_id": string,"zone_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "company_id": string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding": string,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code": string,"updated_at"?: string,"visit_id": string,"zone_id"?: string | null
+                  }
+                  Update: {
+                    "company_id"?: string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding"?: string,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code"?: string,"updated_at"?: string,"visit_id"?: string,"zone_id"?: string | null
+                  }
+                  Relationships: []
                 },"facility_zones": {
                   Row: {
                     "alert_owner_after_days": number,"cleaning_sop_ref": string | null,"code": string | null,"company_id": string,"created_at": string,"created_by": string | null,"equipment_refs": (string)[],"escalate_to_qa_after_days": number,"grade": string | null,"id": string,"is_active": boolean,"line_ref": string | null,"name": string,"owner_id": string | null,"site_id": string,"updated_at": string
@@ -6475,6 +6511,11 @@ isOneToOne: false
 "facility_site_options":
 { Args: { "p_company_id": string }; Returns: {
                              "id": string,"name": string,"site_type": string
+                           }[]
+                           },
+"facility_pest_register":
+{ Args: { "p_company_id": string }; Returns: {
+                             "visit_id": string,"reference": string,"visited_on": string,"technician_name": string | null,"report_file_ref": string | null,"checked_by": string | null,"checked_at": string | null,"provider_id": string,"provider_name": string,"visit_frequency": string | null,"contract_until": string | null,"methods": (string)[],"next_visit_on": string | null,"finding_count": number,"needs_action_count": number,"open_action_count": number
                            }[]
                            },
 "facility_log_trend":

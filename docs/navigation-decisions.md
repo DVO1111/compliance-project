@@ -627,3 +627,202 @@ its permission keys should be.
 
 > **Decision needed, unchanged.** The PM-03 row for `qa_officer`, or a
 > statement that it mirrors another role's cell.
+
+---
+
+## Phase 3, batch 4 — pest control, and the supplier register
+
+> **Provenance.** The brief for this batch asked to continue from
+> `69aaf47` and included FL-06/FL-07 trends and the review-page
+> reassessment, both of which had already landed in `461c8cf`. Those
+> were not redone. This batch covers what was genuinely outstanding:
+> FL-13/FL-14, the two missing data layers, and the route and
+> authorisation half of the review-page question.
+
+### D10 — Pest control is built; the corrective-action task is not, and cannot be
+
+W6·29's note on FL-13 is both the specification and the rule:
+
+> "Fields are those PRD G3.9 names: provider, method, date, findings
+> and corrective actions. A finding marked as needing action can't be
+> closed by a note; it becomes a task with an owner and a due date,
+> alerted through the same overdue rule as every facility log."
+
+`pest_control` had been one of the six facility log types since the
+first facility migration, but a pest visit is not shaped like a
+reading: FL-13 draws a contracted **provider**, a **visit** by a named
+technician with a report file, and **many per-station findings** inside
+that one visit. Three tables now hold that, each with a `company_id`
+foreign key to `companies`.
+
+**The first half of the rule is enforced.** A finding whose
+`needs_action` is true cannot have `resolved_at` set unless
+`corrective_task_id` names a task. C2 of the new suite writes a
+plausible, detailed resolution note onto such a finding and requires
+the refusal; the rule was mutation-tested, and breaking it makes C2
+and C3 fail.
+
+The same trigger closes the loophole from the other side: a finding
+that was marked as needing action **and already closed** cannot have
+the flag cleared afterwards, which would retrospectively turn a
+corrective action into a note. Un-marking a finding that is still open
+*is* allowed, because a mistake on the day should be correctable.
+
+**The second half cannot be built, and this is the decision.**
+
+> ### Decision required — the task register
+>
+> "It becomes a task with an owner and a due date" presupposes a task
+> register. **This product has none.**
+> `src/lib/tasks/taskSources.ts` opens by saying so — *"My tasks —
+> derived, because there is no task register"* — and continues: *"It
+> has no due date and no urgency ordering, because nothing records
+> them."* A derived task is a record sitting in a state only one role
+> can move; it has no owner and no due date, which is precisely what
+> this rule requires.
+>
+> Two candidates were considered and both rejected:
+>
+> - **A free-text task reference** would *be* a note, which is the one
+>   thing the design forbids.
+> - **`capa_actions`** has `assigned_to` and `due_date` and would fit
+>   mechanically, but it hangs off `capa_records`. Making every pest
+>   finding a CAPA classifies a bait station as a formal
+>   corrective-and-preventive-action record. That is a quality
+>   decision, not a schema convenience — and FL-14 shows
+>   "TASK-2026-0161", a task, not a CAPA number.
+>
+> **The decision needed is one of:** (a) a general task register with
+> an owner and a due date, which is a product capability well beyond
+> facility logs; or (b) an explicit ruling that a pest finding needing
+> action *is* a CAPA, in which case `capa_records` is the right home
+> and the classification is the owner's to make.
+>
+> Until one is taken, `corrective_task_id` is a bare uuid with no
+> foreign key and nothing in the product can set it. **The consequence
+> is intended:** a finding marked as needing action can be recorded
+> and shown, and cannot be closed. That is the design's instruction —
+> it may not be closed by a note — rather than a gap left open. The
+> screen says so in words next to the disabled control, rather than
+> offering a button the database will refuse.
+
+**Not invented.** No disposition enum: FL-13's ACTION column shows
+"—", "Normal level · no action" and "Watch at next visit", and only
+the needs-action flag is load-bearing, so the rest is free text. No
+visit-frequency enum either: FL-13 says "Fortnightly visits" and
+`facility_zone_schedules.frequency` allows only daily / weekly /
+monthly / quarterly, so widening that CHECK to fit a pest contract was
+refused and pest visits carry their own free text. No automatic
+deviation, and no signature.
+
+### D11 — The approved-supplier register, and a correction
+
+**Batch 3 said all four `review` pages were working features. That was
+wrong about one of them**, and the error is worth stating plainly:
+`supplier-qualification` rendered a **`ComingSoonPage`**. The claim was
+made from the destination model and PM-03 without reading the route.
+
+What the route reading found, converging from three approved sources:
+
+- `public.suppliers` is a real table — name, code,
+  `qualification_status`, `qualified_until`, country, contact — with
+  RLS enabled and company-isolation policies on **all four verbs**.
+  Only `materialLotService` read it, as a lookup for lots.
+- PM-03 grants `act` on section `suppliers` to **Procurement** and the
+  **QA Manager**, and `view` to four more roles. Those grants had no
+  page to be exercised on: **a permission already stranded**, not one
+  that would be stranded if something were removed.
+- HS-01 row 9 keeps the approved-supplier **list** in the product.
+
+So the list is in scope and is now built. **The qualification workflow
+is not** — the same HS-01 row 9 excludes supplier qualification from
+the MVP, so there are no questionnaires, no audit scheduling, no CMO
+assessment and no scoring.
+
+No migration was needed: the table and its policies already existed.
+The status vocabulary is read off `suppliers_qualification_chk`, which
+has constrained the column to five values since the table was created,
+so nothing was invented there either. Authorisation is
+`canAct(role, 'suppliers')` — PM-03's own grid, not a new permission
+key. Rendered as Procurement the standing control appears on all five
+rows; as Storekeeper (view) and QC Analyst (no cell) it appears on
+none, and the page says why rather than looking broken.
+
+**One piece of reasoning the data does not state.** A `qualified_until`
+in the past means the approval has run out, and the register reports
+that **without rewriting `qualification_status`** — a date passing is
+not somebody deciding to disqualify a supplier. So a lapsed supplier
+still reads "Qualified" in its own column while `isUsable` returns
+false and the row sorts to the top. That is the silent failure the
+screen exists to surface, and two tests fail if the lapse stops
+blocking usability.
+
+### The other two review pages — route and authorisation
+
+- **`dispatch`** has **no permission guard on its route at all**. That
+  is nonetheless correct, because `DispatchPage` consults the grid
+  itself — `canAct(role, 'distribution')`. A test now pins that call,
+  because removing it would open the page to anyone while the route
+  looks unchanged.
+- **`compliance-reporting`** is guarded by
+  `perms.canViewComplianceReporting` behind a `FeatureGate`, and
+  **`enterprise-dashboard`** by the same key plus
+  `profile.organization_id`. Both are correct and unchanged.
+
+All four remain `kind: 'review'`. The recommendations from batch 3
+stand, with `supplier-qualification`'s strengthened: it is no longer a
+question of whether to keep a working page, because the page was a stub
+and the register that replaces it is what row 9 asked for.
+
+### The Regulatory Library — the evidence trace came up empty
+
+The brief's condition was to implement a real data model *if* the page
+is within approved scope **and** its behaviour can be established from
+evidence. It traced to nothing:
+
+- **No Figma screen.** `navigation-audit.md` established this, and it
+  is distinct from the SOP Library.
+- **No product requirement.** `docs/ROADMAP.md` does not mention a
+  regulatory library; its only "libraries" reference is to code
+  libraries. No PRD in the repository names one — note that PRD G3.9,
+  which FL-13's design quotes, is **not in the repository either**, so
+  the pest field list is established only by the design's quotation of
+  it.
+- **No old-product code cited** for it anywhere.
+
+What exists is a static corpus of **real regulatory reference text**
+with working search. A library of statutes is legitimately static, and
+batch 3 already withdrew the "hollow screen" description. What it
+lacks is any company-scoped state — no review record, no bookmark, no
+link to an obligation — and inventing a regulatory review workflow is
+exactly the kind of regulated procedure this project does not invent.
+
+> **Decision required.** Is the Regulatory Library a read-only
+> reference corpus, or a company-scoped register with review state? The
+> first is finished. The second needs its rules stated — what is
+> recorded, by whom, and what a review means — before a table is worth
+> designing. **No data model was built, because the condition the brief
+> set was not met.**
+
+### Legal Marketplace — unchanged, as instructed
+
+Nothing was built and nothing was removed. The evidence available:
+
+- HS-02 excludes a "Regulator portal" from navigation and **does not
+  mention a marketplace either way**.
+- No Figma frame, no roadmap entry, no backing table, no service.
+- `LegalMarketplacePage` is 252 lines with no data access of any kind —
+  the one page in the owed set that is a genuine placeholder.
+
+> **The smallest precise decision needed:** is a legal marketplace in
+> the pilot at all — yes or no? Everything else (what it lists, who may
+> act in it, whether money changes hands) follows from that answer and
+> cannot be usefully specified before it. If the answer is no, the page
+> should be removed from the rail by the same D4 reasoning that applies
+> to `enterprise-dashboard`.
+
+### `qa_officer` — untouched
+
+Unchanged, as instructed, and no shortcut was taken. The `quality`
+preset was not granted. The decision required is still the PM-03 row
+for `qa_officer`, or an explicit statement of role equivalence.

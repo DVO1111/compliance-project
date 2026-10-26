@@ -28,6 +28,8 @@ import SettingsHomePage from '../../src/components/Settings/SettingsHomePage';
 import FacilityLogsPage from '../../src/components/Facility/FacilityLogsPage';
 import FacilityZonesSetup from '../../src/components/Facility/FacilityZonesSetup';
 import FacilityTrendsView from '../../src/components/Facility/FacilityTrendsView';
+import FacilityPestView from '../../src/components/Facility/FacilityPestView';
+import SupplierRegisterPage from '../../src/components/Suppliers/SupplierRegisterPage';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
@@ -66,10 +68,18 @@ const PAGES: Record<string, () => JSX.Element> = {
   //  FL-06 / FL-07. The greyscale check is what FL-07 is, so this is
   //  also the screen to look at with colour removed.
   'facility-trends': () => <FacilityTrendsView companyId="c1" onBack={() => {}} />,
+  //  FL-13. The row that matters is BS-07: marked as needing action,
+  //  so its Close control must be disabled with the reason shown.
+  'facility-pest': () => <FacilityPestView companyId="c1" />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */
 const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
+  //  HS-01 row 9's approved-supplier list. Role-sensitive on purpose:
+  //  PM-03 gives Procurement and the QA Manager `act` on `suppliers`
+  //  and four more roles `view`, so ?role= changes whether the
+  //  standing control appears at all.
+  'supplier-register': (role) => <SupplierRegisterPage companyId="c1" role={role} />,
   'qa-disposition': (role) => <QaDispositionPage companyId="c1" role={role} />,
   'goods-receipt': (role) => <GoodsReceiptPage companyId="c1" role={role} />,
   'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} roles={role ? [role] : []} />,
