@@ -360,7 +360,87 @@ const SUPPLIERS = [
   },
 ];
 
+//  FL-11's six rows, with all four shapes of limit — including the
+//  pH range and the coliform absence that the environmental model
+//  cannot express, and the monthly analysis awaiting its laboratory.
+const WATER_REGISTER = [
+  {
+    test_id: 'wt-1', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
+    source_ref: 'BH-1', test_name: 'Free chlorine after carbon',
+    sample_point: 'After carbon filter', frequency: 'daily',
+    limit_kind: 'max', limit_min: null, limit_max: 0, expected_text: null,
+    result_unit: 'mg/L', laboratory_kind: 'in_house', laboratory_name: 'In-house',
+    last_result_id: 'wr-1', last_sampled_on: '2026-10-21', last_due_on: null,
+    last_value: 0, last_text: null, last_received: true,
+    last_report_ref: null, last_outcome: 'within_limits',
+  },
+  {
+    test_id: 'wt-2', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
+    source_ref: 'BH-1', test_name: 'Conductivity, RO permeate',
+    sample_point: 'RO permeate', frequency: 'daily',
+    limit_kind: 'max', limit_min: null, limit_max: 1.3, expected_text: null,
+    result_unit: 'µS/cm', laboratory_kind: 'in_house', laboratory_name: 'In-house',
+    last_result_id: 'wr-2', last_sampled_on: '2026-10-21', last_due_on: null,
+    last_value: 1.1, last_text: null, last_received: true,
+    last_report_ref: null, last_outcome: 'within_limits',
+  },
+  {
+    test_id: 'wt-3', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
+    source_ref: 'BH-1', test_name: 'pH, loop return',
+    sample_point: 'Loop return', frequency: 'daily',
+    limit_kind: 'range', limit_min: 5, limit_max: 7, expected_text: null,
+    result_unit: null, laboratory_kind: 'in_house', laboratory_name: 'In-house',
+    last_result_id: 'wr-3', last_sampled_on: '2026-10-21', last_due_on: null,
+    last_value: 4.2, last_text: null, last_received: true,
+    last_report_ref: null, last_outcome: 'outside_limits',
+  },
+  {
+    test_id: 'wt-4', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
+    source_ref: 'BH-1', test_name: 'Total viable count, PW-03',
+    sample_point: 'PW-03', frequency: 'weekly',
+    limit_kind: 'max', limit_min: null, limit_max: 100, expected_text: null,
+    result_unit: 'cfu/mL', laboratory_kind: 'external',
+    laboratory_name: 'FIXTURE Labcheck Analytical',
+    last_result_id: 'wr-4', last_sampled_on: '2026-10-15', last_due_on: null,
+    last_value: 42, last_text: null, last_received: true,
+    last_report_ref: 'LA-88412', last_outcome: 'within_limits',
+  },
+  {
+    test_id: 'wt-5', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
+    source_ref: 'BH-1', test_name: 'Coliforms, PW-03',
+    sample_point: 'PW-03', frequency: 'weekly',
+    limit_kind: 'qualitative', limit_min: null, limit_max: null,
+    expected_text: 'Absent', result_unit: '100 mL',
+    laboratory_kind: 'external', laboratory_name: 'FIXTURE Labcheck Analytical',
+    last_result_id: 'wr-5', last_sampled_on: '2026-10-15', last_due_on: null,
+    last_value: null, last_text: 'Absent', last_received: true,
+    last_report_ref: 'LA-88412', last_outcome: 'within_limits',
+  },
+  {
+    test_id: 'wt-6', source_id: 'ws-1', source_name: 'FIXTURE Purified water loop',
+    source_ref: 'BH-1', test_name: 'Full chemical analysis, raw water',
+    sample_point: 'Raw water', frequency: 'monthly',
+    limit_kind: 'max', limit_min: null, limit_max: 9999, expected_text: null,
+    result_unit: null, laboratory_kind: 'external',
+    laboratory_name: 'FIXTURE Labcheck Analytical',
+    last_result_id: 'wr-6', last_sampled_on: '2026-10-01', last_due_on: '2026-10-15',
+    last_value: null, last_text: null, last_received: false,
+    last_report_ref: null, last_outcome: 'awaiting_laboratory',
+  },
+];
+
+const WATER_STAGES = [
+  { id: 'wst-0', source_id: 'ws-1', position: 0, name: 'Borehole BH-1', equipment_ref: null },
+  { id: 'wst-1', source_id: 'ws-1', position: 1, name: 'Sand filter', equipment_ref: null },
+  { id: 'wst-2', source_id: 'ws-1', position: 2, name: 'Carbon filter', equipment_ref: null },
+  { id: 'wst-3', source_id: 'ws-1', position: 3, name: 'Softener', equipment_ref: null },
+  { id: 'wst-4', source_id: 'ws-1', position: 4, name: 'Reverse osmosis', equipment_ref: 'RO-1' },
+  { id: 'wst-5', source_id: 'ws-1', position: 5, name: 'UV lamp', equipment_ref: 'UV-1' },
+  { id: 'wst-6', source_id: 'ws-1', position: 6, name: 'Purified water loop', equipment_ref: null },
+];
+
 const BY_TABLE: Record<string, unknown[]> = {
+  facility_water_stages: WATER_STAGES,
   suppliers: SUPPLIERS,
   facility_log_entries: FACILITY_ENTRIES,
   facility_zones: FACILITY_ZONES,
@@ -379,6 +459,7 @@ const BY_RPC: Record<string, unknown> = {
   facility_site_options: FACILITY_SITES,
   facility_log_trend: FACILITY_TREND,
   facility_pest_register: PEST_REGISTER,
+  facility_water_register: WATER_REGISTER,
 };
 
 function builder(table: string): any {

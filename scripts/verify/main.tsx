@@ -29,6 +29,7 @@ import FacilityLogsPage from '../../src/components/Facility/FacilityLogsPage';
 import FacilityZonesSetup from '../../src/components/Facility/FacilityZonesSetup';
 import FacilityTrendsView from '../../src/components/Facility/FacilityTrendsView';
 import FacilityPestView from '../../src/components/Facility/FacilityPestView';
+import FacilityWaterView from '../../src/components/Facility/FacilityWaterView';
 import SupplierRegisterPage from '../../src/components/Suppliers/SupplierRegisterPage';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
@@ -71,6 +72,9 @@ const PAGES: Record<string, () => JSX.Element> = {
   //  FL-13. The row that matters is BS-07: marked as needing action,
   //  so its Close control must be disabled with the reason shown.
   'facility-pest': () => <FacilityPestView companyId="c1" />,
+  //  FL-11. The pH row is the one to look at: a range limit, and a
+  //  reading of 4.2 that the environmental rule would have passed.
+  'facility-water': () => <FacilityWaterView companyId="c1" />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */

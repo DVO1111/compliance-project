@@ -32,6 +32,7 @@ import {
 import FacilityZonesSetup from './FacilityZonesSetup';
 import FacilityTrendsView from './FacilityTrendsView';
 import FacilityPestView from './FacilityPestView';
+import FacilityWaterView from './FacilityWaterView';
 import { useAuth } from '../../contexts/AuthContext';
 import { logger } from '../../lib/logger';
 import {
@@ -287,6 +288,12 @@ export default function FacilityLogsPage({ companyId }: { companyId?: string }) 
           register's one-row-per-reading table cannot show. */}
       {tab === 'Pest control' ? (
         <FacilityPestView companyId={companyId} />
+      ) : tab === 'Water' ? (
+        /*  FL-11, for the same reason as FL-13: the register's one
+            limit column cannot print a range or "Absent in 100 mL",
+            and the environmental rule would pass a pH of 4.0 against
+            a range of 5.0 to 7.0. */
+        <FacilityWaterView companyId={companyId} />
       ) : loading ? (
         <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)] p-6">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading the register…

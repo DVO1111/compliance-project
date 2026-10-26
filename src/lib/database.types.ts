@@ -5536,6 +5536,54 @@ isOneToOne: false
                     "company_id"?: string,"corrective_task_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"disposition_note"?: string | null,"finding"?: string,"id"?: string,"location_ref"?: string | null,"method_used"?: string | null,"needs_action"?: boolean,"resolution_note"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"station_code"?: string,"updated_at"?: string,"visit_id"?: string,"zone_id"?: string | null
                   }
                   Relationships: []
+                },"facility_water_sources": {
+                  Row: {
+                    "company_id": string,"created_at": string,"created_by": string | null,"id": string,"is_active": boolean,"name": string,"purpose": string | null,"site_id": string | null,"source_detail": string | null,"source_ref": string | null,"updated_at": string,"zone_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "company_id": string,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_active"?: boolean,"name": string,"purpose"?: string | null,"site_id"?: string | null,"source_detail"?: string | null,"source_ref"?: string | null,"updated_at"?: string,"zone_id"?: string | null
+                  }
+                  Update: {
+                    "company_id"?: string,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_active"?: boolean,"name"?: string,"purpose"?: string | null,"site_id"?: string | null,"source_detail"?: string | null,"source_ref"?: string | null,"updated_at"?: string,"zone_id"?: string | null
+                  }
+                  Relationships: []
+                },"facility_water_stages": {
+                  Row: {
+                    "company_id": string,"created_at": string,"equipment_ref": string | null,"id": string,"name": string,"position": number,"source_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "company_id": string,"created_at"?: string,"equipment_ref"?: string | null,"id"?: string,"name": string,"position": number,"source_id": string
+                  }
+                  Update: {
+                    "company_id"?: string,"created_at"?: string,"equipment_ref"?: string | null,"id"?: string,"name"?: string,"position"?: number,"source_id"?: string
+                  }
+                  Relationships: []
+                },"facility_water_tests": {
+                  Row: {
+                    "company_id": string,"created_at": string,"expected_text": string | null,"frequency": string,"id": string,"is_active": boolean,"laboratory_kind": string,"laboratory_name": string | null,"limit_kind": string,"limit_max": number | null,"limit_min": number | null,"name": string,"result_unit": string | null,"sample_point": string | null,"source_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "company_id": string,"created_at"?: string,"expected_text"?: string | null,"frequency": string,"id"?: string,"is_active"?: boolean,"laboratory_kind"?: string,"laboratory_name"?: string | null,"limit_kind": string,"limit_max"?: number | null,"limit_min"?: number | null,"name": string,"result_unit"?: string | null,"sample_point"?: string | null,"source_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "company_id"?: string,"created_at"?: string,"expected_text"?: string | null,"frequency"?: string,"id"?: string,"is_active"?: boolean,"laboratory_kind"?: string,"laboratory_name"?: string | null,"limit_kind"?: string,"limit_max"?: number | null,"limit_min"?: number | null,"name"?: string,"result_unit"?: string | null,"sample_point"?: string | null,"source_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: []
+                },"facility_water_results": {
+                  Row: {
+                    "analyst_name": string | null,"company_id": string,"created_at": string,"due_on": string | null,"id": string,"laboratory_name": string | null,"notes": string | null,"outcome": string,"received": boolean,"recorded_by": string | null,"report_ref": string | null,"result_text": string | null,"result_value": number | null,"sampled_on": string,"test_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "analyst_name"?: string | null,"company_id": string,"created_at"?: string,"due_on"?: string | null,"id"?: string,"laboratory_name"?: string | null,"notes"?: string | null,"outcome"?: string,"received"?: boolean,"recorded_by"?: string | null,"report_ref"?: string | null,"result_text"?: string | null,"result_value"?: number | null,"sampled_on": string,"test_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "analyst_name"?: string | null,"company_id"?: string,"created_at"?: string,"due_on"?: string | null,"id"?: string,"laboratory_name"?: string | null,"notes"?: string | null,"outcome"?: string,"received"?: boolean,"recorded_by"?: string | null,"report_ref"?: string | null,"result_text"?: string | null,"result_value"?: number | null,"sampled_on"?: string,"test_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: []
                 },"facility_zones": {
                   Row: {
                     "alert_owner_after_days": number,"cleaning_sop_ref": string | null,"code": string | null,"company_id": string,"created_at": string,"created_by": string | null,"equipment_refs": (string)[],"escalate_to_qa_after_days": number,"grade": string | null,"id": string,"is_active": boolean,"line_ref": string | null,"name": string,"owner_id": string | null,"site_id": string,"updated_at": string
@@ -6517,6 +6565,14 @@ isOneToOne: false
 { Args: { "p_company_id": string }; Returns: {
                              "visit_id": string,"reference": string,"visited_on": string,"technician_name": string | null,"report_file_ref": string | null,"checked_by": string | null,"checked_at": string | null,"provider_id": string,"provider_name": string,"visit_frequency": string | null,"contract_until": string | null,"methods": (string)[],"next_visit_on": string | null,"finding_count": number,"needs_action_count": number,"open_action_count": number
                            }[]
+                           },
+"facility_water_register":
+{ Args: { "p_company_id": string }; Returns: {
+                             "test_id": string,"source_id": string,"source_name": string,"source_ref": string | null,"test_name": string,"sample_point": string | null,"frequency": string,"limit_kind": string,"limit_min": number | null,"limit_max": number | null,"expected_text": string | null,"result_unit": string | null,"laboratory_kind": string,"laboratory_name": string | null,"last_result_id": string | null,"last_sampled_on": string | null,"last_due_on": string | null,"last_value": number | null,"last_text": string | null,"last_received": boolean | null,"last_report_ref": string | null,"last_outcome": string | null
+                           }[]
+                           },
+"facility_water_outcome":
+{ Args: { "p_limit_kind": string,"p_limit_min": number,"p_limit_max": number,"p_expected_text": string,"p_result_value": number,"p_result_text": string,"p_received": boolean }; Returns: string
                            },
 "facility_log_trend":
 { Args: { "p_company_id": string,"p_log_type": string,"p_weeks"?: number }; Returns: {

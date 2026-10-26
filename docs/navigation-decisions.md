@@ -826,3 +826,130 @@ Nothing was built and nothing was removed. The evidence available:
 Unchanged, as instructed, and no shortcut was taken. The `quality`
 preset was not granted. The decision required is still the PM-03 row
 for `qa_officer`, or an explicit statement of role equivalence.
+
+---
+
+## Phase 3, batch 5 — water treatment (FL-10 / FL-11)
+
+### D12 — Water results are judged by their own rule, and here is why
+
+`water` has been one of the six facility log types since the first
+facility migration, and FL-01 could always show a water reading. What
+it could not show is FL-11, because **FL-11's limits are not the shape
+the environmental model assumes**.
+
+`facility_log_outcome()` asks one question: is the result ABOVE its
+limit. That is right for a settle plate, where more growth is worse.
+FL-11 draws four different shapes:
+
+| Test | Limit | Shape |
+|---|---|---|
+| Free chlorine after carbon | `0.00` | maximum, at zero |
+| Conductivity, RO permeate | `1.3 or less` | maximum |
+| pH, loop return | `5.0 – 7.0` | **range** |
+| Total viable count, PW-03 | `100 or less` | maximum |
+| Coliforms, PW-03 | `Absent in 100 mL` | **qualitative** |
+
+**The defect this avoids was confirmed, not assumed.** Before writing
+the migration, the existing function was run against a pH range
+expressed as an upper bound of 7.0:
+
+```
+ pH 4.0 too acidic   | facility_log_outcome: within_limits
+ pH 6.1 correct      | facility_log_outcome: within_limits
+ pH 9.0 too alkaline | facility_log_outcome: outside_action
+```
+
+A pH of 4.0 — far too acidic to release purified water on — comes back
+`within_limits`, because 4.0 is not greater than 7.0. **Section B3 of
+the new suite asserts that the old function really does say this**, so
+the reason this second derivation exists is a recorded fact rather
+than a claim in a comment. If `facility_log_outcome` ever learns about
+ranges, B3 fails and this model should be revisited.
+
+Coliforms are the other half: "Absent in 100 mL" is not a number and
+no arithmetic makes it one.
+
+So `facility_water_outcome()` switches on `limit_kind` and returns one
+of `within_limits`, `outside_limits`, `awaiting_laboratory` or
+`not_assessed`. As everywhere else in this feature the **database**
+decides and the client sends no `outcome` at all.
+
+**`awaiting_laboratory` is checked first**, before any limit. FL-11
+draws "Not received · due 15 Oct" on the monthly analysis: the sample
+was taken and the laboratory has not reported. That is neither a pass
+nor a failure nor a missed test, and treating it as a pass would be
+the worst available default.
+
+### What establishes the fields
+
+FL-11's own note, which also names the requirement:
+
+> "Fields are those PRD G3.8 names: source, treatment method, testing
+> frequency, results and testing laboratory. Lab reports attach to the
+> result. The overdue monthly analysis uses the same alert rule as
+> environmental tests (FL-02), as engineering item 22 requires."
+
+All five are implemented. The treatment method is drawn as an **ordered
+train** — "Borehole BH-1 → Sand filter → Carbon filter → Softener →
+Reverse osmosis RO-1 → UV lamp UV-1 → Purified water loop" — so it is
+a table with a position, not a text field, and a position cannot repeat
+within a source.
+
+Note that **PRD G3.8 is not in the repository**, exactly as PRD G3.9
+was not for pest control. The field list is established by the approved
+design's quotation of it, which is the only evidence available.
+
+Because FL-11 says the overdue rule is FL-02's, and FL-02 keeps its
+escalation days per zone, a water source may name a zone. It is
+nullable — FL-01's borehole row sits at the site rather than in a
+graded room — and where it is null no escalation is configured rather
+than a default being invented.
+
+### Not invented
+
+**No pharmacopoeial or WHO figures are written into the schema.** A
+limit here is always data. Which brings up the one thing building this
+screen revealed:
+
+> **Decision required — a limit judged against an external document.**
+>
+> FL-11's monthly row reads "Per WHO drinking-water list". That is not
+> a maximum, a range or a qualitative expectation: it is a reference to
+> somebody else's document containing dozens of parameters, and none of
+> the three `limit_kind` values can express it. The fixture used in
+> rendering had to stand a placeholder ceiling in its place, which
+> prints as "9999 or less" — visibly wrong, and left visible rather
+> than hidden.
+>
+> A fourth kind — something like `reference`, carrying the document's
+> name and deriving `not_assessed` so that a person records the verdict
+> — would fit the honesty principle the rest of this model follows. But
+> adding it decides how a company records conformance to an external
+> standard, so it is **recorded here rather than invented**.
+>
+> **The decision:** should a water test be able to name an external
+> specification document instead of a numeric limit, and if so does a
+> person record the verdict, or does the product expect the individual
+> parameters to be entered as separate tests?
+
+No automatic deviation, no sign-off, no second signature — none is
+drawn in W6·29.
+
+### FL-04 and FL-09, still outstanding
+
+Of W6·29's fourteen screens, twelve are now built. The two that are
+not:
+
+- **FL-04 "Floor: settle plate outside action limit"** — the breach
+  variant of FL-03's recording flow. The recording path already
+  derives and displays `outside_action` correctly, so what FL-04 adds
+  is whatever the design shows happening *next* after a breach. That
+  needs reading before it is built, and it may well turn out to
+  overlap the corrective-action question that D10 left open.
+- **FL-09 "Deep cleaning schedule and cleaning records"** — the
+  Cleaning tab. `cleaning_routine` and `cleaning_deep` are already
+  log types and FL-01's register handles them, and `deepCleanOverdue`
+  is already a tile on it. What FL-09 adds beyond that is a dedicated
+  schedule view, which is a smaller piece of work than water or pest
+  and is the natural next batch.
