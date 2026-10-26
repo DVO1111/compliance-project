@@ -953,3 +953,166 @@ not:
   is already a tile on it. What FL-09 adds beyond that is a dedicated
   schedule view, which is a smaller piece of work than water or pest
   and is the natural next batch.
+
+---
+
+# Phase 2 — the six authorised decisions
+
+The product owner settled the six open items. They are recorded here as
+the working direction, each with what it changes and what it still
+rules out.
+
+## P2-1 — Pest control: a general auditable action register
+
+**Authorised:** implement a general, auditable action register for
+findings requiring action; link or escalate to formal CAPA when the
+approved severity, recurrence or product-impact criteria require it;
+never allow a finding requiring action to be closed without its
+required action and closure evidence; **define the escalation criteria
+explicitly rather than inventing hidden rules.**
+
+This supersedes D10's blocker. D10 refused to build the task half
+because no task register existed and because making every pest finding
+a CAPA would have classified a bait station as a formal CAPA record.
+Both objections are answered: a register is now authorised, and
+escalation to CAPA is to be *criteria-driven* rather than automatic.
+
+The last clause is the design constraint that matters. "Explicitly
+rather than hidden" means the criteria are **stored, readable rows** —
+not thresholds compiled into a trigger where nobody can see which rule
+fired. So escalation is evaluated against criteria the company can
+read, and every evaluation records which criterion it matched.
+
+## P2-2 — QA Officer: one key, derived from the row
+
+**Authorised:** correct the mapping from the existing PM-03 row; do not
+equate `qa_officer` with `qa_manager`; do not grant the legacy
+`quality` preset; implement only the fine-grained permissions the
+approved duties need; add regression tests for access and denial.
+
+Done. The row was read from `section_permissions`:
+
+| Access | Sections |
+|---|---|
+| `act` | `coa_register`, `deviation_capa`, `qa_disposition` |
+| `view` | `batch_records`, `batch_release`, `distribution`, `goods_receipt`, `material_lots`, `qc_testing`, `suppliers`, `traceability` |
+
+Each of the eleven was checked against its page's route guard and its
+nav entry. **Ten are gated by PM-03 alone** and consult no
+`Permissions` key. The exception is `deviation_capa`, whose two pages
+are guarded by `perms.canViewCapaManagement` on the route and hidden
+from the rail by the same key.
+
+So the fix is **one key**. `permissions.ts` is 132 insertions and zero
+deletions; PM-03 is untouched; a test pins the row by reading it back
+through `canAct`/`canView` so the preset must be re-derived if the grid
+ever changes. Both halves — access and denial — were mutation-tested.
+
+## P2-3 — Preflights: run, and they came back clean
+
+**Authorised:** run the documented read-only preflights against the
+real database; capture aggregate results and incompatible values
+without exposing sensitive records; no DDL, no repair, no migration;
+report for review before preparing any production-facing migration.
+
+Done, and recorded in full in
+[`docs/preflight-results-2026-10-26.md`](./preflight-results-2026-10-26.md).
+
+The short version: **all four tables are empty in production**, so
+there are no orphans, no incompatible `rejection_reason` values, and
+nothing for a constraint to abort on. The constraints can be added
+without touching data.
+
+Two things in that report are worth carrying forward:
+
+- The result establishes that the migration **cannot fail on existing
+  data**. It does **not** establish that the data is clean, because
+  there is no data — the logistics feature has never been used in
+  production. If those tables are populated before deployment, the
+  preflight should be run again.
+- **`section_permissions` does not exist in production.** The PM-03
+  migrations have not been deployed, so `app_section_access()` is
+  reading a table that is not there. Found while establishing context;
+  reported rather than acted on, being outside what was authorised.
+
+No migration was written. The results go for review first.
+
+## P2-4 — Environmental monitoring: settle plate and active air as distinct methods
+
+**Authorised:** support both sampling methods as distinct methods in
+the facility-log model and the FL-06 workflow; preserve
+method-specific measurement metadata and configurable, protocol-based
+limits; reuse existing schema and services where appropriate;
+**do not assume universal alert thresholds.**
+
+This answers the gap batch 3 reported: FL-06 offers three sub-tabs
+("Settle plates", "Surface swabs", "Active air") while `log_type` has
+only `environmental_air` and `environmental_surface`, because settle
+plates and active air are both *air* methods and only the schedule
+description told them apart.
+
+The last clause is again the constraint that matters. Settle plates are
+measured in CFU per plate per exposure period; active air in CFU per
+cubic metre of sampled air. **They are not the same quantity**, so a
+single alert threshold across both would be meaningless — which is
+exactly what "do not assume universal alert thresholds" rules out.
+Limits stay per schedule, as they already are, and the method carries
+its own measurement metadata.
+
+## P2-5 — Regulatory Library: reference corpus, and that is the scope
+
+**Authorised:** retain the current reference-corpus scope for the
+pilot; do not introduce company-scoped review states or approvals into
+the corpus in this phase; record company-specific controlled review as
+a separate future capability if justified.
+
+Settled, and it confirms the conclusion the evidence trace reached: the
+page works as a read-only reference library over real statutory text,
+and a library of statutes is legitimately static. **Nothing is being
+built here, and nothing is being removed.**
+
+Recorded as a separate future capability, if it is ever justified:
+
+> **Company-scoped controlled review of reference material.** Would
+> need its own tables (which document, reviewed by whom, when, against
+> what), its own rules (what a review *means* and what it permits),
+> and a decision about whether a review expires. None of that is drawn
+> or specified anywhere today, and it is a records-management
+> capability rather than a change to the corpus. It must not be grafted
+> onto the corpus: the corpus is shared reference text, and review
+> state is company data, so mixing them would put one company's
+> workflow inside a shared library.
+
+## P2-6 — Legal Marketplace: deferred, preserved, unchanged
+
+**Authorised:** defer promotion into the initial pilot navigation;
+preserve the existing implementation and routes; do not delete it or
+change its permissions; record the scope decision and the work
+required for a future phase.
+
+Settled. **No code changes.** The page, its route and its permissions
+stay exactly as they are, and it keeps its current navigation
+destination — it is not promoted, and it is not removed.
+
+The evidence, for the record: HS-02 excludes a "Regulator portal" from
+navigation and does not mention a marketplace either way; there is no
+Figma frame, no roadmap entry, no backing table and no service;
+`LegalMarketplacePage` is 252 lines with no data access of any kind.
+
+What bringing it into a future phase would require, in order:
+
+1. **A scope statement** — what the marketplace lists, who the
+   counterparties are, and what a user can actually do in it. Nothing
+   else can be specified before this.
+2. **A data model** — providers or offerings, and whether engagements
+   are tracked. None exists.
+3. **An authorisation decision** — whether PM-03 should tabulate it at
+   all, or whether it sits outside the operational matrix like the
+   administrative pages do.
+4. **A commercial decision** — whether money or contracts change hands
+   through the product, which carries obligations well beyond
+   navigation.
+5. **A design** — FL-style screens for whatever 1 to 4 settle on.
+
+Until step 1 exists the rest cannot be estimated, which is why this is
+recorded as deferred rather than scheduled.
