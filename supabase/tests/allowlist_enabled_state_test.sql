@@ -32,6 +32,18 @@ GRANT EXECUTE ON FUNCTION _sk(text,text,boolean,text) TO anon, authenticated, se
 
 
 -- ── Fixture ──────────────────────────────────────────────────────────
+/*
+ *  20261213000000 added a trigger refusing the removal of the LAST
+ *  access_approvers row, so an operator cannot lock the project out of its
+ *  own administration. This suite creates and removes an approver of its
+ *  own, so it disables that trigger around its fixtures — and only there.
+ *
+ *  Found by the trigger breaking this file: the suite aborted and the
+ *  runner reported it as zero assertions rather than as a failure, which
+ *  is why the total is checked and not just the failure count.
+ */
+ALTER TABLE public.access_approvers DISABLE TRIGGER trg_access_approvers_keep_one;
+
 DO $fx$
 DECLARE
   ua uuid := '00000000-0000-7c01-b000-000000000001';  -- an approver
@@ -55,6 +67,8 @@ BEGIN
    WHERE email = 'disabled@allowlist.test';
 END
 $fx$;
+
+ALTER TABLE public.access_approvers ENABLE TRIGGER trg_access_approvers_keep_one;
 
 
 -- =====================================================================
@@ -391,6 +405,8 @@ $f$;
 
 
 -- ── Fixture cleanup ──────────────────────────────────────────────────
+ALTER TABLE public.access_approvers DISABLE TRIGGER trg_access_approvers_keep_one;
+
 DO $cl$
 DECLARE
   ua uuid := '00000000-0000-7c01-b000-000000000001';
@@ -401,6 +417,8 @@ BEGIN
   DELETE FROM auth.users WHERE id IN (ua, ub);
 END
 $cl$;
+
+ALTER TABLE public.access_approvers ENABLE TRIGGER trg_access_approvers_keep_one;
 
 
 \echo ''
