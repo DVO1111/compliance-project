@@ -104,9 +104,11 @@ describe('supplier-qualification — the home HS-01 points to does not exist', (
    *  and the QA Manager hold `act` on the section.
    */
   it('has no Settings section to be moved into', () => {
-    const ids = SETTINGS_SECTIONS.map((s) => s.id);
+    //  A section is identified by the PAGE it opens, so that is what
+    //  is checked — there is no separate id.
+    const pages = SETTINGS_SECTIONS.map((s) => s.page as string);
     const labels = SETTINGS_SECTIONS.map((s) => s.label.toLowerCase());
-    expect(ids).not.toContain('suppliers');
+    expect(pages).not.toContain('supplier-qualification');
     expect(labels.some((l) => l.includes('supplier'))).toBe(false);
   });
 

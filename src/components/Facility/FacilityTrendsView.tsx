@@ -228,8 +228,12 @@ function ZoneChart({ series, showTable }: { series: TrendSeries; showTable: bool
                   border: '1px solid var(--color-border)',
                   borderRadius: 8,
                 }}
-                formatter={(v: number) => [
-                  `${v}${series.unit ? ` ${series.unit}` : ''}`, 'Highest',
+                //  recharts hands the formatter `number | undefined`,
+                //  so a missing value has to be rendered as something
+                //  other than the string "undefined".
+                formatter={(v: number | undefined) => [
+                  v == null ? '—' : `${v}${series.unit ? ` ${series.unit}` : ''}`,
+                  'Highest',
                 ]}
               />
 
