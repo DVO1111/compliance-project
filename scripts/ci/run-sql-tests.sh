@@ -39,6 +39,14 @@
 #       early produces zero, which would otherwise look indistinguish-
 #       able from a clean pass.
 #    3. No assertion fails.
+#    4. Every suite named in expected-suite-assertions.txt EXISTS and
+#       reports at least the assertions recorded there. The zero check
+#       cannot see a suite that loses half its sections, or one whose
+#       file has been deleted — the glob simply does not run it.
+#    5. The aggregate assertion count does not fall below its floor.
+#    6. No suite exits non-zero while reporting no failures. A suite
+#       that fails raises on purpose, so a non-zero exit WITH a clean
+#       summary is a suite that broke after printing it.
 #
 set -uo pipefail
 
@@ -50,6 +58,9 @@ export PGUSER="${PGUSER:-postgres}"
 export PGPASSWORD="${PGPASSWORD:-postgres}"
 
 EXPECTED="$ROOT/scripts/ci/expected-migration-failures.txt"
+EXPECTED_ASSERTIONS="$ROOT/scripts/ci/expected-suite-assertions.txt"
+WRITE_EXPECTED=0
+[ "${1:-}" = "--write-expected" ] && WRITE_EXPECTED=1
 BOOTSTRAP="$ROOT/scripts/ci/db-bootstrap.sql"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -132,6 +143,8 @@ fi
 
 # ── 3. the suites ────────────────────────────────────────────────────
 say "Running SQL suites"
+grep -vE '^\s*(#|$)' "$EXPECTED_ASSERTIONS" > "$WORK/floors.txt" || true
+: > "$WORK/observed.txt"
 total=0; passed=0; failed=0; empty=0
 printf '  %-46s %8s %8s\n' "suite" "passed" "failed"
 printf '  %-46s %8s %8s\n' "----------------------------------------------" "------" "------"
@@ -143,6 +156,7 @@ for suite in "$ROOT"/supabase/tests/*.sql; do
   #  rows and print a summary, and several raise on purpose to prove a
   #  guard bites. The verdict comes from the summary, not the exit code.
   psql -q --no-psqlrc -d "$DB" -f "$suite" > "$out" 2>&1
+  suite_rc=$?
 
   #  Two summary formats are in use across the suites.
   p="$(grep -oE '^ PASS +\| +[0-9]+' "$out" | grep -oE '[0-9]+$' | head -1)"
@@ -167,13 +181,71 @@ for suite in "$ROOT"/supabase/tests/*.sql; do
     echo "   <-- FAILURES"
     status=1
   else
-    echo
+    #  A suite that fails raises on purpose, so a non-zero exit with a
+    #  clean summary means it broke AFTER printing one — which the
+    #  summary itself cannot show.
+    if [ "$suite_rc" -ne 0 ]; then
+      echo "   <-- EXITED $suite_rc AFTER A CLEAN SUMMARY"
+      status=1
+    else
+      floor="$(awk -v n="$name" '$1==n {print $2}' "$WORK/floors.txt")"
+      if [ -n "$floor" ] && [ "$p" -lt "$floor" ]; then
+        echo "   <-- ONLY $p OF $floor EXPECTED ASSERTIONS"
+        status=1
+      else
+        echo
+      fi
+    fi
   fi
+  echo "$name $p" >> "$WORK/observed.txt"
 
   total=$((total + p + f)); passed=$((passed + p)); failed=$((failed + f))
 done
 
 say "TOTAL: $total assertions, $passed passed, $failed failed"
+
+# ── 4. the suites that did not run at all ────────────────────────────
+#  The glob cannot report a file that is not there. A deleted or renamed
+#  suite would otherwise leave the run green because nothing failed.
+MISSING=""
+while read -r mname _; do
+  [ "$mname" = "TOTAL" ] && continue
+  grep -qE "^$mname " "$WORK/observed.txt" || MISSING="$MISSING  $mname"$'\n'
+done < "$WORK/floors.txt"
+
+if [ -n "$MISSING" ]; then
+  say "SUITES THAT ARE EXPECTED BUT DID NOT RUN"
+  printf '%s' "$MISSING"
+  echo
+  echo "  Each is named in expected-suite-assertions.txt and no file was"
+  echo "  found for it. Restore the suite, or remove its line in the same"
+  echo "  commit that deletes it."
+  status=1
+fi
+
+# ── 5. the aggregate floor ───────────────────────────────────────────
+TOTAL_FLOOR="$(awk '$1=="TOTAL" {print $2}' "$WORK/floors.txt")"
+if [ -n "$TOTAL_FLOOR" ] && [ "$total" -lt "$TOTAL_FLOOR" ]; then
+  say "THE TOTAL ASSERTION COUNT HAS FALLEN"
+  echo "  expected at least $TOTAL_FLOOR, got $total"
+  echo
+  echo "  Assertions have been lost somewhere the per-suite floors did"
+  echo "  not catch. If the drop is intended, lower the TOTAL line in"
+  echo "  the same commit that removes them."
+  status=1
+fi
+
+if [ "$WRITE_EXPECTED" -eq 1 ]; then
+  say "Rewriting $EXPECTED_ASSERTIONS"
+  {
+    grep -E '^\s*#' "$EXPECTED_ASSERTIONS"
+    echo
+    echo "TOTAL $total"
+    echo
+    sort "$WORK/observed.txt"
+  } > "$EXPECTED_ASSERTIONS.new" && mv "$EXPECTED_ASSERTIONS.new" "$EXPECTED_ASSERTIONS"
+  echo "  wrote $(wc -l < "$WORK/observed.txt" | tr -d ' ') suite floors, TOTAL $total"
+fi
 
 if [ "$empty" -ne 0 ] || [ "$failed" -ne 0 ]; then
   say "Details from the suites that did not pass"

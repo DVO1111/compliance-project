@@ -1,0 +1,97 @@
+# Expected assertion counts per SQL suite.
+#
+#  WHAT THIS CATCHES THAT THE ZERO-ASSERTION CHECK DOES NOT.
+#  --------------------------------------------------------
+#  The runner already fails a suite that reports 0/0, which is what an
+#  abort BEFORE the summary looks like. Three things it could not see:
+#
+#    1. A suite that loses assertions without losing all of them. A
+#       section that stops running — an early RETURN, a fixture that no
+#       longer matches, a DO block that silently does nothing — still
+#       prints a summary and still passes. The count falls and nobody
+#       notices.
+#    2. A suite FILE that disappears. The runner globs the directory, so
+#       a deleted or renamed suite is simply not run, and the summary is
+#       green because nothing failed.
+#    3. The aggregate quietly drifting down over several changes.
+#
+#  So each suite declares a FLOOR: the number of assertions it had when
+#  this line was written. Fewer is a failure. More is fine and expected —
+#  tests get added — and the line is updated when that happens.
+#
+#  Updating a floor downward is a deliberate act that shows up in review,
+#  which is the point. If a suite legitimately sheds assertions, lower
+#  the number in the same commit that removes them and say why.
+#
+#  Regenerate the whole file after a run with:
+#      scripts/ci/run-sql-tests.sh --write-expected
+#
+#  Format: <suite filename> <minimum assertions>
+#  TOTAL is the aggregate floor across every suite.
+
+TOTAL 3127
+
+access_requests_test.sql 44
+access_restrictions_test.sql 59
+account_rollover_test.sql 33
+allowlist_enabled_state_test.sql 42
+audit_chain_seal_test.sql 37
+authorised_signatories_test.sql 18
+batch_execution_authorisation_test.sql 35
+batch_record_execution_test.sql 117
+batch_release_gate_test.sql 45
+capa_lifecycle_test.sql 36
+capa_link_and_entry_points_test.sql 26
+change_control_lifecycle_test.sql 29
+company_membership_security_test.sql 21
+d04_d06_integration_test.sql 58
+decision_enforcement_test.sql 78
+decisions_and_step_restrictions_test.sql 33
+demo_seed_test.sql 69
+deviations_test.sql 77
+dispensing_test.sql 90
+electronic_signature_test.sql 52
+environmental_sample_methods_test.sql 33
+facility_action_register_test.sql 45
+facility_cleaning_test.sql 54
+facility_log_trend_test.sql 24
+facility_logs_test.sql 31
+facility_pest_control_test.sql 39
+facility_water_treatment_test.sql 57
+facility_zone_setup_test.sql 33
+incoming_coa_verification_test.sql 73
+inprocess_control_test.sql 131
+instrument_calibration_test.sql 79
+licence_lifecycle_test.sql 98
+lifecycle_enforcement_test.sql 32
+lifecycle_engine_test.sql 17
+lifecycle_function_acl_test.sql 19
+lifecycle_immutability_and_locks_test.sql 35
+line_clearance_test.sql 98
+logistics_customs_security_test.sql 49
+master_formula_sequence_test.sql 22
+master_formula_test.sql 74
+material_chain_test.sql 19
+material_master_test.sql 66
+material_quarantine_gate_test.sql 42
+material_release_readiness_test.sql 20
+material_testing_and_release_test.sql 79
+materials_security_test.sql 60
+migration_reconciliation_test.sql 19
+operational_role_model_test.sql 59
+product_registry_test.sql 56
+product_specification_test.sql 38
+profile_provisioning_test.sql 54
+profiles_rls_test.sql 34
+role_signatures_and_duties_test.sql 86
+signin_allowlist_test.sql 12
+sites_and_department_codes_test.sql 22
+sop_lifecycle_test.sql 44
+starter_records_test.sql 27
+stranded_work_and_service_grants_test.sql 37
+submission_lifecycle_test.sql 34
+tenant_isolation_test.sql 31
+view_security_invoker_test.sql 23
+work_role_authorisation_test.sql 33
+write_path_audit_test.sql 22
+yield_reconciliation_test.sql 168

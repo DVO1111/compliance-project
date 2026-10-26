@@ -96,19 +96,36 @@ Full detail in `docs/ALLOWLIST_AND_RECOVERY.md`. The short version:
 * The allowlist **survives a rollover**: it is keyed on email, and its only
   link to `auth.users` is `added_by … ON DELETE SET NULL`.
 
-### Still required — dashboard
+### Deployment order — migrations first, and that order matters
 
-1. `npx supabase functions deploy before-user-created --project-ref ovxfflilbqaxedzovgmz`
-2. **Authentication → Hooks → Before User Created**: enable, point at
+An earlier draft of this runbook listed the migrations last. That is
+backwards. The hook calls `app_signin_is_allowed`, and the version that
+honours `is_enabled` arrives with `20261212000000`. Enabling the hook first
+means it calls a function whose new behaviour does not exist yet — and
+because the hook fails closed, the symptom is **every signup refused**,
+including approved ones.
+
+Failing closed is the right default and it is still the wrong order.
+
+1. **Apply the migrations** to `ovxfflilbqaxedzovgmz`:
+   `20261212000000_allowlist_enabled_state.sql`, then
+   `20261213000000_account_rollover.sql`.
+   Verify: `select count(*) from information_schema.columns where
+   table_name='allowed_signins' and column_name='is_enabled';` → 1, and
+   `select to_regclass('public.account_rollovers');` → not null.
+2. `npx supabase functions deploy before-user-created --project-ref ovxfflilbqaxedzovgmz`
+3. **Authentication → Hooks → Before User Created**: enable, point at
    `https://ovxfflilbqaxedzovgmz.supabase.co/functions/v1/before-user-created`,
    copy the signing secret.
-3. `npx supabase secrets set AUTH_HOOK_SECRET=<the secret> --project-ref ovxfflilbqaxedzovgmz`
-4. Apply `20261212000000` and `20261213000000`.
+4. `npx supabase secrets set AUTH_HOOK_SECRET=<the secret> --project-ref ovxfflilbqaxedzovgmz`
+   — **set the secret before the hook takes its first live request.** An
+   unset secret fails closed, so signups are refused until it is there.
 5. Test with one unapproved address: signup refused **and** `auth.users`
-   does not grow.
+   does not grow. Then one approved address: signup succeeds.
 
-Until 1–3 are done the hook is not in force and `provision_profile` is the
-only gate.
+**As of the last read-only preflight, step 1 has NOT been done** — neither
+migration is applied to the project. Until it is, the hook must not be
+enabled, and `provision_profile` is the only gate in force.
 
 ---
 
