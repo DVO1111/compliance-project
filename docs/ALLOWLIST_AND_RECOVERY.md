@@ -132,6 +132,31 @@ Until steps 1–3 are done the hook is not in force, and the
 `provision_profile` guard is the only gate. That is the state the project is
 in today.
 
+**Keep the base64 padding on the secret.** A secret whose `=` padding has
+been stripped passes the CLI's validator and the hook's own `atob`, and then
+GoTrue cannot sign with it — every signup fails with a 500 reading
+`illegal base64 data at input byte 40`, which looks nothing like a malformed
+secret. Found while setting the hook up locally.
+
+## Verified locally against a real GoTrue
+
+`scripts/local/up.sh` brings up a disposable stack and two suites exercise
+the gate against it — 26 assertions, all passing:
+
+* `scripts/local/test-allowlist-signup.sh` (17) drives the real
+  `POST /auth/v1/signup` and then **counts rows in `auth.users`**. The
+  central one: a refused signup leaves no Auth user and no profile. It also
+  covers the unsigned caller, a wrong-key signature, the five-minute replay
+  window, normalisation, a disabled entry, re-enabling, and that the table
+  is still unenumerable.
+* `scripts/local/test-hook-fail-closed.sh` (9) breaks the hook deliberately
+  — served with no secret, and with `EXECUTE` revoked from `service_role` so
+  the allowlist RPC genuinely errors. Both refuse an **approved** address and
+  create no account.
+
+This does not replace step 5 above. The hook is per-project configuration,
+so the production project still has to be checked once it is enabled there.
+
 ---
 
 # 2. Branded password recovery
@@ -226,5 +251,31 @@ from the codebase.
    mobile client, the button opens the app's reset screen, the new password
    is accepted, and the link fails cleanly when used a second time.
 
-Step 5 has **not** been done — it cannot be, from here. Until it has, the
-recovery flow is configured but not verified end to end.
+## Verified locally — and what that does and does not cover
+
+`scripts/local/test-recovery.sh` passes 23 assertions against a real local
+GoTrue and the CLI's own mail catcher. It establishes that GoTrue renders
+`supabase/templates/recovery.html`, that the sent message carries Criateur's
+subject and brand colours with no unsubstituted `{{ ... }}`, that a
+distinctive sentence from the committed template is present in what was
+actually sent, that the link is Supabase's own one-time recovery link with
+the token nowhere but the action URL, and that **following it changes the
+password**: the new one works, the old one stops working, and the link
+cannot be reused a second time.
+
+So steps 3 and most of step 5's *behaviour* are now evidenced. What is still
+entirely unproven is **delivery**, because the catcher accepts everything:
+
+* whether Hostinger's SMTP accepts and relays the message,
+* whether SMTP authentication against it succeeds,
+* whether SPF, DKIM and DMARC pass for `criateur.com`,
+* whether it reaches an inbox rather than a spam folder,
+* whether the HTML survives Gmail and Outlook, which strip `<style>` and
+  rewrite tables.
+
+**Step 5 therefore still stands**, narrowed to what only a real send can
+answer: one reset to a mailbox on a domain you do not control, confirmed
+arriving in the inbox and rendering in a desktop and a mobile client. Until
+that has happened the recovery flow is implemented and locally verified, but
+**not** verified to be deliverable. `docs/STAGING_CHECKLIST.md` carries the
+same list.
