@@ -147,16 +147,25 @@ case "${srv:-socket}" in
 esac
 
 #  A real safety net, unlike counting tables: a disposable local database
-#  holds no real people. The one genuine address here is the owner row
-#  bootstrap-local.sql creates because 20261022000000_access_requests.sql
-#  requires it; anything else is a `.test` fixture or a `.invalid`
-#  tombstone. A hosted project would fail this immediately — though it
-#  would never have answered on loopback in the first place.
+#  holds no real people.
+#
+#  The reserved domains are the ones RFC 2606 sets aside and that this
+#  repository actually uses: `.test` for suite fixtures, `.example` for the
+#  demonstration dataset's eleven story actors, and `criateur.invalid` for
+#  rollover tombstones. None of them can receive mail, which is the point.
+#  `.example` was missing at first and this check refused a database holding
+#  nothing but the demo actors — strict in the right direction, and wrong.
+#
+#  The one genuine address is the owner row bootstrap-local.sql creates
+#  because 20261022000000_access_requests.sql requires it. A hosted project
+#  would fail this immediately, though it would never have answered on
+#  loopback in the first place.
 if [ -n "$(psql -X -At -c "SELECT to_regclass('auth.users');" 2>/dev/null)" ]; then
   strangers="$(psql -X -At -c "
     SELECT count(*) FROM auth.users
      WHERE email IS NOT NULL
        AND email NOT LIKE '%.test'
+       AND email NOT LIKE '%.example'
        AND email NOT LIKE '%@criateur.invalid'
        AND email <> 'ayomideelijah1@gmail.com';" 2>/dev/null)"
   echo "  real accounts  : ${strangers:-0} (a disposable database holds none)"

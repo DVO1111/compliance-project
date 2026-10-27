@@ -307,6 +307,43 @@ function main(): void {
     '  END IF;',
     'END $$;',
     '',
+    /*
+     *  MANUFACTURING IS ONE-WAY, AND THE RESET HAS TO SAY SO.
+     *
+     *  scripts/seed/demo/manufacture.py drives real batches through the
+     *  application. That produces records the registry does not own and
+     *  CANNOT own:
+     *
+     *    electronic_signatures carries no_update / no_delete /
+     *    no_truncate triggers — a signature is immutable and undeletable
+     *    by design, which is the whole point of an audit trail;
+     *
+     *    batch_records.formula_id is ON DELETE RESTRICT, so a batch
+     *    manufactured against a seeded formula pins that formula.
+     *
+     *  So once a batch has been manufactured, this reset cannot complete.
+     *  Without the check below it fails on
+     *  `batch_records_formula_id_fkey`, which says nothing about why. The
+     *  only way back to a clean state is to drop the disposable database —
+     *  deleting the signatures is not an option and must not become one.
+     */
+    'DO $$',
+    'DECLARE n integer; m integer;',
+    'BEGIN',
+    '  SELECT count(*) INTO n FROM public.batch_records b',
+    '   WHERE b.formula_id IN (SELECT record_id FROM public.demo_seed_records',
+    "                           WHERE table_name = 'master_formulas');",
+    '  IF n > 0 THEN',
+    '    SELECT count(*) INTO m FROM public.electronic_signatures',
+    "     WHERE entity_type = 'batch_stage';",
+    '    RAISE EXCEPTION',
+    "      'DEMO_MANUFACTURED_CANNOT_RESET: % batch(es) were manufactured against a seeded "
+      + "formula and % batch-stage signature(s) exist. Signatures are immutable (no_delete) "
+      + "and batch_records.formula_id is ON DELETE RESTRICT, so this seed cannot be removed. "
+      + "Drop the disposable database instead — do not delete the signatures.', n, m;",
+    '  END IF;',
+    'END $$;',
+    '',
   ];
   for (const e of [...emitted].reverse()) {
     const m = MAPPABLE.find((x) => x.target === e.table);

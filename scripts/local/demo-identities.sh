@@ -176,9 +176,15 @@ except Exception: print('')")"
     qa_manager) prole='compliance_officer' ;;
     *)          prole='content_creator' ;;
   esac
-  q "INSERT INTO public.profiles (id, email, full_name, role)
-     VALUES ('$local_id', '$email', \$\$$full_name\$\$, '$prole')
-     ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role;" >/dev/null
+  #  company_id belongs on the profile as well as on the membership.
+  #  `provision_profile` sets both, and several triggers read the profile
+  #  rather than the membership — fn_facility_cleaning_verification refuses
+  #  a verifier whose PROFILE does not name the entry's company
+  #  (FACILITY_VERIFIER_WRONG_COMPANY), which is how this was found.
+  q "INSERT INTO public.profiles (id, email, full_name, role, company_id)
+     VALUES ('$local_id', '$email', \$\$$full_name\$\$, '$prole', '$company_id')
+     ON CONFLICT (id) DO UPDATE
+       SET role = EXCLUDED.role, company_id = EXCLUDED.company_id;" >/dev/null
   q "INSERT INTO public.company_members (company_id, user_id, role, status, job_title)
      VALUES ('$company_id', '$local_id', '$role_key', 'active', \$\$$job_title\$\$)
      ON CONFLICT (company_id, user_id) DO UPDATE SET role = EXCLUDED.role;" >/dev/null

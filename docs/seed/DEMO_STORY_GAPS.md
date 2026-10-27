@@ -1,20 +1,30 @@
 # What the adapted demo can and cannot show
 
-The adapted seed loads **188 rows across 16 tables** from a source dataset of
-882 rows across 42, and eleven demo accounts then make two of the three
-master formulas approvable through the application itself. This is what
-remains missing, stated per gap rather than as a total.
+The adapted seed loads **261 rows across 19 tables**, and the application
+then manufactures a further **134 records** from them. The source dataset is
+882 rows across 42 tables.
 
-A second pass added the master formula's own stages, stage parameters and
-bill of materials (41 rows), 45 of 54 material specification parameters, and
-the licence register (4) — see `scripts/seed/demo/mapping.ts`. The nine
-specification parameters not loaded belong to the one source specification
-that is a PRODUCT specification and is not emitted; they are reported by the
-build rather than dropped silently.
+Three things changed the picture since the first pass:
 
-Build it with `scripts/seed/demo/build.ts`; the machine-generated
-`BUILD_REPORT.md` beside the output lists every unemitted table with its
-class and reason.
+* the master formula's own stages, parameters and bill of materials load
+  (41 rows), which is what made the formulas approvable at all;
+* the facility logs load through the real model — zones, schedules and
+  entries, with outcomes derived by the database (73 rows);
+* batches, their stages, their in-process readings and the signatures that
+  attest them are no longer seeded. They are MANUFACTURED, through
+  `batch_record_initiate` and the stage execution RPCs, by real local
+  accounts. See `scripts/seed/demo/manufacture.py`.
+
+| produced by | rows |
+|---|---|
+| the import (`10_` + `15_`, registry-owned, resettable) | 261 |
+| the application, from the import (not resettable) | 134 |
+
+The 134 are 4 batch records, 21 batch stages, 67 in-process readings and 42
+electronic signatures. They cannot be reset: `electronic_signatures` carries
+`no_update` / `no_delete` / `no_truncate`, so a signature is permanent, and
+`batch_records.formula_id` is `ON DELETE RESTRICT`. That is the audit trail
+working. The way back to a clean database is `scripts/local/down.sh`.
 
 ## What loads, and is real
 
@@ -36,6 +46,19 @@ class and reason.
 | `master_formula_materials` | 15 |
 | `material_specification_parameters` | 45 |
 | `regulatory_licences` | 4 |
+| `facility_zones` | 5 |
+| `facility_zone_schedules` | 5 |
+| `facility_log_entries` | 63 |
+
+And then, manufactured by the application rather than imported:
+
+| Table | Rows |
+|---|---|
+| `batch_records` | 4 |
+| `batch_stages` | 21 |
+| `batch_stage_parameter_readings` | 67 |
+| `electronic_signatures` | 42 |
+| `company_members` | 11 |
 
 Two companies with their sites, lines, approved suppliers, material
 catalogue, specifications, received lots, formulas, and six deviations with
@@ -43,11 +66,11 @@ the two CAPAs that came out of them. Enough to show the registers, the
 supplier qualification standing, the material catalogue and the
 deviation-to-CAPA chain.
 
-## The four gaps, and why each one is a gap
+## The gaps, and what each one now is
 
-### 1. Nothing has a lifecycle state
+### 1. IMPORTED records have no lifecycle state; manufactured ones do
 
-**Affects: every material lot, every batch, every deviation.**
+**Affects: every material lot and every deviation. No longer batches.**
 
 The source keeps lot, batch and deviation state in `entity_current_state`
 and `entity_state_history`. In this application those are the **lifecycle
@@ -59,18 +82,27 @@ that no signature attests. So they are not seeded, and every lot loads as
 `quarantine`, which is the application's own default for a newly received
 lot.
 
-**What the demo cannot show:** the quarantine-to-released journey, a
-batch moving through its stages, a deviation being closed. The *records*
-are there; their *state* is the starting state, not the story's state.
+**Products and batches are the exception, because their state was
+driven rather than seeded.** The pipeline moves each manufacturable
+product `concept -> regulatory_preparation -> submitted -> registered ->
+active` through `lifecycle_transition`, citing the source's own
+registration number in the comment the engine requires, and the batch
+stages run `pending -> in_progress -> awaiting_verification -> complete`
+through the execution RPCs. Those states are real because the transitions
+happened.
+
+**What the demo still cannot show:** the quarantine-to-released journey for
+a material lot, or a deviation being closed. Those *records* are there;
+their *state* is the starting state, not the story's.
 
 Note the source's `disposition` column is not a substitute. It is null on
 25 of the 26 lots and carries a rejection disposition on the one returned
 to its supplier — a different fact from the lot's status.
 
-### 2. No batches
+### 2. Batches are manufactured, not imported — 4 of the 6
 
-**Affects: 6 batch records, 30 batch stages, 75 parameter readings, 26
-dispensing records, 75 QC results.**
+**Affects: 2 of 6 batch records, and the 26 dispensing records and 75 QC
+results that hang off them.**
 
 Found by the database refusing the load:
 
@@ -109,9 +141,9 @@ mapping.
 **What the demo cannot show yet:** anything downstream of a batch —
 execution, in-process control, yield, QC, release.
 
-### 3. No electronic signatures
+### 3. The source's 139 signatures are still not imported — and are no longer needed
 
-**Affects: all 139.**
+**Affects: all 139 source rows. 42 real ones now exist instead.**
 
 The application computes a record hash server-side over its own canonical
 serialisation and records which convention in `hash_convention`. The source
@@ -121,33 +153,67 @@ would **fail** — 139 signatures that look signed and are not.
 
 The only legitimate path is `sign_electronic_record()`, which takes the
 signer from `auth.uid()`, re-verifies their password, asks the lifecycle
-engine whether they may act, and computes the hash itself. None of that can
-happen without a real Auth session.
+engine whether they may act, and computes the hash itself.
 
-**What the demo cannot show:** any signed act — formula approval, batch
-release, QC verification, deviation closure. This is the same blocker as
-gap 2 seen from the other end.
+**That path is now taken.** `scripts/local/demo-identities.sh` creates the
+eleven actors as real local accounts and the pipeline signs with them, so
+the database holds **42 genuine signatures**: every one a 64-hex hash under
+the application's own `sha256-esig-record-v1`, every signer a real account,
+none backdated, and all 21 two-person stages signed by two *different*
+people — four-eyes enforced by the application, not asserted by the seed.
 
-### 4. Facility logs, QC and training are a reshape, not a rename
+**What the demo can now show:** formula approval, stage execution and stage
+verification, each signed.
 
-**Affects: 60 environmental readings, 12 cleaning records, 75 QC results,
-54 specification tests, 46 training assignments, 10 calibrations.**
+**What it still cannot show:** batch release and QC verification, because
+those need QC results against a governing specification — see gap 4.
 
-The application models these, differently enough that adapting them is real
-work rather than a column mapping:
+### 4. QC, training and calibration are a reshape, not a rename
 
-* environmental monitoring and cleaning are **facility log entries**
-  against a **zone schedule** that carries the limits and the sampling
-  method — the scaffolding has to be created first, and the outcome is
-  derived by a trigger, never supplied;
-* QC results key to a batch and a specification parameter, not to a
-  free-standing test;
-* training is **responses to scenarios**, not assignments with due dates;
-* calibration belongs to an **instrument**, and the source's general
-  production equipment has no counterpart.
+**Affects: 75 QC results, 46 training assignments, 10 calibrations, 10
+equipment rows. Facility logs and specification tests are now DONE.**
 
-**What the demo cannot show:** the facility-log registers with real
-readings, the trend charts, the QC history.
+Settled since the first pass:
+
+* **environmental monitoring and cleaning** load through the real Facility
+  Logs model — 5 zones, 5 schedules and 63 entries, with every outcome
+  derived by `fn_facility_log_outcome` and none written by the seed. Nine of
+  the 72 source readings are left out, and `FACILITY_REPORT.md` beside the
+  build says exactly which and why: a schedule's `frequency` is NOT NULL
+  with a daily/weekly/monthly/quarterly vocabulary, and two groups have no
+  representable cadence (one single reading, and one irregular series of
+  1/2/13/14-day gaps that is the story's failed swab and its re-swabs).
+* **specification tests** load as `material_specification_parameters`,
+  45 of 54; the other nine belong to the one source specification that is a
+  *product* specification and is not imported.
+
+One thing the model holds that the source does not: a SCHEDULE's
+`sample_method` is bound to its protocol — a settle-plate schedule must
+carry `protocol_exposure_minutes`, an active-air one
+`protocol_volume_litres`. The source records the method but neither figure.
+So the schedules leave `sample_method` null and the method goes on each
+ENTRY, whose own constraint needs no protocol. The fact is kept; the
+protocol is not invented.
+
+What remains:
+
+* **QC results (75)** key to a batch and a specification parameter in the
+  application; the source keys them to a free-standing `specification_test`
+  with an `entity_type` of `material_lot` or `batch`. Mapping them needs a
+  decision about which of `batch_qc_results` and `batch_inprocess_qc` each
+  belongs to, and the lot-keyed ones have no home at all. This is the one
+  that blocks batch release, so it is the next piece worth doing.
+* **Training (46)** is **responses to scenarios** in the application, not
+  assignments with a due date. The two models do not describe the same
+  thing and no column mapping bridges them.
+* **Calibration (10)** belongs to an **instrument**, which the application
+  models in its own right with due dates and alerts. The source's
+  `equipment` is general production plant — a blender, a floor balance —
+  and importing a blender as a calibration-bearing measuring instrument
+  would misrepresent it. Both stay out.
+
+**What the demo still cannot show:** QC history, batch release, training
+records and calibration status.
 
 ## What it would take to close them
 
