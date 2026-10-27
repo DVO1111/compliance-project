@@ -136,13 +136,69 @@ case "${srv:-socket}" in
   *) echo "REFUSING: server address $srv is routable, not a local container." >&2; exit 1;;
 esac
 
-#  Belt and braces: a hosted project carries rows this fresh local one
-#  cannot. If any real company is present, this is not a disposable database.
-realco="$(psql -X -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null)"
-echo "  public tables  : ${realco:-0} (a freshly started local database starts empty)"
-if [ "${realco:-0}" -gt 50 ]; then
-  echo "REFUSING: ${realco} tables already exist — this is not a freshly started disposable database." >&2
-  exit 1
+#  A real safety net, unlike counting tables: a disposable local database
+#  holds no real people. The one genuine address here is the owner row
+#  bootstrap-local.sql creates because 20261022000000_access_requests.sql
+#  requires it; anything else is a `.test` fixture or a `.invalid`
+#  tombstone. A hosted project would fail this immediately — though it
+#  would never have answered on loopback in the first place.
+if [ -n "$(psql -X -At -c "SELECT to_regclass('auth.users');" 2>/dev/null)" ]; then
+  strangers="$(psql -X -At -c "
+    SELECT count(*) FROM auth.users
+     WHERE email IS NOT NULL
+       AND email NOT LIKE '%.test'
+       AND email NOT LIKE '%@criateur.invalid'
+       AND email <> 'ayomideelijah1@gmail.com';" 2>/dev/null)"
+  echo "  real accounts  : ${strangers:-0} (a disposable database holds none)"
+  if [ "${strangers:-0}" -gt 0 ]; then
+    echo "REFUSING: ${strangers} account(s) here belong to real addresses." >&2
+    echo "This database is not disposable. Stopping before anything is written." >&2
+    exit 1
+  fi
+fi
+
+#  ── ALREADY BUILT? ───────────────────────────────────────────────────────
+#
+#  A previous run's schema survives a container restart, because the data
+#  lives in a Docker volume rather than in the container. In this
+#  environment the containers get reaped regularly, so `up.sh` has to be
+#  re-runnable — and re-applying 230 migrations to an already-migrated
+#  database produces a long list of "already exists" failures that look
+#  alarming and mean nothing.
+#
+#  An earlier version REFUSED here, on a count of public tables, with the
+#  reasoning that a hosted project would carry rows a fresh local one
+#  cannot. That reasoning was wrong: the count cannot tell an
+#  already-built local database from anything else, and the loopback and
+#  private-address checks above already settle the only question that
+#  matters. So the count is used for what it can actually tell us —
+#  whether the schema is already there — and `--rebuild` forces the work
+#  to be redone.
+tables="$(psql -X -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null)"
+echo "  public tables  : ${tables:-0}"
+if [ "${tables:-0}" -gt 50 ] && [ "${1:-}" != "--rebuild" ]; then
+  say "Schema is already built — reusing it"
+  #  The bootstrap still runs: it is idempotent, and it carries the repair
+  #  for the NULL auth.users token columns an older version of it left
+  #  behind. Skipping it here would mean a reused database kept a defect
+  #  that a rebuilt one does not have.
+  psql -X -q -v ON_ERROR_STOP=1 -f "$ROOT/scripts/local/bootstrap-local.sql" >/dev/null || {
+    echo "bootstrap failed" >&2; exit 1; }
+  echo "  ${tables} tables are already present, so only the bootstrap was"
+  echo "  re-applied and the migration pass was skipped. Pass --rebuild to"
+  echo "  force it, or run scripts/local/down.sh for a clean database."
+  [ -f "$ROOT/.local-migration-failures.txt" ] && echo "  (first-apply failures from the build that made it are still in .local-migration-failures.txt)"
+  say "Local stack is up"
+  cat <<INFO
+  API        http://127.0.0.1:54321
+  Database   $DB_URL
+  Auth       http://127.0.0.1:54321/auth/v1
+  Mail sink  scripts/local/smtp-sink.py (mailpit image would not pull)
+
+  Keys:      npx $CLI status -o env   (do not paste them anywhere)
+  Teardown:  scripts/local/down.sh
+INFO
+  exit 0
 fi
 
 say "Applying the local bootstrap"
