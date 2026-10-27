@@ -1,0 +1,46 @@
+-- ====================================================================
+--  What a REAL local Supabase stack still lacks.
+--
+--  scripts/ci/db-bootstrap.sql shims a bare Postgres: it creates the
+--  auth schema, auth.users, auth.uid() and the three roles, because none
+--  of that exists there. A CLI-started stack has all of it for real —
+--  GoTrue owns auth.users, and trying to CREATE it fails with
+--  "permission denied for schema auth", which is correct.
+--
+--  So this file is the short remainder: the things no migration creates
+--  and no Supabase service provides either.
+--
+--  LOCAL DISPOSABLE DATABASE ONLY.
+-- ====================================================================
+
+-- ── public.companies ────────────────────────────────────────────────
+--  Referenced by dozens of migrations and created by none of them. The
+--  CI shim says the same thing and scaffolds the same shape; this is
+--  the one structural gap that stops the migration history applying to
+--  an empty database. Where it ought to be created is a schema decision
+--  about a live project, not something to settle here.
+CREATE TABLE IF NOT EXISTS public.companies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON public.companies TO anon, authenticated, service_role;
+
+-- ── the owner account the access-request migration requires ─────────
+--  20261022000000_access_requests.sql seeds the product owner as the
+--  first approver and REFUSES TO INSTALL if that row is absent — a
+--  sound guard against a project ending up with an approvals table and
+--  nobody able to approve.
+--
+--  The address is the one that migration names. This is a row in a
+--  throwaway container with no password and no identity, so it is not
+--  an account anywhere and cannot be signed in to; it exists only to
+--  satisfy the guard. Every address this phase actually tests with is a
+--  disposable @local.test one.
+INSERT INTO auth.users (id, instance_id, aud, role, email, created_at, updated_at)
+VALUES ('00000000-0000-4000-8000-00000000c0de',
+        '00000000-0000-0000-0000-000000000000',
+        'authenticated', 'authenticated',
+        'ayomideelijah1@gmail.com', now(), now())
+ON CONFLICT (id) DO NOTHING;

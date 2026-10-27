@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+#
+#  Allowlisted signup, against a REAL local GoTrue.
+#
+#      scripts/local/up.sh
+#      npx supabase@2.122.0 functions serve --env-file <local env>
+#      scripts/local/test-allowlist-signup.sh
+#
+#  ── WHY THIS EXISTS WHEN THERE ARE ALREADY UNIT TESTS ─────────────────────
+#
+#  Because the thing being tested is whether `auth.users` ends up with a row
+#  in it, and no unit test can answer that. The claim the hook makes is not
+#  "the function returns 403" — it is "the signup transaction is aborted, so
+#  no account exists". The only way to know is to ask the Auth server to
+#  create one and then look in the table.
+#
+#  So every case here drives the real POST /auth/v1/signup endpoint and then
+#  counts rows in auth.users. A case that only checked the HTTP response
+#  would pass just as happily against a hook that denied the request after
+#  the user was written.
+#
+#  LOCAL ONLY. Refuses to run against anything but 127.0.0.1:54322, uses
+#  `.test` addresses throughout (RFC 2606), and deletes everything it made.
+#
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+API="${LOCAL_API_URL:-http://127.0.0.1:54321}"
+export PGHOST=127.0.0.1 PGPORT=54322 PGUSER=postgres PGPASSWORD=postgres PGDATABASE=postgres
+
+[ -n "${LOCAL_ANON_KEY:-}" ] || { echo "LOCAL_ANON_KEY is not set." >&2; exit 2; }
+[ -n "${AUTH_HOOK_SECRET:-}" ] || { echo "AUTH_HOOK_SECRET is not set." >&2; exit 2; }
+
+case "$API" in
+  http://127.0.0.1:*|http://localhost:*) ;;
+  *) echo "REFUSING: $API is not a local API." >&2; exit 1;;
+esac
+
+#  Fixed, obviously-synthetic addresses on a reserved TLD. The approved one
+#  is added to the LOCAL allowlist only; nothing here touches the real one.
+APPROVED="approved.pilot@criateur.test"
+MIXEDCASE="  Approved.Pilot@Criateur.TEST  "
+STRANGER="stranger@criateur.test"
+DISABLED="disabled.pilot@criateur.test"
+PASSWORD="LocalOnly-$(head -c 9 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')9aA!"
+
+total=0; passed=0; failed=0
+ok()   { total=$((total+1)); passed=$((passed+1)); printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
+bad()  { total=$((total+1)); failed=$((failed+1)); printf '  \033[31mFAIL\033[0m  %s\n' "$1"; [ -n "${2:-}" ] && printf '          %s\n' "$2"; }
+head2() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+
+q() { psql -X -At -c "$1" 2>/dev/null; }
+
+#  How many auth users hold this address, asked of auth.users directly
+#  rather than of any endpoint that might answer from a cache.
+authusers() { q "SELECT count(*) FROM auth.users WHERE lower(email) = lower('$1');"; }
+profiles()  { q "SELECT count(*) FROM public.profiles WHERE lower(email) = lower('$1');"; }
+
+#  POST /auth/v1/signup. Prints "<http status><newline><body>".
+signup() {
+  curl -sS -o /tmp/.su.$$ -w '%{http_code}' \
+    -X POST "$API/auth/v1/signup" \
+    -H "apikey: $LOCAL_ANON_KEY" -H 'Content-Type: application/json' \
+    --data "$(printf '{"email":%s,"password":"%s"}' "$(printf '%s' "$1" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))')" "$PASSWORD")" \
+    2>/dev/null
+  echo
+  cat /tmp/.su.$$ 2>/dev/null; rm -f /tmp/.su.$$
+}
+
+#  A Standard Webhooks request to the hook, signed exactly the way GoTrue
+#  signs one. `--ts` and `--secret` are overridable so the replay and
+#  wrong-key cases are the same code path with one input changed.
+hook_post() {
+  local body="$1" ts="${2:-$(date +%s)}" secret="${3:-$AUTH_HOOK_SECRET}" id="msg_$RANDOM$RANDOM"
+  local sig
+  sig="$(SW_SECRET="$secret" python3 -I - "$id" "$ts" "$body" <<'PY'
+import base64, hashlib, hmac, os, sys
+msg_id, ts, body = sys.argv[1], sys.argv[2], sys.argv[3]
+secret = os.environ["SW_SECRET"]
+b64 = secret.split(",", 1)[1] if "," in secret else secret
+b64 = b64.removeprefix("whsec_")
+#  Pad to a multiple of four rather than appending a fixed "===", which
+#  produces a length Python refuses outright — and a silently empty
+#  signature, which reads as a rejected request rather than a broken test.
+key = base64.b64decode(b64 + "=" * (-len(b64) % 4))
+mac = hmac.new(key, f"{msg_id}.{ts}.{body}".encode(), hashlib.sha256).digest()
+print("v1," + base64.b64encode(mac).decode())
+PY
+)"
+  curl -sS -X POST "$API/functions/v1/before-user-created" \
+    -H 'Content-Type: application/json' \
+    -H "webhook-id: $id" -H "webhook-timestamp: $ts" -H "webhook-signature: $sig" \
+    --data "$body" 2>/dev/null
+}
+
+cleanup() {
+  for e in "$APPROVED" "$STRANGER" "$DISABLED"; do
+    q "DELETE FROM public.profiles WHERE lower(email) = lower('$e');" >/dev/null
+    q "DELETE FROM auth.identities WHERE user_id IN
+         (SELECT id FROM auth.users WHERE lower(email) = lower('$e'));" >/dev/null
+    q "DELETE FROM auth.users WHERE lower(email) = lower('$e');" >/dev/null
+    q "DELETE FROM public.allowed_signins WHERE lower(email) = lower('$e');" >/dev/null
+  done
+}
+trap cleanup EXIT
+
+head2 "Preparing local fixtures"
+cleanup
+#  The allowlist treats an EMPTY table as open — a deliberate bootstrap
+#  affordance. It is not empty here (the local database carries the owner
+#  row), but assert it rather than assume it, because every refusal below
+#  would otherwise be vacuous.
+openrows="$(q "SELECT count(*) FROM public.allowed_signins WHERE is_enabled;")"
+if [ "${openrows:-0}" -ge 1 ]; then
+  ok "allowlist is populated ($openrows enabled), so the gate is closed by default"
+else
+  bad "allowlist has no enabled rows — an empty allowlist is open, so these tests would be vacuous"
+fi
+
+q "INSERT INTO public.allowed_signins (email, note) VALUES
+     ('$APPROVED', 'local integration test'),
+     ('$DISABLED', 'local integration test')
+   ON CONFLICT (email) DO UPDATE SET is_enabled = true, disabled_at = NULL, disabled_by = NULL;" >/dev/null
+q "UPDATE public.allowed_signins SET is_enabled = false, disabled_at = now()
+    WHERE lower(email) = lower('$DISABLED');" >/dev/null
+echo "  fixtures: 1 enabled, 1 disabled, 1 absent"
+
+# ─────────────────────────────────────────────────────────────────────────
+head2 "1. The hook is actually reachable and refuses an unsigned caller"
+#  Asserted first, because every later refusal would also "pass" against a
+#  hook that was simply unreachable — GoTrue would refuse the signup and the
+#  row count would be zero for the wrong reason.
+unsigned="$(curl -sS -X POST "$API/functions/v1/before-user-created" \
+             -H 'Content-Type: application/json' --data '{"user":{"email":"x@criateur.test"}}' 2>/dev/null)"
+case "$unsigned" in
+  *'"http_code":401'*) ok "unsigned POST is refused 401 Unauthorized" ;;
+  '')                  bad "unsigned POST got no response — the hook is not being served" ;;
+  *)                   bad "unsigned POST was not refused 401" "$unsigned" ;;
+esac
+case "$unsigned" in
+  *"not approved"*|*"criateur.com"*)
+    bad "the 401 body leaks the allowlist refusal message to an unsigned caller" ;;
+  *) ok "the unsigned refusal reveals nothing about any address" ;;
+esac
+
+head2 "2. A signed request with the WRONG key is refused"
+wrong="$(hook_post '{"user":{"email":"'"$APPROVED"'"}}' "$(date +%s)" \
+          "v1,whsec_$(head -c 32 /dev/urandom | base64)")"
+case "$wrong" in
+  *'"http_code":401'*) ok "a signature made with another secret is refused 401" ;;
+  *)                   bad "a wrong-key signature was not refused 401" "$wrong" ;;
+esac
+
+head2 "3. A valid signature with a STALE timestamp is refused (replay window)"
+stale="$(hook_post '{"user":{"email":"'"$APPROVED"'"}}' "$(( $(date +%s) - 600 ))")"
+case "$stale" in
+  *'"http_code":401'*) ok "a correctly signed request 10 minutes old is refused 401" ;;
+  *)                   bad "a stale signed request was accepted" "$stale" ;;
+esac
+fresh="$(hook_post '{"user":{"email":"'"$APPROVED"'"}}')"
+case "$fresh" in
+  '{}') ok "the same request signed with a current timestamp is allowed" ;;
+  *)    bad "a correctly signed approved address was not allowed" "$fresh" ;;
+esac
+
+head2 "4. Normalisation matches the database's"
+norm="$(hook_post "$(printf '{"user":{"email":%s}}' \
+         "$(printf '%s' "$MIXEDCASE" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))')")")"
+case "$norm" in
+  '{}') ok "'  Approved.Pilot@Criateur.TEST  ' is allowed, as the trimmed lowered form is" ;;
+  *)    bad "the hook and the database disagree about normalisation" "$norm" ;;
+esac
+
+# ─────────────────────────────────────────────────────────────────────────
+#  From here on the assertions are about auth.users, not about the hook.
+# ─────────────────────────────────────────────────────────────────────────
+head2 "5. An approved address can register, and the account really exists"
+before="$(authusers "$APPROVED")"
+resp="$(signup "$APPROVED")"
+code="$(echo "$resp" | head -1)"; body="$(echo "$resp" | tail -n +2)"
+after="$(authusers "$APPROVED")"
+if [ "$code" = "200" ] && [ "${before:-0}" = "0" ] && [ "${after:-0}" = "1" ]; then
+  ok "signup returned 200 and auth.users went 0 -> 1"
+else
+  bad "approved signup did not create exactly one auth user (http $code, $before -> $after)" "$body"
+fi
+
+head2 "6. A NON-ALLOWLISTED address is refused, and leaves no account behind"
+resp="$(signup "$STRANGER")"
+code="$(echo "$resp" | head -1)"; body="$(echo "$resp" | tail -n +2)"
+users="$(authusers "$STRANGER")"; profs="$(profiles "$STRANGER")"
+[ "$code" != "200" ] && ok "signup was refused (http $code)" \
+                     || bad "an unapproved signup returned 200" "$body"
+case "$body" in
+  *"not approved"*) ok "the refusal carries the hook's own message through GoTrue" ;;
+  *)                bad "the refusal did not carry the allowlist message" "$body" ;;
+esac
+#  THE POINT OF THE WHOLE EXERCISE. The old database-only gate let the row
+#  be written and then refused the profile; the hook runs inside the signup
+#  transaction, so there must be nothing at all.
+[ "${users:-1}" = "0" ] && ok "auth.users holds NO row for the refused address" \
+                        || bad "a refused signup still created $users auth user(s)"
+[ "${profs:-1}" = "0" ] && ok "public.profiles holds no row for the refused address" \
+                        || bad "a refused signup still created $profs profile(s)"
+
+head2 "7. A DISABLED allowlist entry is refused the same way"
+resp="$(signup "$DISABLED")"
+code="$(echo "$resp" | head -1)"; body="$(echo "$resp" | tail -n +2)"
+users="$(authusers "$DISABLED")"
+[ "$code" != "200" ] && ok "a disabled address is refused (http $code)" \
+                     || bad "a disabled address was allowed to register" "$body"
+[ "${users:-1}" = "0" ] && ok "a disabled address leaves no auth user" \
+                        || bad "a disabled address created $users auth user(s)"
+#  Re-enabling must restore access, or `is_enabled` is a one-way door and
+#  the admin UI is lying about what the toggle does.
+q "UPDATE public.allowed_signins SET is_enabled = true, disabled_at = NULL
+    WHERE lower(email) = lower('$DISABLED');" >/dev/null
+resp="$(signup "$DISABLED")"
+code="$(echo "$resp" | head -1)"
+users="$(authusers "$DISABLED")"
+if [ "$code" = "200" ] && [ "${users:-0}" = "1" ]; then
+  ok "re-enabling the same entry lets that address register"
+else
+  bad "re-enabling did not restore access (http $code, $users user(s))"
+fi
+
+head2 "8. The database gate is still there underneath"
+#  Defence in depth, as the function's own header claims: the hook is
+#  configuration and can be switched off, so `provision_profile` must still
+#  refuse an address that is not approved.
+guard="$(q "SELECT public.app_signin_is_allowed('$STRANGER')::text;")"
+[ "$guard" = "false" ] \
+  && ok "app_signin_is_allowed() — the one rule both gates call — refuses the stranger" \
+  || bad "app_signin_is_allowed() returned '$guard' for an unapproved address"
+rls="$(q "SELECT relrowsecurity::text FROM pg_class WHERE oid = 'public.allowed_signins'::regclass;")"
+pol="$(q "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename='allowed_signins';")"
+if [ "$rls" = "true" ] && [ "${pol:-1}" = "0" ]; then
+  ok "allowed_signins has RLS on and no policy, so it cannot be enumerated from a browser"
+else
+  bad "allowed_signins is enumerable (rls=$rls, policies=$pol)"
+fi
+
+head2 "Result"
+printf '  total %d | passed %d | failed %d\n\n' "$total" "$passed" "$failed"
+[ "$failed" -eq 0 ] || exit 1
