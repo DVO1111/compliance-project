@@ -91,8 +91,10 @@ Full detail in `docs/ALLOWLIST_AND_RECOVERY.md`. The short version:
   `admin_allowlist_list`, each restricted to `access_approvers` members.
 * The table has RLS on with **no policy**, so it cannot be read from a
   browser at all.
-* **An empty table opens the product.** A table of disabled rows does not —
-  otherwise disabling the last pilot user would publish the application.
+* **An empty table denies everyone.** So does a table whose rows are all
+  disabled. Before `20261214000000` an empty table *opened* the product;
+  that is no longer true, and opening signup to the public is now a
+  deliberate switch (below) rather than the absence of data.
 * The allowlist **survives a rollover**: it is keyed on email, and its only
   link to `auth.users` is `added_by … ON DELETE SET NULL`.
 
@@ -107,12 +109,23 @@ including approved ones.
 
 Failing closed is the right default and it is still the wrong order.
 
-1. **Apply the migrations** to `ovxfflilbqaxedzovgmz`:
-   `20261212000000_allowlist_enabled_state.sql`, then
-   `20261213000000_account_rollover.sql`.
+1. **Apply the migrations** to `ovxfflilbqaxedzovgmz`, in this order:
+   `20261212000000_allowlist_enabled_state.sql`,
+   `20261213000000_account_rollover.sql`, then
+   `20261214000000_closed_signup_by_default.sql`.
    Verify: `select count(*) from information_schema.columns where
-   table_name='allowed_signins' and column_name='is_enabled';` → 1, and
-   `select to_regclass('public.account_rollovers');` → not null.
+   table_name='allowed_signins' and column_name='is_enabled';` → 1,
+   `select to_regclass('public.account_rollovers');` → not null, and
+   `select public.app_signin_is_allowed('nobody@example.invalid');` → false.
+
+   `20261214000000` **refuses to apply** if `allowed_signins` has no enabled
+   row and public signup is off, because that combination would deny every
+   signup including the operator's own. It is a tightening, so confirm the
+   approved addresses are present *before* applying it:
+   `select email, is_enabled from public.allowed_signins order by email;`
+   The last read-only preflight found 5 rows there, so this should pass —
+   but check, rather than assume, because the failure mode is a project
+   nobody can register against.
 2. `npx supabase functions deploy before-user-created --project-ref ovxfflilbqaxedzovgmz`
 3. **Authentication → Hooks → Before User Created**: enable, point at
    `https://ovxfflilbqaxedzovgmz.supabase.co/functions/v1/before-user-created`,
@@ -240,8 +253,24 @@ Symptom: nobody can approve an access request or open the allowlist screen.
 
 ### If the allowlist is emptied by accident
 
-An empty `allowed_signins` **opens the product to anyone**. Restore from
-backup, or re-add the approved addresses immediately with
-`admin_allowlist_add`. This is the single highest-consequence mistake
-available at the SQL console, which is why disabling is the supported way to
-remove someone and deletion is not.
+Since `20261214000000` an empty `allowed_signins` **denies everyone**, so
+emptying it locks people out instead of letting strangers in. That is the
+safer failure, but it is still a failure: nobody can register, including a
+replacement owner. Restore from backup or re-add the approved addresses with
+`admin_allowlist_add`.
+
+Disabling remains the supported way to remove someone — it keeps the record
+of when and by whom, which deletion does not.
+
+### Opening signup to the public, deliberately
+
+Emptying the allowlist is no longer how this is done. It is a switch:
+
+```sql
+SELECT public.admin_set_public_signup(true, 'why the product is being opened');
+SELECT public.admin_set_public_signup(false);          -- closing needs no reason
+```
+
+Approver-only, and opening **requires a reason**, which is stored with the
+actor and the time. `signin_policy` holds one row; a missing row reads as
+closed, so a damaged configuration shuts the door rather than opening it.

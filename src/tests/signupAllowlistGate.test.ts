@@ -35,6 +35,16 @@ const MIGRATION = readFileSync(
   'utf8',
 );
 
+//  The migration that made the gate closed by default. Kept separate from
+//  MIGRATION rather than concatenated, so an assertion about the CURRENT
+//  rule cannot be satisfied by the historical migration that states the
+//  old one — which it still does, correctly, because that is what was
+//  applied at the time.
+const CLOSED_DEFAULT = readFileSync(
+  join(process.cwd(), 'supabase/migrations/20261214000000_closed_signup_by_default.sql'),
+  'utf8',
+);
+
 //  Prose explains what the code avoids, so a search of the whole file would
 //  match the thing it refuses to do.
 const HOOK_CODE = HOOK
@@ -175,14 +185,68 @@ describe('the database keeps both gates', () => {
     expect(MIGRATION).toMatch(/app_signin_is_allowed\(v_email\)/);
   });
 
-  it('keeps "empty means open" and does not extend it to "all disabled"', () => {
-    /*
-     *  If disabling every row opened the product, revoking the last pilot
-     *  user would publish the application — and the operator doing it would
-     *  believe they had just locked it down.
-     */
-    expect(MIGRATION).toMatch(/NOT EXISTS \(SELECT 1 FROM public\.allowed_signins\)/);
+  it('matches only ENABLED rows', () => {
+    //  If disabling every row opened the product, revoking the last pilot
+    //  user would publish the application — and the operator doing it
+    //  would believe they had just locked it down.
     expect(MIGRATION).toMatch(/AND a\.is_enabled/);
+  });
+
+  it('no longer treats an empty allowlist as open', () => {
+    /*
+     *  THIS TEST ASSERTED THE OPPOSITE UNTIL 20261214000000.
+     *
+     *  The original gate began `NOT EXISTS (SELECT 1 FROM allowed_signins)`
+     *  so that emptying the table opened the product without a code
+     *  change. The product requirement is that only approved addresses may
+     *  register, and that reading turned "somebody emptied the table" into
+     *  "the product is public" — the one moment it should be shut.
+     *
+     *  Opening signup is now a deliberate switch in `signin_policy`, so the
+     *  capability is kept and the accident is not. Asserted against the
+     *  CURRENT migration, because the historical one still contains the old
+     *  clause and should: it is what was applied at the time.
+     */
+    expect(CLOSED_DEFAULT).toMatch(/app_public_signup_enabled/);
+    expect(CLOSED_DEFAULT).not.toMatch(
+      /SELECT\s+NOT EXISTS \(SELECT 1 FROM public\.allowed_signins\)/,
+    );
+    //  And the switch is off unless somebody turns it on.
+    expect(CLOSED_DEFAULT).toMatch(/public_signup_enabled boolean NOT NULL DEFAULT false/);
+  });
+
+  it('requires a reason before public signup can be opened', () => {
+    //  "Open, but nobody recorded why" is not a record — the same
+    //  reasoning as allowed_signins.disabled_at/disabled_by.
+    expect(CLOSED_DEFAULT).toMatch(/SIGNUP_POLICY_REASON_REQUIRED/);
+    expect(CLOSED_DEFAULT).toMatch(/signin_policy_open_is_accounted_for/);
+  });
+
+  it('reads a missing policy row as CLOSED', () => {
+    /*
+     *  "Deny everyone" is also what a broken configuration looks like. The
+     *  wrong default would turn a deleted row into an open front door that
+     *  nobody notices, because the symptom is signups succeeding.
+     */
+    expect(CLOSED_DEFAULT).toMatch(/coalesce\(\s*\n?\s*\(SELECT s\.public_signup_enabled[\s\S]*?false\)/);
+  });
+
+  it('refuses to apply if it would deny everyone', () => {
+    //  The one way tightening a gate can do harm: applying it to a
+    //  database with no enabled address and no switch, which locks out the
+    //  person applying it.
+    expect(CLOSED_DEFAULT).toMatch(/SIGNUP_WOULD_BE_CLOSED_TO_EVERYONE/);
+  });
+
+  it('keeps the policy table out of the browser', () => {
+    expect(CLOSED_DEFAULT).toMatch(/ALTER TABLE public\.signin_policy ENABLE ROW LEVEL SECURITY/);
+    expect(CLOSED_DEFAULT).toMatch(/REVOKE ALL ON public\.signin_policy FROM anon, authenticated/);
+  });
+
+  it('reuses the existing approver set to guard the switch', () => {
+    //  Not a second idea of who may administer this.
+    expect(CLOSED_DEFAULT).toMatch(/app_is_allowlist_admin/);
+    expect(CLOSED_DEFAULT).toMatch(/ALLOWLIST_NOT_PERMITTED/);
   });
 
   it('gives anon no grant on the admin surface', () => {

@@ -3,7 +3,7 @@
 --
 --  A. The column and its shape
 --  B. A disabled address is refused
---  C. AN EMPTY TABLE OPENS THE PRODUCT; A DISABLED TABLE DOES NOT
+--  C. NEITHER AN EMPTY NOR A DISABLED TABLE OPENS THE PRODUCT
 --  D. The administrator surface refuses non-administrators
 --  E. The list is not readable or writable from a browser
 --  F. Both gates are still in place
@@ -11,13 +11,19 @@
 --  WHY C IS THE POINT OF THIS FILE
 --  -------------------------------
 --  20261017000000 made "the table is empty" mean "the product is open",
---  deliberately, so that ending the pilot is a data change rather than a
---  code change. Adding a disabled state puts a trap next to that rule: if
---  "no ENABLED rows" were also read as open, then disabling the last
---  pilot user would publish the application to the entire internet, and
---  the operator doing it would believe they had just locked it down.
+--  so that ending the pilot would be a data change rather than a code
+--  change. Adding a disabled state put a trap next to that rule: if "no
+--  ENABLED rows" were also read as open, then disabling the last pilot
+--  user would publish the application to the entire internet, and the
+--  operator doing it would believe they had just locked it down.
 --
---  So C disables every row and requires the gate to stay SHUT.
+--  20261214000000 removed the rule itself. Only approved addresses may
+--  register, so an empty list denies like any other list that matches
+--  nothing, and opening the product is now an explicit switch in
+--  signin_policy rather than the absence of data.
+--
+--  So C requires the gate to stay SHUT for a fully disabled list AND for
+--  an empty one. signin_policy_test.sql covers the switch.
 -- =====================================================================
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;
@@ -151,7 +157,7 @@ $b$;
 
 
 -- =====================================================================
---  C — AN EMPTY TABLE OPENS THE PRODUCT; A DISABLED TABLE DOES NOT
+--  C — NEITHER AN EMPTY NOR A DISABLED TABLE OPENS THE PRODUCT
 -- =====================================================================
 DO $c$
 DECLARE n integer;
@@ -176,11 +182,20 @@ BEGIN
   PERFORM _sk('C','C3 not even for an address that is on it, disabled',
               NOT public.app_signin_is_allowed('enabled@allowlist.test'));
 
-  --  Now actually empty, which 20261017000000 defines as open. Preserved
-  --  deliberately: it is how the pilot ends, without a code change.
+  /*
+   *  C4 ASSERTED THE OPPOSITE UNTIL 20261214000000.
+   *
+   *  20261017000000 made an empty table mean "open", so that ending the
+   *  pilot would be a data change rather than a code change. That reading
+   *  is now withdrawn: only approved addresses may register, so an empty
+   *  allowlist denies like any other list that matches nothing, and
+   *  opening the product is a deliberate switch instead of the absence of
+   *  data. The old rule turned "somebody emptied the table" into "the
+   *  product is public", which is the one moment it should be shut.
+   */
   DELETE FROM public.allowed_signins;
-  PERFORM _sk('C','C4 an EMPTY list opens the product, as it always did',
-              public.app_signin_is_allowed('anyone@allowlist.test'));
+  PERFORM _sk('C','C4 an EMPTY list now DENIES, it does not open the product',
+              NOT public.app_signin_is_allowed('anyone@allowlist.test'));
 
   INSERT INTO public.allowed_signins SELECT * FROM _saved_allowlist;
   DROP TABLE _saved_allowlist;

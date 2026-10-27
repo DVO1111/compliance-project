@@ -70,16 +70,36 @@ factory's quality staff, and it must not be enumerable.
 The hook can be switched off in a dashboard; the guard travels with the
 database. `allowlist_enabled_state_test.sql` section F asserts both.
 
-### "Empty means open" — and why "all disabled" must not
+### Closed by default, since `20261214000000`
 
-`app_signin_is_allowed` returns true for everyone when the table is
-**empty**. That is deliberate and dates from the original migration: ending
-the pilot is a data change, not a code change.
+`app_signin_is_allowed` used to begin `NOT EXISTS (SELECT 1 FROM
+allowed_signins)`, so an **empty** table admitted everyone. That was written
+so ending the pilot would be a data change rather than a code change, and it
+made "somebody emptied the table" mean "the product is public" — the one
+moment it should be shut.
 
-A table of **disabled** rows is not empty and does **not** open the product.
-If it did, disabling the last pilot user would publish the application to
-the entire internet — and the operator doing it would believe they had just
-locked it down. Section C of the SQL suite exists for exactly that.
+The gate is now the matching clause alone:
+
+| state | answer |
+|---|---|
+| empty allowlist | **deny** |
+| rows, all disabled | **deny** |
+| enabled row matching the address | allow |
+| disabled or unlisted address | **deny** |
+| `signin_policy.public_signup_enabled` deliberately on | allow |
+
+The capability is kept and the accident is not: `admin_set_public_signup`
+turns public signup on, approver-only, and **requires a reason**, which is
+stored with the actor and the time. A missing policy row reads as closed.
+
+**This changed nothing for a project whose allowlist already has rows** — for
+those, `NOT EXISTS` was already false. And `app_signin_is_allowed` is called
+only by `provision_profile` and the hook, by no RLS policy, so it cannot
+sign anyone out or remove anyone from a company.
+
+`signin_policy_test.sql` covers all of it (30 assertions); section C of
+`allowlist_enabled_state_test.sql` keeps the all-disabled case, which was
+always a denial.
 
 ## What removing someone actually does
 

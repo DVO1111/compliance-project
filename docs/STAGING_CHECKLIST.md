@@ -63,10 +63,14 @@ has to be settled before any project can be built from the migrations alone.
 Seed `allowed_signins` with the **real** addresses of whoever will use
 staging, through `admin_allowlist_add`.
 
-> An empty `allowed_signins` is treated as OPEN, deliberately, so a fresh
-> project is not locked out of its own bootstrap. A staging project with an
-> empty allowlist therefore accepts anyone whose signup reaches it. Seed it
-> before announcing the URL.
+> Since `20261214000000` an empty `allowed_signins` **denies** everyone, so
+> an unseeded staging project refuses all signups rather than accepting all
+> of them. `20261017000000` seeds two owner addresses, so the project is not
+> locked out of its own bootstrap; add the rest with `admin_allowlist_add`
+> before anyone tries to register.
+>
+> If you genuinely want staging open to anyone, say so explicitly:
+> `SELECT public.admin_set_public_signup(true, '<reason>');`
 
 **Never add the eleven demo actors here, or to production.** They are
 fictional; `docs/seed/DEMO_IDENTITIES.md` explains what to do instead.

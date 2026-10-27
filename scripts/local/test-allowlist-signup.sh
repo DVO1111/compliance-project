@@ -42,6 +42,10 @@ APPROVED="approved.pilot@criateur.test"
 MIXEDCASE="  Approved.Pilot@Criateur.TEST  "
 STRANGER="stranger@criateur.test"
 DISABLED="disabled.pilot@criateur.test"
+#  Section 8 needs an address that has NEVER registered: $APPROVED has by
+#  then, so GoTrue answers 422 "already registered" and the refusal under
+#  test is indistinguishable from a duplicate.
+CLOSED="closed.probe@criateur.test"
 PASSWORD="LocalOnly-$(head -c 9 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')9aA!"
 
 total=0; passed=0; failed=0
@@ -94,7 +98,7 @@ PY
 }
 
 cleanup() {
-  for e in "$APPROVED" "$STRANGER" "$DISABLED"; do
+  for e in "$APPROVED" "$STRANGER" "$DISABLED" "$CLOSED"; do
     q "DELETE FROM public.profiles WHERE lower(email) = lower('$e');" >/dev/null
     q "DELETE FROM auth.identities WHERE user_id IN
          (SELECT id FROM auth.users WHERE lower(email) = lower('$e'));" >/dev/null
@@ -224,7 +228,76 @@ else
   bad "re-enabling did not restore access (http $code, $users user(s))"
 fi
 
-head2 "8. The database gate is still there underneath"
+head2 "8. CLOSED BY DEFAULT — an empty allowlist denies, against real GoTrue"
+#  This is the case 20261214000000 changed, and the only way to know the
+#  product is actually shut is to empty the list and ask the real Auth
+#  server to create an account.
+#
+#  The whole table is parked and restored, because every later assertion
+#  depends on it and an empty allowlist would deny them all.
+q "CREATE TABLE IF NOT EXISTS public._parked_allowlist AS SELECT * FROM public.allowed_signins WHERE false;" >/dev/null
+q "DELETE FROM public._parked_allowlist;" >/dev/null
+q "INSERT INTO public._parked_allowlist SELECT * FROM public.allowed_signins;" >/dev/null
+parked_n="$(q "SELECT count(*) FROM public._parked_allowlist;")"
+q "DELETE FROM public.allowed_signins;" >/dev/null
+echo "  allowlist emptied (${parked_n} row(s) parked)"
+
+resp="$(signup "$CLOSED")"
+code="$(echo "$resp" | head -1)"; body="$(echo "$resp" | tail -n +2)"
+users="$(authusers "$CLOSED")"
+[ "$code" != "200" ] && ok "with an EMPTY allowlist, signup is refused (http $code)" \
+                     || bad "an empty allowlist let a signup through — the product is open" "$body"
+[ "${users:-1}" = "0" ] && ok "and no auth user was created" \
+                        || bad "$users auth user(s) created against an empty allowlist"
+[ "$(q "SELECT public.app_signin_is_allowed('$CLOSED')::text;")" = "false" ] \
+  && ok "the database gate agrees: an empty list denies" \
+  || bad "app_signin_is_allowed returned true for an empty list"
+
+#  All-disabled is a different state from empty and must give the same
+#  answer, so there is nothing in between that opens the product.
+q "INSERT INTO public.allowed_signins (email, note, is_enabled, disabled_at)
+   VALUES ('$CLOSED', 'emptied-list test', false, now());" >/dev/null
+resp="$(signup "$CLOSED")"
+code="$(echo "$resp" | head -1)"
+[ "$code" != "200" ] && ok "a list holding only DISABLED rows also refuses (http $code)" \
+                     || bad "an all-disabled allowlist let a signup through"
+[ "$(authusers "$CLOSED")" = "0" ] && ok "and still no auth user" \
+                                     || bad "an all-disabled list created an auth user"
+
+#  And the deliberate switch is the only thing that opens it — tested
+#  because a tightened gate that cannot be opened on purpose would be a
+#  different bug.
+q "DELETE FROM public.allowed_signins;" >/dev/null
+q "UPDATE public.signin_policy SET public_signup_enabled = true,
+     reason = 'local integration test', enabled_at = now() WHERE id;" >/dev/null
+resp="$(signup "$CLOSED")"
+code="$(echo "$resp" | head -1)"
+users="$(authusers "$CLOSED")"
+if [ "$code" = "200" ] && [ "${users:-0}" = "1" ]; then
+  ok "with public signup deliberately ON, an unlisted address can register"
+else
+  bad "the deliberate switch did not open signup (http $code, $users user(s))"
+fi
+q "UPDATE public.signin_policy SET public_signup_enabled = false,
+     reason = NULL, enabled_at = NULL, enabled_by = NULL WHERE id;" >/dev/null
+#  Clean up the account that switch allowed, then restore the real list.
+q "DELETE FROM public.profiles WHERE lower(email) = lower('$CLOSED');" >/dev/null
+q "DELETE FROM auth.identities WHERE user_id IN
+     (SELECT id FROM auth.users WHERE lower(email) = lower('$CLOSED'));" >/dev/null
+q "DELETE FROM auth.users WHERE lower(email) = lower('$CLOSED');" >/dev/null
+q "DELETE FROM public.allowed_signins;" >/dev/null
+q "INSERT INTO public.allowed_signins SELECT * FROM public._parked_allowlist;" >/dev/null
+q "DROP TABLE IF EXISTS public._parked_allowlist;" >/dev/null
+restored="$(q "SELECT count(*) FROM public.allowed_signins;")"
+[ "${restored:-0}" = "${parked_n:-0}" ] \
+  && ok "the real allowlist is restored (${restored} row(s))" \
+  || bad "the allowlist was not restored (${restored} vs ${parked_n})"
+#  The fixtures the earlier sections rely on went with the parking.
+q "INSERT INTO public.allowed_signins (email, note) VALUES
+     ('$APPROVED', 'local integration test'), ('$DISABLED', 'local integration test')
+   ON CONFLICT (email) DO UPDATE SET is_enabled = true, disabled_at = NULL, disabled_by = NULL;" >/dev/null
+
+head2 "9. The database gate is still there underneath"
 #  Defence in depth, as the function's own header claims: the hook is
 #  configuration and can be switched off, so `provision_profile` must still
 #  refuse an address that is not approved.

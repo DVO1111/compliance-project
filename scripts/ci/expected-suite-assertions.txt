@@ -29,7 +29,7 @@
 #  Format: <suite filename> <minimum assertions>
 #  TOTAL is the aggregate floor across every suite.
 
-TOTAL 3127
+TOTAL 3157
 
 access_requests_test.sql 44
 access_restrictions_test.sql 59
@@ -85,6 +85,7 @@ profile_provisioning_test.sql 54
 profiles_rls_test.sql 34
 role_signatures_and_duties_test.sql 86
 signin_allowlist_test.sql 12
+signin_policy_test.sql 30
 sites_and_department_codes_test.sql 22
 sop_lifecycle_test.sql 44
 starter_records_test.sql 27
