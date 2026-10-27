@@ -167,6 +167,91 @@ describe('values are mapped, never invented', () => {
   });
 });
 
+describe('the second pass of mappings', () => {
+  it('loads the master formula\'s own stages, parameters and materials', () => {
+    //  These were `unsupported` on the grounds that they depend on the
+    //  formula's versioning. They do not: each hangs off formula_id or
+    //  stage_id and carries no version of its own. Without them a formula
+    //  loads as a header with no stages and no bill of materials — and
+    //  master_formula_approve refuses a formula that has neither.
+    for (const s of ['master_formula_stages', 'master_formula_stage_parameters',
+                     'master_formula_materials']) {
+      expect(classOf(s)).toBe('mappable');
+    }
+  });
+
+  it('resets the formula children by cascade, not by deleting them', () => {
+    /*
+     *  fn_master_formula_child_freeze refuses DELETE on the children of an
+     *  APPROVED formula, so the reset's default reverse order cannot undo a
+     *  formula that was later approved through the application. The
+     *  children cascade from the parent, and the trigger reads the parent's
+     *  status by SELECT — so once the parent is gone it reads NULL and the
+     *  delete is allowed.
+     */
+    for (const s of ['master_formula_stages', 'master_formula_stage_parameters',
+                     'master_formula_materials']) {
+      expect(MAPPINGS.find((m) => m.source === s)!.resetVia).toBe('cascade');
+    }
+  });
+
+  it('drops a specification test whose specification is not emitted', () => {
+    //  9 of 54 belong to the one PRODUCT specification that `only` filters
+    //  out. Emitting them would violate the foreign key partway through the
+    //  transaction and abort the whole import.
+    const m = MAPPINGS.find((x) => x.source === 'specification_tests')!;
+    expect(m.klass).toBe('mappable');
+    expect(m.requires).toEqual([{ field: 'specification_id', from: 'material_specifications' }]);
+  });
+
+  it('reads a specification limit\'s shape off the data rather than guessing', () => {
+    const m = MAPPINGS.find((x) => x.source === 'specification_tests')!;
+    const lt = m.computed!.limit_type;
+    expect(lt({ min_value: 1, max_value: 2 }, {})).toBe('range');
+    expect(lt({ min_value: 1, max_value: null }, {})).toBe('min');
+    expect(lt({ min_value: null, max_value: 2 }, {})).toBe('max');
+    //  Text alone is `complies`, NOT `exact_text`: "Complies with reference
+    //  spectrum" is a compliance statement, not a string to match.
+    expect(lt({ min_value: null, max_value: null }, {})).toBe('complies');
+  });
+
+  it('takes a material\'s formula role from its own type, and guesses no excipient function', () => {
+    const m = MAPPINGS.find((x) => x.source === 'master_formula_materials')!;
+    const role = m.computed!.role;
+    const tables = { materials: [{ id: 'm1', material_type: 'api' },
+                                 { id: 'm2', material_type: 'excipient' }] };
+    expect(role({ material_id: 'm1' }, tables)).toBe('active');
+    //  Which excipient function it serves is genuinely not in the source.
+    expect(role({ material_id: 'm2' }, tables)).toBe('other');
+  });
+
+  it('files a licence it has no category for as "other", losing nothing', () => {
+    /*
+     *  The application's licence_type list has no PCN premises option. The
+     *  alternative to `other` was filing a Pharmacy Council licence under a
+     *  NAFDAC or ministry category it does not belong to.
+     */
+    const m = MAPPINGS.find((x) => x.source === 'licences')!;
+    expect(m.klass).toBe('mappable');
+    expect(m.enums!.licence_type.pcn_premises_licence).toBe('other');
+    const notes = m.computed!.notes(
+      { issuer: 'Pharmacy Council of Nigeria', licence_type: 'pcn_premises_licence' }, {},
+    ) as string;
+    expect(notes).toContain('Pharmacy Council of Nigeria');
+    expect(notes).toContain('pcn_premises_licence');
+  });
+
+  it('still refuses to seed a signature, a member or a lifecycle row', () => {
+    //  The second pass must not have quietly widened what gets written.
+    const emitted = MAPPABLE.map((m) => m.target);
+    for (const forbidden of ['electronic_signatures', 'company_members',
+                             'entity_current_state', 'entity_state_history',
+                             'batch_records', 'batch_stages']) {
+      expect(emitted).not.toContain(forbidden);
+    }
+  });
+});
+
 describe('the build and reset tooling', () => {
   const BUILD = readFileSync(
     join(process.cwd(), 'scripts/seed/demo/build.ts'), 'utf8',

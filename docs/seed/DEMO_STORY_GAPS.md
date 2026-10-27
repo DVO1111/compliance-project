@@ -1,8 +1,16 @@
 # What the adapted demo can and cannot show
 
-The adapted seed loads **98 rows across 11 tables** from a source dataset of
-882 rows across 42. This is what that costs the demonstration story, stated
-per gap rather than as a total.
+The adapted seed loads **188 rows across 16 tables** from a source dataset of
+882 rows across 42, and eleven demo accounts then make two of the three
+master formulas approvable through the application itself. This is what
+remains missing, stated per gap rather than as a total.
+
+A second pass added the master formula's own stages, stage parameters and
+bill of materials (41 rows), 45 of 54 material specification parameters, and
+the licence register (4) — see `scripts/seed/demo/mapping.ts`. The nine
+specification parameters not loaded belong to the one source specification
+that is a PRODUCT specification and is not emitted; they are reported by the
+build rather than dropped silently.
 
 Build it with `scripts/seed/demo/build.ts`; the machine-generated
 `BUILD_REPORT.md` beside the output lists every unemitted table with its
@@ -23,6 +31,11 @@ class and reason.
 | `master_formulas` | 3 |
 | `deviations` | 6 |
 | `capa_records` | 2 |
+| `master_formula_stages` | 12 |
+| `master_formula_stage_parameters` | 14 |
+| `master_formula_materials` | 15 |
+| `material_specification_parameters` | 45 |
+| `regulatory_licences` | 4 |
 
 Two companies with their sites, lines, approved suppliers, material
 catalogue, specifications, received lots, formulas, and six deviations with
@@ -66,18 +79,35 @@ BATCH_FORMULA_NOT_APPROVED: formula version 2 is "draft",
 so a batch cannot be manufactured to it
 ```
 
-A batch needs an **approved** master formula. An approved formula needs
-`approved_by` and `approved_at` (`master_formulas_approval_chk`), which
-name a user. The demo has no Auth accounts, so the chain cannot be
-completed — and a formula approval is a signed act, not a column to fill
-in.
+A batch needs an **approved** master formula, and an approved formula needs
+`approved_by` and `approved_at` (`master_formulas_approval_chk`), which name
+a user.
 
-**The trigger is correct and was not touched.** It exists to stop exactly
-this: a batch manufactured against a formula nobody approved.
+**This half is now resolved, by performing the approval rather than seeding
+it.** `scripts/local/demo-identities.sh` creates the eleven actors as real
+local accounts, and `scripts/local/demo-approve-formulas.sh` signs in as a
+QA manager and calls `master_formula_approve` — the application's own
+approval API, which takes the approver from `auth.uid()` and the time from
+`now()`. So the row records what actually happened instead of asserting that
+a fictional QA manager approved something in August.
 
-**What the demo cannot show:** anything downstream of a batch — execution,
-in-process control, yield, QC, release. That is the largest single piece of
-the ten-minute story.
+Two of the three formulas approve. The third is the orange drink, whose
+materials are packaging and raw ingredients: it declares **no active
+ingredient**, and the application requires one
+(`MASTER_FORMULA_NO_ACTIVE`). Relabelling a sugar syrup as the active would
+be inventing a formulation fact to defeat a correct rule, so it stays a
+draft and the refusal is asserted as the expected outcome.
+
+**What still blocks the batches themselves** is not the formula any more.
+`batch_records` carries six further insert-time gates — product,
+licence, initiation, status, section-role and governing-specification —
+and the only legitimate way past them is `batch_record_initiate` followed
+by driving each stage through the execution workflow. That is manufacturing
+the batch, not importing it, and it is the next increment rather than a
+mapping.
+
+**What the demo cannot show yet:** anything downstream of a batch —
+execution, in-process control, yield, QC, release.
 
 ### 3. No electronic signatures
 

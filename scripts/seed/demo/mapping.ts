@@ -57,6 +57,60 @@ export interface TableMapping {
    * reported.
    */
   only?: { field: string; equals: string };
+  /**
+   * Emit only rows whose foreign key resolves to a row this build EMITTED.
+   *
+   * Not the same as `only`. A source table can reference a parent the
+   * mapping deliberately did not emit — `specification_tests` has 9 of 54
+   * rows against the one `material_specifications` row that is a PRODUCT
+   * specification and is filtered out. Loading them would violate the
+   * foreign key halfway through the transaction and abort the whole import.
+   *
+   * Each dropped row is reported with the parent it wanted, so this is a
+   * stated consequence of an earlier decision rather than a silent trim.
+   */
+  requires?: { field: string; from: string }[];
+  /**
+   * A target column computed from the source row itself.
+   *
+   * For the cases where the application requires a value that the source
+   * DOES supply, but spread across columns rather than named. Two in use:
+   *
+   *   limit_type   the application names the shape of an acceptance limit;
+   *                the source expresses it by which of min/max/text it
+   *                filled in. Reading that back is a restatement, not a
+   *                guess.
+   *   role         a material's role in a formula. The source records the
+   *                material's own TYPE, so `api` gives `active` as a fact.
+   *                Everything else gets the application's own catch-all
+   *                rather than a guessed excipient function.
+   *
+   * A function, not a lookup table, because the inputs are several columns.
+   * It returns `undefined` to leave the column unset.
+   */
+  computed?: Record<string, (row: Record<string, unknown>,
+                             tables: Record<string, Record<string, unknown>[]>) => unknown>;
+  /**
+   * The reset does not delete this table; its parent's delete cascades it.
+   *
+   * Needed, not tidiness. The three master-formula child tables carry
+   * `fn_master_formula_child_freeze`, which refuses INSERT, UPDATE and
+   * DELETE on the children of an APPROVED formula:
+   *
+   *   MASTER_FORMULA_APPROVED_FROZEN: master_formula_materials cannot be
+   *   changed on an approved formula.
+   *
+   * That rule is correct — an approved formula is frozen and a change
+   * means a new version — and it means the reset's default of deleting in
+   * reverse insertion order cannot undo a formula that has since been
+   * approved through the application. The children's foreign key is
+   * ON DELETE CASCADE, and the trigger resolves the parent's status by
+   * SELECT, so once the parent row is gone it reads NULL and the delete is
+   * permitted. Deleting the parent first therefore works where deleting
+   * the children first does not — verified against the database, and the
+   * registry still bounds exactly what goes.
+   */
+  resetVia?: 'cascade';
   /** Load order within the mappable set; lower first. */
   order?: number;
 }
@@ -341,6 +395,162 @@ export const MAPPINGS: TableMapping[] = [
     },
   },
 
+  /*
+   *  ── THE MASTER FORMULA'S OWN CONTENTS ────────────────────────────────
+   *
+   *  These three were `unsupported` on the grounds that they "depend on the
+   *  formula's own versioning". Checked against the schema rather than
+   *  assumed: they do not. Each hangs off `formula_id` or `stage_id` and
+   *  carries no version column of its own — the version lives on
+   *  master_formulas, which is already emitted. So the dependency was on
+   *  master_formulas existing, and it does.
+   *
+   *  Without them a master formula loads as a header with no stages and no
+   *  bill of materials, which is the part of it that matters.
+   */
+  {
+    source: 'master_formula_stages', target: 'master_formula_stages',
+    klass: 'mappable', order: 14,
+    resetVia: 'cascade',
+    note: 'The same entity: an ordered manufacturing stage of a formula. '
+      + '`requires_dual_signoff` becomes `requires_signoff` — the '
+      + 'application records THAT a stage needs signing, not how many '
+      + 'people, so a dual requirement is carried as a requirement and the '
+      + 'count is not asserted. requires_line_clearance, required_sop_id '
+      + 'and the yield-reconciliation fields have no column here; line '
+      + 'clearance and yield reconciliation are separate features with '
+      + 'their own tables, and inventing a link to them from a flag would '
+      + 'be a guess about which record.',
+    fields: {
+      id: 'id', master_formula_id: 'formula_id', stage_key: 'stage_code',
+      stage_name: 'name', sequence_order: 'sequence_no',
+      requires_dual_signoff: 'requires_signoff',
+    },
+  },
+  {
+    source: 'master_formula_stage_parameters',
+    target: 'master_formula_stage_parameters', klass: 'mappable', order: 15,
+    resetVia: 'cascade',
+    note: 'The same entity, and the parameter_type vocabulary matches the '
+      + 'application\'s exactly — machine_setting and product_attribute, '
+      + 'both sides. Verified that all 14 rows already satisfy the '
+      + 'application\'s three conditional CHECKs (a machine_setting carries '
+      + 'a target, a product_attribute carries a range, and no range is '
+      + 'inverted), so nothing had to be filled in to make them load.',
+    fields: {
+      id: 'id', stage_id: 'stage_id', parameter_name: 'parameter',
+      parameter_type: 'parameter_type', unit: 'unit',
+      target_value: 'target_value', min_value: 'min_value',
+      max_value: 'max_value', is_critical: 'is_critical',
+    },
+    //  A parameter whose stage was not emitted cannot be emitted either.
+    requires: [{ field: 'stage_id', from: 'master_formula_stages' }],
+  },
+  {
+    source: 'master_formula_materials', target: 'master_formula_materials',
+    klass: 'mappable', order: 16,
+    resetVia: 'cascade',
+    note: 'The formula\'s bill of materials. The application requires a '
+      + '`role` from a controlled list and the source does not record one — '
+      + 'so it is taken from the MATERIAL\'S OWN TYPE, which the source does '
+      + 'record: `api` gives `active`, which is a restatement. Every other '
+      + 'type gives the application\'s own `other`, because which excipient '
+      + 'function a material serves in a particular formula (binder, '
+      + 'lubricant, glidant) is genuinely not in the source and naming one '
+      + 'would be a fabricated formulation detail. Confirmed all 15 '
+      + '(formula, material) pairs are distinct, so the UNIQUE on '
+      + '(formula_id, material_id, role) holds.',
+    fields: {
+      id: 'id', master_formula_id: 'formula_id', material_id: 'material_id',
+      quantity_required: 'quantity_per_batch', unit: 'unit',
+      tolerance_pct: 'tolerance_pct', sequence_order: 'sort_order',
+    },
+    computed: {
+      role: (row, tables) => {
+        const mat = (tables.materials ?? []).find((m) => m.id === row.material_id);
+        return mat?.material_type === 'api' ? 'active' : 'other';
+      },
+    },
+  },
+  {
+    source: 'specification_tests', target: 'material_specification_parameters',
+    klass: 'mappable', order: 17,
+    note: 'The application holds specification parameters per material '
+      + 'specification. The source\'s test rows reference '
+      + 'material_specifications directly, so the "which of the two kinds" '
+      + 'question that made this adaptable resolves by the same rule the '
+      + 'parent already uses: the one source specification with '
+      + 'applies_to_type = product is not emitted, and its 9 test rows are '
+      + 'dropped and reported rather than orphaned. 45 of 54 load. '
+      + '`limit_type` is NOT NULL from a controlled list and the source '
+      + 'expresses the same thing by which columns it filled in, so it is '
+      + 'read back: both bounds give range, one gives min or max, and text '
+      + 'alone gives `complies` — not `exact_text`, because "Complies with '
+      + 'reference spectrum" is a compliance statement and not a string to '
+      + 'match. Census over all 54: 14 range, 1 min, 20 max, 19 text.',
+    fields: {
+      id: 'id', specification_id: 'specification_id', test_name: 'parameter',
+      unit: 'unit', min_value: 'min_value', max_value: 'max_value',
+      acceptance_criteria: 'expected_text', sequence_order: 'sort_order',
+    },
+    computed: {
+      limit_type: (row) => {
+        const mn = row.min_value;
+        const mx = row.max_value;
+        if (mn !== null && mn !== undefined && mx !== null && mx !== undefined) return 'range';
+        if (mn !== null && mn !== undefined) return 'min';
+        if (mx !== null && mx !== undefined) return 'max';
+        //  Text only. `complies` carries the criterion in expected_text
+        //  without claiming it is a value to compare against.
+        return 'complies';
+      },
+    },
+    requires: [{ field: 'specification_id', from: 'material_specifications' }],
+  },
+  {
+    source: 'licences', target: 'regulatory_licences', klass: 'mappable',
+    order: 18,
+    note: 'The application\'s licence register. Two things the source does '
+      + 'not supply, both resolved from what it does: `licence_type` is a '
+      + 'controlled list with no PCN premises option, so a PCN licence is '
+      + 'recorded as `other` with its real type kept in the notes rather '
+      + 'than filed under a NAFDAC or ministry category it does not belong '
+      + 'to; and `status` is read off the dates — all four were issued in '
+      + 'the past and expire in the future, so `active` is a fact about the '
+      + 'record. The renewal states (renewal_due, renewal_in_progress, '
+      + 'renewed) are NOT set: those belong to a workflow the source has no '
+      + 'concept of, and asserting one would invent a renewal history.',
+    fields: {
+      id: 'id', company_id: 'company_id', licence_number: 'registration_number',
+      covers: 'name', issued_date: 'issue_date', expiry_date: 'expiry_date',
+      licence_type: 'licence_type',
+    },
+    constants: { status: 'active' },
+    enums: {
+      licence_type: {
+        nafdac_gmp_certificate: 'nafdac_gmp_certificate',
+        nafdac_product_registration: 'nafdac_product_registration',
+        import_permit: 'nafdac_import_permit',
+        son_mancap: 'son_mancap_approval',
+        pcn_premises_licence: 'other',
+      },
+    },
+    computed: {
+      //  Nothing from the source is discarded: the issuer and the source's
+      //  own type string are preserved verbatim, which is what makes the
+      //  `other` above honest rather than lossy.
+      notes: (row) => `Issuer: ${String(row.issuer ?? 'not recorded')}. `
+        + `Source licence type: ${String(row.licence_type ?? 'not recorded')}.`,
+      regulatory_body: (row) => {
+        const t = String(row.licence_type ?? '');
+        if (t.startsWith('nafdac') || t === 'import_permit') return 'nafdac';
+        if (t.startsWith('son')) return 'son';
+        if (t.startsWith('pcn')) return 'pcn';
+        return 'other';
+      },
+    },
+  },
+
   // ── adaptable ──────────────────────────────────────────────────────────
   {
     source: 'environmental_monitoring', target: 'facility_log_entries',
@@ -471,23 +681,6 @@ export const MAPPINGS: TableMapping[] = [
     note: 'The table exists, but the application requires a verification '
       + 'outcome and a discrepancy record that the source has no field for. '
       + 'Seeding it unverified would misrepresent incoming-goods control.',
-  },
-  {
-    source: 'master_formula_materials', target: 'master_formula_materials',
-    klass: 'unsupported',
-    note: 'Exists, and depends on the formula\'s own versioning and the '
-      + 'material\'s specification version. Loadable after master_formulas '
-      + 'once the version pinning is decided.',
-  },
-  {
-    source: 'master_formula_stages', target: 'master_formula_stages',
-    klass: 'unsupported',
-    note: 'Exists; same dependency as master_formula_materials.',
-  },
-  {
-    source: 'master_formula_stage_parameters', target: 'master_formula_stage_parameters',
-    klass: 'unsupported',
-    note: 'Exists; depends on master_formula_stages.',
   },
   {
     source: 'batch_stage_parameter_readings', target: 'batch_stage_parameter_readings',

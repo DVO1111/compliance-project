@@ -203,7 +203,7 @@ if [ "${tables:-0}" -gt 50 ] && [ "${1:-}" != "--rebuild" ]; then
   API        http://127.0.0.1:54321
   Database   $DB_URL
   Auth       http://127.0.0.1:54321/auth/v1
-  Mail sink  scripts/local/smtp-sink.py (mailpit image would not pull)
+  Mail       http://127.0.0.1:54324  (the CLI's catcher; nothing is delivered)
 
   Keys:      npx $CLI status -o env   (do not paste them anywhere)
   Teardown:  scripts/local/down.sh
@@ -251,7 +251,7 @@ cat <<INFO
   API        http://127.0.0.1:54321
   Database   $DB_URL
   Auth       http://127.0.0.1:54321/auth/v1
-  Mail sink  scripts/local/smtp-sink.py (mailpit image would not pull)
+  Mail       http://127.0.0.1:54324  (the CLI's catcher; nothing is delivered)
 
   Keys:      npx $CLI status -o env   (do not paste them anywhere)
   Teardown:  scripts/local/down.sh

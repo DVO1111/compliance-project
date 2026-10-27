@@ -232,6 +232,49 @@ guard="$(q "SELECT public.app_signin_is_allowed('$STRANGER')::text;")"
 [ "$guard" = "false" ] \
   && ok "app_signin_is_allowed() — the one rule both gates call — refuses the stranger" \
   || bad "app_signin_is_allowed() returned '$guard' for an unapproved address"
+#  THE HOOK GUARDS THE PUBLIC SIGNUP PATH, AND ONLY THAT.
+#
+#  Measured rather than assumed: POST /auth/v1/admin/users with a
+#  service-role key creates an account for an address that is NOT on the
+#  allowlist, because an Auth hook does not run on an admin create. So the
+#  question the brief asks — can an existing user bypass the database-side
+#  provisioning checks — has to be answered about the DATABASE gate, which
+#  is the half that travels with the schema and cannot be switched off in a
+#  dashboard. This is the defence-in-depth claim the function's header
+#  makes, tested instead of trusted.
+if [ -n "${LOCAL_SERVICE_ROLE_KEY:-}" ]; then
+  admin_id="$(curl -sS -X POST "$API/auth/v1/admin/users" \
+    -H "apikey: $LOCAL_SERVICE_ROLE_KEY" -H "Authorization: Bearer $LOCAL_SERVICE_ROLE_KEY" \
+    -H 'Content-Type: application/json' \
+    --data "$(printf '{"email":"%s","password":"%s","email_confirm":true}' "$STRANGER" "$PASSWORD")" \
+    2>/dev/null | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("id","") or "")
+except Exception: print("")')"
+  if [ -n "$admin_id" ]; then
+    ok "the Admin API does create a non-allowlisted account (so the hook is not the only gate that matters)"
+    #  That account now exists. What must still be impossible is it
+    #  becoming a member of anything, which is what every RLS policy in
+    #  this schema is written against.
+    #  The whole output, not its last line: PL/pgSQL prints the RAISE and
+    #  then a CONTEXT line, and matching only the tail reads the context
+    #  as the result and calls a refusal an acceptance.
+    prov="$(psql -X -At -c "
+      SELECT set_config('request.jwt.claims',
+        json_build_object('sub','$admin_id','role','authenticated')::text, true);
+      SELECT public.provision_profile('$STRANGER', 'Stranger', 'Nowhere Ltd')::text;" 2>&1)"
+    if printf '%s' "$prov" | grep -q '^ERROR:'; then
+      ok "provision_profile refuses it: $(printf '%s' "$prov" | grep -m1 '^ERROR:' | cut -c1-96)"
+    else
+      bad "provision_profile accepted a non-allowlisted address" "$(printf '%s' "$prov" | head -c 200)"
+    fi
+    [ "$(q "SELECT count(*) FROM public.company_members WHERE user_id='$admin_id';")" = "0" ] \
+      && ok "and it holds no company membership" \
+      || bad "the admin-created account gained a membership"
+  else
+    bad "could not create an account through the Admin API, so this case was not exercised"
+  fi
+fi
+
 rls="$(q "SELECT relrowsecurity::text FROM pg_class WHERE oid = 'public.allowed_signins'::regclass;")"
 pol="$(q "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename='allowed_signins';")"
 if [ "$rls" = "true" ] && [ "${pol:-1}" = "0" ]; then

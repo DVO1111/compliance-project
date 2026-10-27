@@ -60,6 +60,8 @@ function emit(
   rows: Row[],
   problems: string[],
   allTables: Record<string, Row[]>,
+  /** ids this build has already emitted, per SOURCE table name. */
+  emittedIds: Record<string, Set<string>>,
 ): Emitted {
   const statements: string[] = [];
   const ids: string[] = [];
@@ -73,6 +75,38 @@ function emit(
       );
       continue;
     }
+
+    /*
+     *  A foreign key that points at a row this build did not emit.
+     *
+     *  Emitting it anyway would abort the whole import on a constraint
+     *  violation partway through, so the row is dropped — but reported with
+     *  the parent it wanted, because it is a consequence of an earlier
+     *  decision and not a trim for convenience. This is why `order`
+     *  matters: the parent has to have been emitted already.
+     */
+    let orphaned = false;
+    for (const req of m.requires ?? []) {
+      const parent = row[req.field];
+      const known = emittedIds[req.from];
+      if (known === undefined) {
+        problems.push(
+          `${m.source} row ${i + 1}: cannot check ${req.field} — `
+          + `${req.from} is emitted after this table, so its order is wrong`,
+        );
+        orphaned = true;
+        break;
+      }
+      if (typeof parent !== 'string' || !known.has(parent)) {
+        problems.push(
+          `${m.source} row ${i + 1}: ${req.field} = ${String(parent)} is not a `
+          + `${req.from} row this seed emits — not emitted`,
+        );
+        orphaned = true;
+        break;
+      }
+    }
+    if (orphaned) continue;
     const out: Record<string, unknown> = {};
 
     for (const [src, tgt] of Object.entries(fields)) {
@@ -111,6 +145,18 @@ function emit(
         continue;
       }
       out[tgt] = related[d.take];
+    }
+
+    //  Computed values, from the source row's own columns. Run before
+    //  constants so a constant still only ever fills a gap, and after
+    //  `fields` so a computed column can deliberately replace a mapped one.
+    for (const [tgt, fn] of Object.entries(m.computed ?? {})) {
+      const v = fn(row, allTables);
+      if (v === undefined) {
+        problems.push(`${m.source} row ${i + 1}: ${tgt} could not be computed`);
+        continue;
+      }
+      out[tgt] = v;
     }
 
     for (const [k, v] of Object.entries(m.constants ?? {})) {
@@ -161,10 +207,17 @@ function main(): void {
   const problems: string[] = [];
   const emitted: Emitted[] = [];
 
+  //  Keyed by SOURCE table, so `requires` can ask "did we emit the parent".
+  //  Filled as we go, which is what makes `order` load-bearing rather than
+  //  cosmetic.
+  const emittedIds: Record<string, Set<string>> = {};
+
   for (const m of MAPPABLE) {
     const rows = seed.tables[m.source] ?? [];
     if (rows.length === 0) continue;
-    emitted.push(emit(m, rows, problems, seed.tables));
+    const e = emit(m, rows, problems, seed.tables, emittedIds);
+    emittedIds[m.source] = new Set(e.ids);
+    emitted.push(e);
   }
 
   mkdirSync(outDir, { recursive: true });
@@ -256,6 +309,19 @@ function main(): void {
     '',
   ];
   for (const e of [...emitted].reverse()) {
+    const m = MAPPABLE.find((x) => x.target === e.table);
+    if (m?.resetVia === 'cascade') {
+      //  Deliberately no DELETE. See `resetVia` in mapping.ts: deleting
+      //  these before their parent is refused outright on an approved
+      //  formula, and the parent's own delete removes them.
+      reset.push(
+        `-- ${e.table}: no DELETE — removed by the cascade from its parent.`,
+        `--   Deleting it directly is refused once the formula is approved`,
+        `--   (MASTER_FORMULA_APPROVED_FROZEN). ${e.rows} row(s) are still`,
+        '--   registered, and the registry is cleared below.',
+      );
+      continue;
+    }
     reset.push(
       `DELETE FROM ${e.table} WHERE id IN (`,
       `  SELECT record_id FROM demo_seed_records WHERE table_name = '${e.table}');`,

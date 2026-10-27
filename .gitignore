@@ -73,3 +73,6 @@ scripts/preview/out/
 #  copy in here would be a brand asset that drifts.
 scripts/preview/criateur-logo-ondark.svg
 .local-migration-failures.txt
+
+#  Local demo actors: the translation file holds a password.
+.demo-identities.json
