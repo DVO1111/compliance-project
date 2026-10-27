@@ -65,12 +65,15 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
 $$;
 GRANT EXECUTE ON FUNCTION auth.uid(), auth.role(), auth.jwt() TO anon, authenticated, service_role;
 
---  public.companies is referenced by many migrations but created by
---  none of them (the suites scaffold it too). Same shape as the suites use.
-CREATE TABLE IF NOT EXISTS public.companies (
-  id uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
-  name text NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-GRANT ALL ON public.companies TO anon, authenticated, service_role;
+--  public.companies IS NO LONGER SCAFFOLDED HERE.
+--
+--  It used to be, because no migration created it — which meant the suites
+--  proved the schema against a table the schema did not contain, and the
+--  migration history did not apply to an empty database at all. It is now
+--  created by supabase/migrations/20260206000000_baseline_companies.sql,
+--  dated before every other migration, so this shim does not need a copy
+--  and must not keep one: two definitions of the same table is how they
+--  drift.
+--
+--  If a suite ever fails with 'relation "companies" does not exist', the
+--  baseline migration did not run — do not re-add it here.

@@ -13,19 +13,12 @@
 --  LOCAL DISPOSABLE DATABASE ONLY.
 -- ====================================================================
 
--- ── public.companies ────────────────────────────────────────────────
---  Referenced by dozens of migrations and created by none of them. The
---  CI shim says the same thing and scaffolds the same shape; this is
---  the one structural gap that stops the migration history applying to
---  an empty database. Where it ought to be created is a schema decision
---  about a live project, not something to settle here.
-CREATE TABLE IF NOT EXISTS public.companies (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-GRANT ALL ON public.companies TO anon, authenticated, service_role;
+-- ── public.companies is NOT created here any more ───────────────────
+--  It was, because no migration created it. That question is settled:
+--  supabase/migrations/20260206000000_baseline_companies.sql creates it,
+--  dated before every other migration. Keeping a second copy here would
+--  be a competing definition of the same table, and the migration pass
+--  that follows this file applies the real one.
 
 -- ── the owner account the access-request migration requires ─────────
 --  20261022000000_access_requests.sql seeds the product owner as the
