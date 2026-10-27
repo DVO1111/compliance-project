@@ -39,11 +39,21 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLI="supabase@2.122.0"
 CONFIG="$ROOT/supabase/config.toml"
-EXCLUDE="studio,realtime,storage-api,imgproxy,logflare,vector,supavisor,postgres-meta,pgbouncer,mailpit"
+EXCLUDE="studio,realtime,storage-api,imgproxy,logflare,vector,supavisor,postgres-meta,pgbouncer"
 
-#  mailpit is excluded because its image would not pull from any of the
-#  three registries the CLI tries. Mail is caught by scripts/local/smtp-sink.py
-#  instead; see the recovery runbook.
+#  mailpit is NOT excluded: it is the CLI's mail catcher and the only way to
+#  read what GoTrue actually renders. An earlier version of this script
+#  excluded it because the image would not pull from any of the three
+#  registries the CLI tries — that turned out to be a transient registry
+#  failure, not a missing image, and it pulls fine.
+#
+#  It has to be the catcher rather than a local SMTP server of our own,
+#  because the CLI does not wire [auth.email.smtp] into a local stack at
+#  all: custom SMTP is a hosted-project setting. With [inbucket] enabled
+#  the CLI points GoTrue at the catcher, and with it disabled GoTrue gets
+#  no GOTRUE_SMTP_HOST whatsoever. scripts/local/smtp-sink.py is kept for
+#  the case where the image genuinely cannot be fetched, and the recovery
+#  test says which of the two it used.
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 

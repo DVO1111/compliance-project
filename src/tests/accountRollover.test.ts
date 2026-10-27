@@ -75,17 +75,45 @@ describe('the order of operations', () => {
     expect(revoke).toBeLessThan(rename);
   });
 
-  it('bans and signs out as part of the same pass', () => {
+  it('bans in the same call that frees the address', () => {
+    //  One call, so an account cannot end up renamed but still able to
+    //  sign in if the second of two calls failed.
     expect(CODE).toMatch(/ban_duration/);
-    expect(CODE).toMatch(/signOut\(/);
-    expect(CODE.indexOf('updateUserById')).toBeLessThan(CODE.indexOf('signOut('));
+    const upd = CODE.indexOf('updateUserById');
+    const ban = CODE.indexOf('ban_duration: BAN_FOREVER');
+    expect(upd).toBeGreaterThan(-1);
+    expect(ban).toBeGreaterThan(upd);
   });
 
-  it('corrects the identity row, which the rename alone does not', () => {
-    //  identity_data still names the old address after a rename; an
-    //  identity claiming an address it no longer owns would mislead
-    //  account-linking and anyone reading the audit.
-    expect(CODE).toMatch(/identity_data/);
+  /*
+   *  THESE TWO TESTS REPLACE ONES THAT ASSERTED THE OPPOSITE.
+   *
+   *  The suite used to require `signOut(` and `identity_data` in the
+   *  source. Both were there, and both were inert — which is precisely
+   *  what a test that greps the source cannot tell. Run against real
+   *  GoTrue v2.197.0:
+   *
+   *    auth.admin.signOut() takes an ACCESS TOKEN, not a user id, and the
+   *    admin form of the route 404s. It failed on every run, as a warning.
+   *
+   *    db.from('identities') resolves to public.identities, which does not
+   *    exist; PostgREST answered PGRST205 every run, also as a warning.
+   *
+   *  So the outcomes are now asserted where they can actually be observed
+   *  — scripts/local/test-rollover.sh checks auth.identities and the token
+   *  refusals against a live Auth server — and what is pinned here is only
+   *  that the two broken calls do not come back.
+   */
+  it('does not call signOut, which cannot work with a user id', () => {
+    expect(CODE).not.toMatch(/signOut\(/);
+    //  The ban is what ends access, so it must still be there.
+    expect(CODE).toMatch(/BAN_FOREVER/);
+  });
+
+  it('does not reach for auth.identities through PostgREST', () => {
+    //  GoTrue maintains identity_data.email on an admin email change;
+    //  measured, and asserted end-to-end in the rollover integration test.
+    expect(CODE).not.toMatch(/from\(['"]identities['"]\)/);
   });
 });
 

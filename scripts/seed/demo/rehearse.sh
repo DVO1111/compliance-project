@@ -19,7 +19,33 @@ ADAPTED="${1:-}"
 SRC="${SEED_TEMPLATE_DB:-criateur_local}"
 DB="demo_rehearsal"
 
-[ -n "$ADAPTED" ] || { echo "usage: rehearse.sh <adapted-dir>" >&2; exit 2; }
+#  ── TWO MODES, BECAUSE ONE OF THEM CANNOT WORK EVERYWHERE ───────────
+#
+#  CLONE (the default): copies the schema with CREATE DATABASE ... TEMPLATE
+#  and works on the bare PG 17 rig the SQL suites build.
+#
+#  IN PLACE (--in-place): loads into the database it is pointed at. Needed
+#  for a CLI-started Supabase stack, where cloning is impossible —
+#
+#      ERROR: source database "postgres" is being accessed by other users
+#      DETAIL: There are 5 other sessions using the database.
+#
+#  because GoTrue, PostgREST and Kong hold connections open for as long as
+#  the stack is up. The point of rehearsing there rather than only on the
+#  rig is that it is the schema the application actually runs against,
+#  with GoTrue's own auth schema present.
+#
+#  In place, the rehearsal ends by resetting and CHECKING the database was
+#  returned to how it was found. The clone mode deliberately leaves the
+#  seed loaded, since the database is dropped a moment later anyway.
+INPLACE=0
+for a in "$@"; do [ "$a" = "--in-place" ] && INPLACE=1; done
+if [ "$INPLACE" = "1" ]; then
+  DB="${PGDATABASE:-postgres}"
+  ADAPTED="$(for a in "$@"; do [ "$a" != "--in-place" ] && { echo "$a"; break; }; done)"
+fi
+
+[ -n "$ADAPTED" ] || { echo "usage: rehearse.sh <adapted-dir> [--in-place]" >&2; exit 2; }
 [ -f "$ADAPTED/10_demo_adapted.sql" ] || { echo "no 10_demo_adapted.sql in $ADAPTED" >&2; exit 2; }
 
 pass=0; fail=0
@@ -27,7 +53,12 @@ ok() { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass + 1)); }
 no() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 q()  { psql -d "$DB" -X -At -c "$1" 2>/dev/null; }
 
-cleanup() { psql -d postgres -X -q -c "DROP DATABASE IF EXISTS $DB;" >/dev/null 2>&1; }
+cleanup() {
+  #  In place there is nothing to drop; the final reset is what cleans up,
+  #  and it is an assertion rather than a teardown.
+  [ "$INPLACE" = "1" ] && return 0
+  psql -d postgres -X -q -c "DROP DATABASE IF EXISTS $DB;" >/dev/null 2>&1
+}
 trap cleanup EXIT INT TERM
 
 load() {
@@ -37,9 +68,31 @@ load() {
 
 printf '\n\033[1mDemonstration seed rehearsal\033[0m\n'
 
-cleanup
-psql -d postgres -X -q -c "CREATE DATABASE $DB TEMPLATE $SRC;" >/dev/null 2>&1 \
-  || { echo "cannot create $DB from $SRC — run scripts/ci/run-sql-tests.sh first" >&2; exit 2; }
+if [ "$INPLACE" = "1" ]; then
+  printf '  mode: IN PLACE against %s on %s:%s\n' \
+    "$DB" "${PGHOST:-local}" "${PGPORT:-5432}"
+  #  A rehearsal must not be the thing that writes demo data into a real
+  #  database. Loopback is the same proof scripts/local/up.sh relies on: a
+  #  hosted project is never reachable there.
+  case "${PGHOST:-}" in
+    127.0.0.1|localhost|::1|/tmp|/var/run/postgresql) ;;
+    *) echo "REFUSING: --in-place needs a loopback PGHOST, got '${PGHOST:-unset}'." >&2
+       exit 1;;
+  esac
+  #  And it must leave nothing behind, which is only checkable if the
+  #  database starts clean of seed-owned rows.
+  pre_reg="$(q "SELECT count(*) FROM demo_seed_records;" 2>/dev/null)"
+  if [ -n "${pre_reg:-}" ] && [ "${pre_reg:-0}" -gt 0 ]; then
+    echo "REFUSING: $pre_reg demo_seed_records row(s) already present." >&2
+    echo "Run 30_demo_reset.sql first; this rehearsal cannot tell its own" >&2
+    echo "rows from a previous run's." >&2
+    exit 1
+  fi
+else
+  cleanup
+  psql -d postgres -X -q -c "CREATE DATABASE $DB TEMPLATE $SRC;" >/dev/null 2>&1 \
+    || { echo "cannot create $DB from $SRC — run scripts/ci/run-sql-tests.sh first" >&2; exit 2; }
+fi
 
 base_companies="$(q 'SELECT count(*) FROM companies;')"
 base_suppliers="$(q 'SELECT count(*) FROM suppliers;')"
@@ -155,6 +208,27 @@ sigs="$(q "SELECT count(*) FROM demo_seed_records WHERE table_name = 'electronic
 [ "${sigs:-1}" = "0" ] \
   && ok "no electronic signature was seeded" \
   || no "$sigs signature(s) were seeded — hashes cannot be carried over"
+
+# ── 10. in place, the database is handed back as it was found ────────
+#  Step 7 left the seed loaded, which is fine in a database about to be
+#  dropped and not fine in one that is staying. This is both the teardown
+#  and the assertion that the reset is exact: if the counts do not come
+#  back to their baselines, the reset removed too much or too little, and
+#  either way the next rehearsal starts from somewhere unknown.
+if [ "$INPLACE" = "1" ]; then
+  load "$ADAPTED/30_demo_reset.sql" /tmp/.r2.$$
+  rc=$?
+  rm -f /tmp/.r2.$$
+  end_companies="$(q 'SELECT count(*) FROM companies;')"
+  end_suppliers="$(q 'SELECT count(*) FROM suppliers;')"
+  end_reg="$(q 'SELECT count(*) FROM demo_seed_records;')"
+  if [ "$rc" -eq 0 ] && [ "$end_companies" = "$base_companies" ] \
+     && [ "$end_suppliers" = "$base_suppliers" ] && [ "${end_reg:-1}" = "0" ]; then
+    ok "the database was returned to its pre-rehearsal state (companies $base_companies, suppliers $base_suppliers, registry empty)"
+  else
+    no "the database was NOT returned to its pre-rehearsal state (companies $base_companies->$end_companies, suppliers $base_suppliers->$end_suppliers, registry $end_reg, exit $rc)"
+  fi
+fi
 
 printf '\n  %d passed, %d failed\n\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
