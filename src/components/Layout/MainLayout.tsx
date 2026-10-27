@@ -1,6 +1,10 @@
 import { getPermissions } from '../../lib/permissions';
 import { getIndustryCategory } from '../../lib/regulatoryProfile';
 import { resolveWorkRoles, pageOpenableBy, PAGE_SECTION } from '../../lib/access/roleAccess';
+import {
+  RAIL_GROUPS, BEYOND_DESIGN, DESTINATIONS, railEntryFor,
+} from '../../lib/navigation/hs02';
+import { mayOpenSettingsHome } from '../../lib/navigation/settingsSections';
 import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
@@ -69,6 +73,7 @@ import {
   Lock,
   ChevronRight,
   Boxes,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { usePlan } from '../../hooks/usePlan';
 import { appUrl } from '../../lib/routing';
@@ -84,6 +89,14 @@ export type PageId =
   | 'company-invites'
   | 'company-departments'
   | 'company-settings'
+  //  CF-02's Settings home. Added by Phase 2: the rail entry called
+  //  "Settings" used to be the company-profile page, which is guarded by
+  //  canManageRoles, so every configuration area sat behind a
+  //  role-administration permission.
+  | 'settings-home'
+  //  HS-02's fourteenth rail entry. W6·29 designs it (FL-01 to FL-14);
+  //  only the implementation was missing until 20261204000000.
+  | 'facility-logs'
   | 'correction-editor'
   | 'profile'
   | 'license-vault'
@@ -250,6 +263,8 @@ export const PAGE_IDS = [
   'shipment-event-log', 'cn-declarations', 'compliance-alerting', 'audit-prep',
   'coa',
   'product-specifications',
+  'settings-home',
+  'facility-logs',
 ] as const;
 
 /**
@@ -281,7 +296,10 @@ type NavigateToEventDetail = {
 };
 
 const CORRECTION_OPEN_KEY = 'cc_open_correction_id';
-const COLLAPSED_NAV_KEY = 'cc_collapsed_nav_categories';
+//  The groups no longer collapse, so the old key has nothing to
+//  store. A new key, because the shape it holds is different: host
+//  page ids that the reader has opened, not group names they closed.
+const EXPANDED_HOSTS_KEY = 'cc_expanded_nav_hosts';
 
 /**
  * Sidebar group order — the compliance cycle: see what needs me, do the work,
@@ -291,15 +309,10 @@ const COLLAPSED_NAV_KEY = 'cc_collapsed_nav_categories';
  * couple of items change category by industry (training records) and would
  * otherwise pull their group to the top of the sidebar.
  */
-const CATEGORY_ORDER = [
-  'Overview',
-  'Materials',
-  'Quality',
-  'Production',
-  'Regulatory',
-  'Traceability',
-  'More',
-];
+//  HS-02's groups, in the order the design draws them. The list itself
+//  lives in lib/navigation/hs02.ts with the destinations, so the rail's
+//  order and its contents cannot drift apart.
+const CATEGORY_ORDER: readonly string[] = RAIL_GROUPS;
 
 /**
  * ONB-08's sidebar, which is a SHORTER sidebar on purpose.
@@ -336,90 +349,33 @@ const CATEGORY_ORDER = [
  * that it belongs under More. The earlier note said no page existed for
  * Materials; one does now, and the note outlived it.
  */
-/**
- * The design names its groups and the items in each. Anything the file
- * does not name but that we still show inside those groups sorts after
- * this mark, and the rail draws a rule above the first one.
- */
-const BEYOND_DESIGN = 50;
 
-/**
- * DB-01's rail, item for item.
- *
- * THE DESIGN THIS MATCHES IS DB-01, NOT ONB-08. Those are two different
- * frames with two different sidebars, and this file previously followed
- * the onboarding one — four groups, Batch Records under Manufacturing &
- * Quality. DB-01 is the dashboard a QA Manager actually lands on and it
- * splits the work six ways: Overview, Materials, Quality, Production,
- * Regulatory, Traceability.
- *
- * FIVE OF ITS FOURTEEN ENTRIES HAVE NO PAGE: My tasks, Goods receipt,
- * QC testing, QA disposition and Traceability. They are listed anyway,
- * because the rail is meant to read as the design draws it, and each
- * opens a panel that says the screen is not built yet. A tab that opens
- * nothing is a bug; a tab that opens an approximation is worse, because
- * it looks finished.
- *
- * Declared before the object that reads it: below it, the reference is
- * in the temporal dead zone and the module throws on import.
- */
-const DB01_NAV: Record<string, { group: string; label?: string; order: number }> = {
-  'dashboard':              { group: 'Overview', order: 1 },
-  'my-tasks':               { group: 'Overview', label: 'My tasks', order: 2 },
-
-  'supplier-qualification': { group: 'Materials', label: 'Suppliers', order: 1 },
-  'goods-receipt':          { group: 'Materials', label: 'Goods receipt', order: 2 },
-  //  The design says "Material lots", which is what the page lists.
-  'materials':              { group: 'Materials', label: 'Material lots', order: 3 },
-
-  'qc-testing':             { group: 'Quality', label: 'QC testing', order: 1 },
-  'qa-disposition':         { group: 'Quality', label: 'QA disposition', order: 2 },
-  'batch-release':          { group: 'Quality', label: 'Batch release', order: 3 },
-  //  ONE entry in the design. CAPA keeps its own page under More.
-  'deviations':             { group: 'Quality', label: 'Deviation / CAPA', order: 4 },
-  'coa':                    { group: 'Quality', label: 'CoA register', order: 5 },
-
-  //  A batch manufacturing record IS the batch being run and signed.
-  'batch-execution':        { group: 'Production', label: 'Batch records', order: 1 },
-
-  'products':               { group: 'Regulatory', order: 1 },
-  'license-vault':          { group: 'Regulatory', label: 'Licence Vault', order: 2 },
-
-  //  DB-02 draws Dispatch on the Storekeeper's rail. It is PM-03's
-  //  `Distribution` column, which had no page until 20261111000000.
-  'dispatch':               { group: 'Traceability', label: 'Dispatch', order: 0 },
-  //  Beyond DB-01: the design has no frame for a specification screen,
-  //  and 20261113000000 made one necessary — a batch cannot be
-  //  released without an approved specification, so there has to be
-  //  somewhere to write one.
-  'product-specifications': { group: 'Quality', label: 'Specifications', order: BEYOND_DESIGN + 3 },
-  'traceability':           { group: 'Traceability', label: 'Traceability', order: 1 },
-  'audit-trail':            { group: 'Traceability', label: 'Audit trail', order: 2 },
-
-  //  BEYOND DB-01, AND MARKED AS SUCH. order >= BEYOND_DESIGN draws a
-  //  rule above the first of them, so each group reads as the design
-  //  draws it and anything added is visibly an addition.
-  //
-  //  These are built, working screens. They sit in the rail rather than
-  //  under More because More starts collapsed, and a screen nobody can
-  //  find reads as a screen that was never built.
-  'instruments':            { group: 'Production', order: BEYOND_DESIGN + 1 },
-  'in-process':             { group: 'Production', label: 'In-process checks', order: BEYOND_DESIGN + 2 },
-  'master-formulas':        { group: 'Production', order: BEYOND_DESIGN + 3 },
-  'access-control':         { group: 'Overview', label: 'Roles & Access', order: BEYOND_DESIGN + 1 },
-};
+//  WHERE THE RAIL IS DECIDED NOW: lib/navigation/hs02.ts.
+//
+//  This file used to hold `DB01_NAV`, a map of page -> DB-01 group,
+//  plus a fallback that sent anything missing from it to a collapsed
+//  "More" group. HS-01 row 1 decided against that arrangement —
+//  "One rail for every page and role (HS-02)" — and named DB-01 as
+//  one of the four rails it replaces.
+//
+//  So the map is gone and `DESTINATIONS` replaces it. The difference
+//  that matters is the type: it is Record<PageId, Destination>, so a
+//  page with no stated destination does not compile. There is no
+//  fallback left to fall into.
 
 /** Everything the design does not name starts collapsed. */
-const DEFAULT_COLLAPSED = ['More'];
-
-function loadCollapsedCategories(): string[] {
+//  Was ['More']. There is no More group to collapse now, and every
+//  HS-02 group is drawn flat, so nothing starts closed.
+function loadExpandedHosts(): string[] {
   try {
-    const raw = localStorage.getItem(COLLAPSED_NAV_KEY);
-    if (!raw) return DEFAULT_COLLAPSED;
+    const raw = localStorage.getItem(EXPANDED_HOSTS_KEY);
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : DEFAULT_COLLAPSED;
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : [];
   } catch {
-    return DEFAULT_COLLAPSED;
+    //  Private windows and blocked site data both land here. The rail
+    //  still works; it just forgets which hosts were open.
+    return [];
   }
 }
 
@@ -432,7 +388,26 @@ export default function MainLayout({
   const { plan, isTrialing, daysRemaining } = usePlan();
   const [toastParams, setToastParams] = useState<{ message: string; type?: 'success' | 'warning' } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsedCategories, setCollapsedCategories] = useState<string[]>(loadCollapsedCategories);
+
+  //  HS-02 draws a flat rail. Pages that belong INSIDE one of its
+  //  entries — Settings' sections, CoA under Batch Release, CAPA under
+  //  Deviation / CAPA — are reachable here as a nested list under the
+  //  host, collapsed, until Phase 2 gives the host real tabs.
+  //
+  //  Collapsed by default ON PURPOSE, and it is worth saying why this
+  //  is not the "More" problem again: More was ONE anonymous bucket
+  //  holding 80 unrelated pages, and nothing told you what was in it.
+  //  These are named children of the entry they belong to, the host is
+  //  one click away, and a host holding the current page opens itself.
+  const [expandedHosts, setExpandedHosts] = useState<string[]>(loadExpandedHosts);
+  const toggleHost = (id: string) =>
+    setExpandedHosts((prev) => {
+      const next = prev.includes(id) ? prev.filter((h) => h !== id) : [...prev, id];
+      try {
+        localStorage.setItem(EXPANDED_HOSTS_KEY, JSON.stringify(next));
+      } catch { /* storage unavailable — expansion still works for this session */ }
+      return next;
+    });
 
   const industryType = (profile as any)?.industry_type as string | null | undefined;
   const isLogisticsProfile = industryType?.trim().toLowerCase() === 'logistics & courier';
@@ -551,6 +526,10 @@ export default function MainLayout({
       { id: 'sop-library', label: 'SOP Library', icon: BookMarked, category: 'Quality Operations', hidden: !usesManufacturingQuality },
       { id: 'supplier-qualification', label: 'Supplier Qual', icon: PackageCheck, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       { id: 'gmp-inspection', label: 'GMP Inspection', icon: Factory, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
+      //  HS-01 row 7: "GMP Inspection — Rail; Facility logs sits under
+      //  it." Same industry gate as the rest of this cluster; no new
+      //  permission key was invented for it.
+      { id: 'facility-logs', label: 'Facility logs', icon: ClipboardList, category: 'Quality Operations', hidden: isLogisticsProfile || !usesManufacturingQuality },
       // Training records are inspection evidence for a manufacturer — an
       // inspector asks for them. They stay in Administration for sectors that
       // don't run a quality system.
@@ -635,6 +614,12 @@ export default function MainLayout({
 
       // ── 11. Administration ───────────────────────────────────────────
       { id: 'billing', label: 'Billing & Plan', icon: CreditCard, category: 'Administration', hidden: !perms.canViewBilling },
+      //  CF-02. The gate is the UNION of the sections' own existing
+      //  checks — never a permission of its own — so this entry appears
+      //  exactly when there is something behind it. See
+      //  lib/navigation/settingsSections.ts.
+      { id: 'settings-home', label: 'Settings', icon: SettingsIcon, category: 'Administration',
+        hidden: !mayOpenSettingsHome(perms, profile as never) },
       { id: 'company-settings', label: 'Company Settings', icon: Building2, category: 'Administration', hidden: !perms.canManageRoles },
       { id: 'company-members', label: 'Members', icon: User, category: 'Administration', hidden: !perms.canViewMembers },
       { id: 'company-invites', label: 'Invites', icon: User, category: 'Administration', hidden: !perms.canInvite },
@@ -662,16 +647,61 @@ export default function MainLayout({
       { id: 'legal-partner-dashboard', label: 'Partner Console', icon: LayoutDashboard, category: 'External Partners', hidden: profile?.role !== 'legal_partner' },
     ];
 
-  //  DB-01's grouping, applied AFTER the list above rather than written
+  //  HS-02's grouping, applied AFTER the list above rather than written
   //  into it. Every `hidden` test has already run, so an item the person
   //  may not see never reaches this and no permission is widened by it.
-  //  An item the design does not name keeps its own label and moves to
-  //  "More"; one it does name takes the design's group, order and words.
+  //
+  //  Each item takes its destination's group, order and words. A page
+  //  that belongs INSIDE another one — CoA inside Batch Release, CAPA
+  //  inside Deviation / CAPA, every Settings section inside Settings —
+  //  is marked `parent` here and drawn nested below its host further
+  //  down, rather than being given a rail entry of its own.
+  //
+  //  `category: 'Hidden'` is kept for the one page that carries it
+  //  (`correction-editor`), and a standalone page gets the same
+  //  treatment: reachable by its own route, absent from the rail by
+  //  statement rather than by omission.
   const regrouped = navItems.map((item) => {
-    const placed = DB01_NAV[item.id];
-    return placed
-      ? { ...item, category: placed.group, label: placed.label ?? item.label, order: placed.order }
-      : { ...item, category: item.category === 'Hidden' ? 'Hidden' : 'More', order: 99 };
+    const dest = DESTINATIONS[item.id];
+    if (!dest || item.category === 'Hidden') {
+      return { ...item, category: 'Hidden', order: 99, parent: null as PageId | null };
+    }
+    switch (dest.kind) {
+      case 'rail':
+      case 'pendingDesign':
+      case 'review':
+        return {
+          ...item, category: dest.group as string, label: dest.label,
+          order: dest.order, parent: null as PageId | null,
+        };
+      //  A record page is reached from its list, never from the rail.
+      //  It keeps its route and drops out of the sidebar entirely.
+      case 'detail':
+        return { ...item, category: 'Hidden', order: 99, parent: null as PageId | null };
+      case 'hosted': {
+        //  The group is the host's, so an orphaned child (host hidden
+        //  by a permission the child does not need) can still be drawn
+        //  in the right place instead of vanishing.
+        const rail = railEntryFor(item.id);
+        const railDest = rail ? DESTINATIONS[rail] : undefined;
+        const group =
+          railDest && (railDest.kind === 'rail' || railDest.kind === 'pendingDesign' || railDest.kind === 'review')
+            ? (railDest.group as string)
+            : 'Hidden';
+        return {
+          ...item,
+          category: group,
+          label: dest.label ?? item.label,
+          //  Sorts after every rail entry in the group; the renderer
+          //  pulls these out and draws them under their host anyway.
+          order: BEYOND_DESIGN + 90,
+          parent: dest.host as PageId | null,
+        };
+      }
+      case 'standalone':
+      default:
+        return { ...item, category: 'Hidden', order: 99, parent: null as PageId | null };
+    }
   });
 
   //  PM-03 APPLIED TO THE RAIL. Until now nothing in this file consulted
@@ -739,17 +769,6 @@ export default function MainLayout({
   const categories = [...new Set(displayNavItems.map(item => item.category))]
     .sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
 
-  const toggleCategory = (category: string) => {
-    setCollapsedCategories(prev => {
-      const next = prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category];
-      try {
-        localStorage.setItem(COLLAPSED_NAV_KEY, JSON.stringify(next));
-      } catch { /* storage unavailable — collapse still works for this session */ }
-      return next;
-    });
-  };
 
   return (
     <div className="min-h-screen flex font-sans bg-[var(--color-bg)] text-[var(--color-text-primary)]">
@@ -815,92 +834,111 @@ export default function MainLayout({
         {/* Navigation Categories - Each in its own card */}
         <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-4 scrollbar-hide">
           {categories.map(category => {
-            //  Sorted by the design's order within a group, so
-            //  Manufacturing & Quality reads the way a batch moves
-            //  rather than the way the array happens to be written.
-            const items = displayNavItems
-              .filter(item => item.category === category)
+            const inGroup = displayNavItems.filter(item => item.category === category);
+
+            //  A hosted page whose HOST is not visible is promoted to a
+            //  top-level entry in the same group. Without this, a
+            //  permission that hides the host would silently take the
+            //  child with it — which is how pages got lost before.
+            const visibleIds = new Set(inGroup.map(i => i.id));
+            const topLevel = inGroup
+              .filter(i => !i.parent || !visibleIds.has(i.parent))
               .sort((a, b) => a.order - b.order);
-            if (items.length === 0) return null;
+            if (topLevel.length === 0) return null;
 
-            // A collapsed group still opens itself when it holds the current page,
-            // so navigating from a KPI or a link never lands you somewhere the
-            // sidebar can't show you.
-            const holdsCurrentPage = items.some(item => item.id === currentPage);
-            const isCollapsed = collapsedCategories.includes(category) && !holdsCurrentPage;
+            const childrenOf = (id: string) => inGroup.filter(i => i.parent === id);
 
-            //  THE DESIGN'S FOUR GROUPS ARE NOT CARDS AND DO NOT COLLAPSE.
-            //  ONB-08 draws them flat on the navy rail: a green label, the
-            //  items under it, no panel, no border, no chevron. Only
-            //  "More" — which the design has no equivalent of, and which
-            //  holds every page the file does not name — keeps a toggle,
-            //  because it is the one group long enough to need one.
-            const isDesignGroup = category !== 'More';
-            const showItems = isDesignGroup || !isCollapsed;
+            //  HS-02's groups are not cards and do not collapse: a green
+            //  label, the items under it, no panel, no border, no
+            //  chevron. Every group is now one of the design's, so every
+            //  group is drawn that way — the card-with-a-chevron variant
+            //  existed only for "More", which no longer exists.
 
             return (
-              <div
-                key={category}
-                className={isDesignGroup
-                  ? 'space-y-1'
-                  : 'dash-card border dash-border rounded-2xl p-2.5 shadow-sm space-y-1'}
-              >
-                {isDesignGroup ? (
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 mb-1 text-left"
-                      style={{ color: 'var(--color-accent)' }}>
-                    {category}
-                  </h4>
-                ) : (
-                  <button
-                    onClick={() => toggleCategory(category)}
-                    aria-expanded={!isCollapsed}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-1 mb-1 min-h-[28px] rounded-lg hover:dash-surface-alt transition-colors group/cat"
-                  >
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary text-left">{category}</h4>
-                    <span className="flex items-center gap-1.5 dash-text-tertiary">
-                      {isCollapsed && (
-                        <span className="text-[10px] font-semibold tabular-nums">{items.length}</span>
-                      )}
-                      {isCollapsed
-                        ? <ChevronRight size={14} strokeWidth={2} />
-                        : <ChevronDown size={14} strokeWidth={2} />}
-                    </span>
-                  </button>
-                )}
-                {showItems && items.map((item, i) => {
+              <div key={category} className="space-y-1">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 mb-1 text-left"
+                    style={{ color: 'var(--color-accent)' }}>
+                  {category}
+                </h4>
+                {topLevel.map((item, i) => {
                   const Icon = item.icon;
                   const isActive = currentPage === item.id;
-                  //  The rule between what ONB-08 lists and what we added
-                  //  to its groups. Drawn above the FIRST item past the
-                  //  mark, and only when the design's own items precede
-                  //  it — a group that is entirely ours gets no rule.
+                  const kids = childrenOf(item.id);
+                  const holdsChild = kids.some(k => k.id === currentPage);
+                  const open = expandedHosts.includes(item.id) || holdsChild;
+
+                  //  The rule between what the design names and what we
+                  //  added to its groups. Drawn above the FIRST item past
+                  //  the mark, and only when the design's own items
+                  //  precede it — a group that is entirely ours gets no
+                  //  rule.
                   const opensExtras = item.order >= BEYOND_DESIGN
-                    && i > 0 && items[i - 1]!.order < BEYOND_DESIGN;
+                    && i > 0 && topLevel[i - 1]!.order < BEYOND_DESIGN;
+
                   return (
                     <Fragment key={item.id}>
                     {opensExtras && (
                       <div className="mx-3 my-1.5 border-t dash-border" aria-hidden />
                     )}
-                    <button
-                      onClick={() => { onNavigate(item.id); setSidebarOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all group ${isActive
-                        ? 'text-white shadow-md'
-                        : 'text-[var(--color-text-secondary)] hover:dash-surface-alt hover:text-[var(--color-text-primary)]'
-                        }`}
-                      style={isActive ? { background: 'var(--color-accent)' } : undefined}
-                    >
-                      <Icon
-                        size={20}
-                        strokeWidth={1.5}
-                        className={`flex-shrink-0 ${isActive ? 'text-white' : 'dash-text-tertiary group-hover:text-[var(--color-text-primary)]'}`}
-                      />
-                      {/*  No tracking-wide, and 13px: at 14px with extra
-                           letter-spacing "Registrations & Licences" ran
-                           past the rail and truncated to
-                           "Registrations & Licenc…". The design fits it
-                           on one line, so the label does too. */}
-                      <span className="font-medium text-[13px] truncate" title={item.label}>{item.label}</span>
-                    </button>
+                    <div className="flex items-stretch gap-1">
+                      <button
+                        onClick={() => { onNavigate(item.id); setSidebarOpen(false); }}
+                        className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 rounded-xl transition-all group ${isActive
+                          ? 'text-white shadow-md'
+                          : 'text-[var(--color-text-secondary)] hover:dash-surface-alt hover:text-[var(--color-text-primary)]'
+                          }`}
+                        style={isActive ? { background: 'var(--color-accent)' } : undefined}
+                      >
+                        <Icon
+                          size={20}
+                          strokeWidth={1.5}
+                          className={`flex-shrink-0 ${isActive ? 'text-white' : 'dash-text-tertiary group-hover:text-[var(--color-text-primary)]'}`}
+                        />
+                        {/*  No tracking-wide, and 13px: at 14px with extra
+                             letter-spacing "Registrations & Licences" ran
+                             past the rail and truncated to
+                             "Registrations & Licenc…". The design fits it
+                             on one line, so the label does too. */}
+                        <span className="font-medium text-[13px] truncate" title={item.label}>{item.label}</span>
+                      </button>
+                      {kids.length > 0 && (
+                        <button
+                          onClick={() => toggleHost(item.id)}
+                          aria-expanded={open}
+                          aria-label={`${open ? 'Hide' : 'Show'} ${item.label} sections`}
+                          className="shrink-0 px-2 rounded-xl flex items-center justify-center min-w-[32px] dash-text-tertiary hover:dash-surface-alt transition-colors"
+                        >
+                          <span className="text-[10px] font-semibold tabular-nums mr-1">{kids.length}</span>
+                          {open ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                        </button>
+                      )}
+                    </div>
+                    {open && kids.length > 0 && (
+                      <div className="ml-4 pl-3 border-l dash-border space-y-0.5">
+                        {kids.map(kid => {
+                          const KidIcon = kid.icon;
+                          const kidActive = currentPage === kid.id;
+                          return (
+                            <button
+                              key={kid.id}
+                              onClick={() => { onNavigate(kid.id); setSidebarOpen(false); }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 min-h-[32px] rounded-lg transition-all group ${kidActive
+                                ? 'text-white shadow-sm'
+                                : 'text-[var(--color-text-secondary)] hover:dash-surface-alt hover:text-[var(--color-text-primary)]'
+                                }`}
+                              style={kidActive ? { background: 'var(--color-accent)' } : undefined}
+                            >
+                              <KidIcon
+                                size={16}
+                                strokeWidth={1.5}
+                                className={`flex-shrink-0 ${kidActive ? 'text-white' : 'dash-text-tertiary group-hover:text-[var(--color-text-primary)]'}`}
+                              />
+                              <span className="font-medium text-[12.5px] truncate" title={kid.label}>{kid.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     </Fragment>
                   );
                 })}

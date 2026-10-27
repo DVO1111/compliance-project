@@ -11,7 +11,8 @@ import type { Permissions } from '../lib/permissions';
 import { fetchRoleById, ensureSystemRoles } from '../lib/roleService';
 import { logger } from '../lib/logger';
 import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/passwordReset';
-import { canRestoreAuthSession, isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
+import { canRestoreAuthSession, isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE,
+  isSignupNotApprovedError, SIGNUP_NOT_APPROVED_MESSAGE } from '../lib/auth/allowlist';
 import { isInviteCallback } from '../lib/auth/inviteCallback';
 import { appUrl, SIGN_OUT_DESTINATION } from '../lib/routing';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
@@ -407,6 +408,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (authError) {
       logger.error('Signup failed:', authError);
+      /*
+       *  A refusal from the allowlist is not a failure to report as one.
+       *  It arrives either from the Before User Created hook — which
+       *  aborts the signup transaction, so no auth.users row is written —
+       *  or from provision_profile's guard if the hook is not configured
+       *  on this project. Both mean the same thing to the person typing,
+       *  and Supabase's own wording for a hook rejection is not something
+       *  to show them.
+       */
+      if (isSignupNotApprovedError(authError.message)) {
+        throw new Error(SIGNUP_NOT_APPROVED_MESSAGE);
+      }
       throw authError;
     }
 
