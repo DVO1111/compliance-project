@@ -99,7 +99,9 @@ export async function qaManagerCounts(companyId: string): Promise<QaManagerCount
     countOf('batch_records', (q) => q.eq('company_id', companyId).eq('status', 'in_progress')),
     countOf('deviations', (q) => q.eq('company_id', companyId).neq('status', 'closed')),
     countOf('capa_records', (q) => q.eq('company_id', companyId).lt('due_date', new Date().toISOString())),
-    countOf('suppliers', (q) => q.eq('company_id', companyId).neq('status', 'approved')),
+    countOf('suppliers', (q) =>
+      q.eq('company_id', companyId).neq('qualification_status', 'approved')
+    ),
     countOf('batch_records', (q) => q.eq('company_id', companyId).eq('status', 'released')),
   ]);
   return { quarantine, qcPending, qaReview, production, deviations, capaOverdue, procurement, distribution };
