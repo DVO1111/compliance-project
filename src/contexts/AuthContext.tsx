@@ -14,8 +14,9 @@ import { isAccountEnumerationError, passwordResetRedirectTo } from '../lib/auth/
 import { canRestoreAuthSession, isEmailAllowedToSignIn, SIGNIN_NOT_ALLOWED_MESSAGE } from '../lib/auth/allowlist';
 import { isInviteCallback } from '../lib/auth/inviteCallback';
 import {
-  activeCompanyStorageKey, resolveActiveCompany, isSwitchAuthorised,
-  isMissingFunctionError, type AuthorisedCompany,
+  activeCompanyStorageKey, resolveActiveCompany,
+  isMissingFunctionError, createLoadSequencer, switchWorkspace,
+  type AuthorisedCompany,
 } from '../lib/auth/activeCompany';
 import { appUrl, SIGN_OUT_DESTINATION } from '../lib/routing';
 import { initFrameworkLibrary } from '../lib/frameworkLibraryService';
@@ -30,6 +31,38 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row'];
  * supabase/migrations/20261215000000_my_companies.sql.
  */
 export type CompanyMembership = AuthorisedCompany;
+
+/**
+ * WHICH WORKSPACE AM I LOOKING AT — AS ONE VALUE.
+ *
+ * These five used to be five separate `useState` calls, and that was the
+ * bug. `switchCompany` set the active company immediately and the profile
+ * only after four queries returned, so between those two points the header
+ * named the new company while every page still rendered the old company's
+ * rows. On a fast local database that window was milliseconds; on a slow
+ * one it was measured at over eleven seconds.
+ *
+ * Batching does not fix it, because the updates are separated by `await`:
+ * React batches within a synchronous block, not across one. Holding them in
+ * a single state value does fix it, structurally — there is exactly one
+ * setter, so a render either has the whole new workspace or the whole old
+ * one. No intermediate state exists to be observed.
+ */
+interface WorkspaceView {
+  profile: Profile | null;
+  companies: CompanyMembership[];
+  activeCompanyId: string | null;
+  defaultCompanyId: string | null;
+  companiesError: string | null;
+}
+
+const EMPTY_WORKSPACE: WorkspaceView = {
+  profile: null,
+  companies: [],
+  activeCompanyId: null,
+  defaultCompanyId: null,
+  companiesError: null,
+};
 
 /** One row of `app_my_companies()`, as PostgREST returns it. */
 interface MyCompaniesRow {
@@ -209,7 +242,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
@@ -219,10 +251,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => INITIAL_AUTH_CALLBACK_IS_INVITE || hasInviteCallback()
   );
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
-  const [companies, setCompanies] = useState<CompanyMembership[]>([]);
-  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
-  const [defaultCompanyId, setDefaultCompanyId] = useState<string | null>(null);
-  const [companiesError, setCompaniesError] = useState<string | null>(null);
+  //  ONE value, so the header and the pages can never disagree — see
+  //  WorkspaceView above for why this is not five useState calls.
+  const [workspace, setWorkspace] = useState<WorkspaceView>(EMPTY_WORKSPACE);
+  const { profile, companies, activeCompanyId, defaultCompanyId, companiesError } = workspace;
+  //  The profile alone, for the paths that only learn it could not be read.
+  //  Everything else about the workspace is left as it was: failing to read
+  //  a profile is not a reason to forget which companies the person holds.
+  const setProfileOnly = (p: Profile | null) =>
+    setWorkspace((w) => (w.profile === p ? w : { ...w, profile: p }));
   const [switchingCompany, setSwitchingCompany] = useState(false);
   //  A ref as well as state, because the auth listener and the
   //  visibility-change refresh below are registered once and would
@@ -230,6 +267,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   //  registered — a background refresh would then silently reload the
   //  profile for the workspace the person had already switched away from.
   const activeCompanyIdRef = useRef<string | null>(null);
+  /**
+   * Which profile load is the current one.
+   *
+   * Two switches in quick succession start two loads, and they can finish
+   * in either order. Without this the slower one would publish last and the
+   * person would end up in the workspace they did NOT choose last. Each
+   * load takes a ticket on the way in and throws its result away if a newer
+   * load has started since.
+   */
+  const loadSeq = useRef(createLoadSequencer()).current;
   // Track whether the initial profile load has completed. After that,
   // background refreshes (token refresh, window focus) must NEVER set
   // loading=true — that unmounts the entire app and loses all page state.
@@ -338,7 +385,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await loadProfile(session.user.id);
           }
         } else if (event === 'SIGNED_OUT') {
-          setProfile(null);
+          setProfileOnly(null);
           //  Also reached when the session expires or is revoked from
           //  another tab, which is why it is not enough to clear this in
           //  signOut() alone.
@@ -378,7 +425,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadProfileInner(userId, preferredCompanyId);
     } catch (err) {
       logger.error('loadProfile failed:', err);
-      setProfile(null);
+      setProfileOnly(null);
     } finally {
       setLoading(false);
       initialLoadDone.current = true;
@@ -388,14 +435,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Loads the profile for ONE workspace — the active one.
    *
-   * Returns true when a profile was set. `switchCompany` needs that answer:
-   * a switch that could not load the new workspace's profile has to put the
-   * old one back rather than leave the two disagreeing.
+   * Returns true when the workspace was published. `switchCompany` needs
+   * that answer: a switch whose profile could not be read must leave the
+   * previous workspace exactly as it was rather than half-apply.
+   *
+   * `keepOnFailure` is what makes a failed switch harmless. On the initial
+   * load, failing to read a profile has to be shown — that is the "signed
+   * in, but the product does not know who you are" screen. On a SWITCH it
+   * must not be: the person already has a working workspace on screen, and
+   * blanking it because the other one could not be read would turn a failed
+   * click into a broken session.
    */
   const loadProfileInner = async (
     userId: string,
     preferredCompanyId?: string | null,
+    opts?: { keepOnFailure?: boolean },
   ): Promise<boolean> => {
+    //  Take a ticket. Checked again just before publishing, so a load that
+    //  has been overtaken by a newer one discards its result instead of
+    //  overwriting the workspace the person actually chose.
+    const seq = loadSeq.begin();
+    const keepOnFailure = opts?.keepOnFailure === true;
+    const failed = (reason: string | null): boolean => {
+      if (keepOnFailure) return false;
+      if (reason !== null) setProfileLoadError(reason);
+      setProfileOnly(null);
+      return false;
+    };
     //  THE MEMBERSHIP IS FETCHED ALONGSIDE THE PROFILE, NOT AFTER IT.
     //  It used to wait for the profile so it could filter on company_id —
     //  but company_members is keyed on user_id too, so the row can be
@@ -436,9 +502,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (profileRes.error) {
       logger.error('loadProfile error:', profileRes.error);
-      setProfileLoadError(profileRes.error.message);
-      setProfile(null);
-      return false;
+      return failed(profileRes.error.message);
     }
 
     const baseProfile = (profileRes.data ?? null) as ProfileRow | null;
@@ -446,9 +510,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If no profile row exists, stop — but say so, because "no row" and
     // "the query failed" need different answers from the person.
     if (!baseProfile) {
-      setProfileLoadError('NO_PROFILE');
-      setProfile(null);
-      return false;
+      return failed('NO_PROFILE');
     }
 
     // ── WHICH WORKSPACE IS THIS LOAD FOR? ──────────────────────────────
@@ -507,14 +569,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listFailed: !!companiesRes?.error,
     });
 
-    setCompanies(authorisedRows);
-    setCompaniesError(companyListError);
-    setDefaultCompanyId(baseProfile.company_id ?? null);
-    activeCompanyIdRef.current = activeCompany;
-    setActiveCompanyId(activeCompany);
-    //  Remember what was settled on, so a refresh comes back to the same
-    //  workspace. Written only after it has been validated above.
-    writeStoredCompany(userId, activeCompany);
+    /*
+     *  NOTHING IS PUBLISHED HERE.
+     *
+     *  This block used to set the companies, the default and the active
+     *  company at this point — before the role lookups below, and before
+     *  the profile. That is precisely what let the header run ahead of the
+     *  page content. Every one of those values is now carried to the single
+     *  `setWorkspace` at the end of this function, so the whole workspace
+     *  becomes visible in one render or not at all.
+     */
 
     let company_role: string | null = null;
     let module_access: string[] | null = null;
@@ -592,17 +656,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toJurisdictionId((baseProfile as any).default_jurisdiction ?? (baseProfile as any).primary_markets?.[0])
     );
 
+    /*
+     *  SUPERSEDED BY A LATER SWITCH?
+     *
+     *  Two clicks in quick succession start two loads. They can finish in
+     *  either order, and without this check the SLOWER one would publish
+     *  last — leaving the person in the workspace they did not choose last,
+     *  with the header to match. The ticket is taken at the top of this
+     *  function; if it is no longer the current one, this result is stale
+     *  and is dropped. Returning true is right: this load did not fail, it
+     *  was simply overtaken, and the newer one owns the outcome.
+     */
+    if (!loadSeq.isCurrent(seq)) {
+      logger.warn('a newer workspace load superseded this one — discarding the stale result');
+      return true;
+    }
+
+    //  THE ONE PUBLICATION POINT. Everything the interface reads about the
+    //  active workspace changes here, in a single render: the profile the
+    //  pages scope their queries by, the name the header draws, the list
+    //  the menu offers, and which of them is the profile's own default.
+    //  There is no ordering between them to get wrong.
+    activeCompanyIdRef.current = activeCompany;
+    //  Remember what was settled on, so a refresh comes back to the same
+    //  workspace. Written only after it has been validated above.
+    writeStoredCompany(userId, activeCompany);
     setProfileLoadError(null);
-    setProfile({
-      ...baseProfile,
-      //  THE ACTIVE WORKSPACE IS PUBLISHED AS `company_id`, deliberately.
-      //  Every company-scoped query and effect in the app already reads
-      //  this field; overwriting it here is what makes switching reach all
-      //  of them without 84 call sites having to know switching exists.
-      //  The stored default is kept beside it and is never written back.
-      company_id: activeCompany,
-      default_company_id: baseProfile.company_id ?? null,
-      company_role, module_access, operational_roles, customPermissions,
+    setWorkspace({
+      companies: authorisedRows,
+      companiesError: companyListError,
+      activeCompanyId: activeCompany,
+      defaultCompanyId: baseProfile.company_id ?? null,
+      profile: {
+        ...baseProfile,
+        //  THE ACTIVE WORKSPACE IS PUBLISHED AS `company_id`, deliberately.
+        //  Every company-scoped query and effect in the app already reads
+        //  this field; overwriting it here is what makes switching reach all
+        //  of them without 84 call sites having to know switching exists.
+        //  The stored default is kept beside it and is never written back.
+        company_id: activeCompany,
+        default_company_id: baseProfile.company_id ?? null,
+        company_role, module_access, operational_roles, customPermissions,
+      },
     });
     return true;
   };
@@ -824,10 +919,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearCompanyState = (userId?: string | null) => {
     if (userId) writeStoredCompany(userId, null);
     activeCompanyIdRef.current = null;
-    setActiveCompanyId(null);
-    setDefaultCompanyId(null);
-    setCompanies([]);
-    setCompaniesError(null);
+    //  Any load still in flight is now stale: bump the ticket so it cannot
+    //  publish a signed-out person's workspace after the fact.
+    loadSeq.invalidate();
+    setWorkspace(EMPTY_WORKSPACE);
     setSwitchingCompany(false);
   };
 
@@ -848,7 +943,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { window.history.replaceState({}, '', appUrl(SIGN_OUT_DESTINATION)); }
     catch { /* history is unavailable in some embedded views */ }
     setUser(null);
-    setProfile(null);
+    setProfileOnly(null);
     setSession(null);
     setIsRecoveringPassword(false);
   };
@@ -1043,11 +1138,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    *
    * The sequence matters. The company is validated against the server's own
    * list FIRST, so a request for a company this person does not hold never
-   * changes any state at all. Only then is the active company moved and the
-   * profile — role, module access, operational roles, custom permissions —
-   * reloaded for it. If that reload fails, the previous workspace is put
-   * back and reloaded, because the one state this must never end in is a
-   * header naming one company over another company's data.
+   * changes any state at all.
+   *
+   * THEN IT CHANGES NOTHING UNTIL THE NEW WORKSPACE IS READY. This function
+   * used to move the active company immediately and leave the profile to
+   * catch up when four queries returned, which is exactly how the header
+   * came to name one company over another company's rows. It now moves
+   * nothing: `loadProfileInner` publishes the whole workspace in a single
+   * render when it succeeds, and publishes nothing at all when it does not.
+   *
+   * That makes rollback trivial rather than delicate — there is no partial
+   * state to undo. A failed switch leaves the previous workspace on screen,
+   * untouched, and returns the error for the selector to show.
    *
    * Note what this does NOT do: it does not write `profiles.company_id`.
    * Switching is a view of a workspace, not a change of which workspace is
@@ -1056,39 +1158,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const switchCompany = async (companyId: string): Promise<{ error: Error | null }> => {
     if (!user?.id) return { error: new Error('You are not signed in.') };
-    if (!companyId) return { error: new Error('No workspace was chosen.') };
-    if (companyId === activeCompanyIdRef.current) return { error: null };
 
-    //  VALIDATED AGAINST THE SERVER'S ANSWER, not against anything the
-    //  caller supplied. `companies` is whatever app_my_companies() last
-    //  returned for this session. Belt and braces: even a forged id past
+    //  The decisions live in lib/auth/activeCompany.ts, where controlled
+    //  promises can reproduce the timing this has to get right. Membership
+    //  is judged against `companies` — the server's own answer — before the
+    //  loader is reached at all. Belt and braces: even a forged id past
     //  this point reads nothing, because app_is_company_member() guards
     //  every company-scoped table on every statement.
-    if (!isSwitchAuthorised(companyId, companies)) {
-      logger.warn('refused a switch to a workspace this account does not hold');
-      return { error: new Error('You do not have access to that workspace.') };
-    }
-
-    const previous = activeCompanyIdRef.current;
-    setSwitchingCompany(true);
-    try {
-      activeCompanyIdRef.current = companyId;
-      setActiveCompanyId(companyId);
-      const ok = await loadProfileInner(user.id, companyId);
-      if (!ok) throw new Error('The workspace opened but its profile could not be read.');
-      return { error: null };
-    } catch (err) {
-      logger.error('switchCompany failed:', err);
-      activeCompanyIdRef.current = previous;
-      setActiveCompanyId(previous);
-      //  Put the previous workspace's profile back. If even that fails the
-      //  last good profile stays on screen, which is consistent with the
-      //  restored active company.
-      try { await loadProfileInner(user.id, previous); } catch { /* keep the last good profile */ }
-      return { error: err as Error };
-    } finally {
-      setSwitchingCompany(false);
-    }
+    return switchWorkspace({
+      companyId,
+      currentCompanyId: activeCompanyIdRef.current,
+      authorised: companies,
+      setBusy: setSwitchingCompany,
+      onError: (err) => logger.error('switchCompany failed:', err),
+      //  `keepOnFailure` is the whole of the rollback: a workspace that
+      //  cannot be read publishes nothing, so the previous profile,
+      //  companies, header and pages all stay exactly as they were.
+      load: (id) => loadProfileInner(user.id, id, { keepOnFailure: true }),
+    });
   };
 
   //  ── A REVOKED ROLE AND AN OPEN TAB ──

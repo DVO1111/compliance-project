@@ -13,8 +13,41 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveActiveCompany, isSwitchAuthorised, activeCompanyStorageKey,
-  isMissingFunctionError, type AuthorisedCompany,
+  isMissingFunctionError, createLoadSequencer, switchWorkspace,
+  type AuthorisedCompany,
 } from '../lib/auth/activeCompany';
+
+/**
+ * A promise this test resolves by hand.
+ *
+ * Every timing test below uses one. No sleeps, no fake timers, no
+ * flakiness: the test decides exactly when the "database" answers, and can
+ * inspect the world while the answer is still outstanding — which is the
+ * only moment the bug being guarded against was ever visible.
+ */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+/**
+ * The smallest thing that behaves like the screen.
+ *
+ * `publish` is atomic on purpose — that is what AuthContext's single
+ * `setWorkspace` call buys, and these tests assert the orchestration never
+ * asks for anything less.
+ */
+function fakeScreen(initial: string) {
+  const view = { header: initial, rows: initial };
+  return {
+    view,
+    publish(company: string) { view.header = company; view.rows = company; },
+    /** The state the bug produced: header one company, rows another. */
+    get isTorn() { return view.header !== view.rows; },
+  };
+}
 
 const STERLIN = '3b08610c-9262-46a4-863d-72751fe0ee13';
 const IBADAN = '43ff9447-0022-5109-b9bf-edea7cc884df';
@@ -204,5 +237,265 @@ describe('the remembered workspace is scoped to one account', () => {
 
   it('is not a bare shared key', () => {
     expect(activeCompanyStorageKey('u1')).not.toBe('criateur_active_company_');
+  });
+});
+
+/* ===================================================================
+ *  THE RACE CONDITION, AND WHY THESE TESTS EXIST
+ *
+ *  Shipped in #37: switchCompany set the active company immediately and
+ *  the profile only after four queries returned. Between those two points
+ *  the header named the new company while every page still rendered the
+ *  old company's rows. Measured at over eleven seconds against a database
+ *  that had just finished crash recovery.
+ *
+ *  React batching does not fix it — the updates are separated by `await`,
+ *  and batching works within a synchronous block, not across one. The fix
+ *  is that nothing is published until the load succeeds, and then all of
+ *  it is published at once.
+ *
+ *  Every test here drives a promise the test itself resolves, so the
+ *  moment "the query is still outstanding" is inspectable and the result
+ *  is deterministic.
+ * =================================================================== */
+
+const ACME: AuthorisedCompany = { company_id: 'c-acme', company_name: 'Acme', role: 'owner' };
+const BETA: AuthorisedCompany = { company_id: 'c-beta', company_name: 'Beta', role: 'member' };
+const BOTH = [ACME, BETA];
+
+describe('switchWorkspace — nothing changes until the load succeeds', () => {
+  it('1. publishes NOTHING while a slow profile query is outstanding', async () => {
+    const screen = fakeScreen('c-acme');
+    const gate = deferred<boolean>();
+    const busy: boolean[] = [];
+
+    const pending = switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: (b) => busy.push(b),
+      load: async (id) => { const ok = await gate.promise; if (ok) screen.publish(id); return ok; },
+    });
+
+    //  THE MOMENT THAT USED TO BE BROKEN. The switch is in flight and the
+    //  database has not answered. Before the fix the header already said
+    //  "Beta" here while the rows still said "Acme".
+    await Promise.resolve();
+    expect(screen.view.header).toBe('c-acme');
+    expect(screen.view.rows).toBe('c-acme');
+    expect(screen.isTorn).toBe(false);
+    expect(busy[0]).toBe(true);           // the indicator IS running
+
+    gate.resolve(true);
+    expect((await pending).error).toBeNull();
+    expect(screen.view).toEqual({ header: 'c-beta', rows: 'c-beta' });
+    expect(busy).toEqual([true, false]);  // and it stops
+  });
+
+  it('2. header and rows are never observed disagreeing, at any point', async () => {
+    const screen = fakeScreen('c-acme');
+    const gate = deferred<boolean>();
+    const samples: boolean[] = [];
+    const sample = () => samples.push(screen.isTorn);
+
+    const pending = switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: sample,
+      load: async (id) => { sample(); const ok = await gate.promise; sample(); if (ok) screen.publish(id); sample(); return ok; },
+    });
+    sample(); await Promise.resolve(); sample();
+    gate.resolve(true); await pending; sample();
+
+    expect(samples.length).toBeGreaterThanOrEqual(6);
+    expect(samples).not.toContain(true);
+  });
+
+  it('3. a successful switch leaves the new company everywhere', async () => {
+    const screen = fakeScreen('c-acme');
+    const r = await switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: () => {}, load: async (id) => { screen.publish(id); return true; },
+    });
+    expect(r.error).toBeNull();
+    expect(screen.view).toEqual({ header: 'c-beta', rows: 'c-beta' });
+  });
+});
+
+describe('switchWorkspace — a failed switch keeps the previous workspace', () => {
+  it('4a. a load that returns false changes nothing and reports why', async () => {
+    const screen = fakeScreen('c-acme');
+    const busy: boolean[] = [];
+    const r = await switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: (b) => busy.push(b),
+      load: async () => false,          // publishes nothing, as keepOnFailure does
+    });
+    expect(r.error?.message).toMatch(/still in the previous one/i);
+    expect(screen.view).toEqual({ header: 'c-acme', rows: 'c-acme' });
+    expect(busy).toEqual([true, false]);   // the indicator still stops
+  });
+
+  it('4b. a load that THROWS also changes nothing', async () => {
+    const screen = fakeScreen('c-acme');
+    const seen: unknown[] = [];
+    const r = await switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: () => {}, onError: (e) => seen.push(e),
+      load: async () => { throw new Error('connection lost'); },
+    });
+    expect(r.error?.message).toBe('connection lost');
+    expect(seen).toHaveLength(1);
+    expect(screen.view).toEqual({ header: 'c-acme', rows: 'c-acme' });
+  });
+
+  it('4c. an unauthorised company never reaches the loader', async () => {
+    //  The authorisation check must happen BEFORE any work, so a company
+    //  this person does not hold cannot even cause a query.
+    let called = 0;
+    const r = await switchWorkspace({
+      companyId: 'c-stranger', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: () => {}, load: async () => { called += 1; return true; },
+    });
+    expect(r.error?.message).toMatch(/do not have access/i);
+    expect(called).toBe(0);
+  });
+
+  it('4d. switching to the one already open is a no-op, not a reload', async () => {
+    let called = 0;
+    const r = await switchWorkspace({
+      companyId: 'c-acme', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: () => {}, load: async () => { called += 1; return true; },
+    });
+    expect(r.error).toBeNull();
+    expect(called).toBe(0);
+  });
+});
+
+describe('switchWorkspace — a slow custom-role lookup is inside the atomic step', () => {
+  it('5. the extra await adds no intermediate state', async () => {
+    /*
+     *  custom_roles is fetched by id AFTER the first four queries, so it
+     *  is a second await inside the load. It used to sit between the
+     *  active company being set and the profile being set — a second,
+     *  smaller window of the same bug. It is now inside the single
+     *  publication step, so it cannot be observed at all.
+     */
+    const screen = fakeScreen('c-acme');
+    const queries = deferred<void>();
+    const role = deferred<void>();
+    const torn: boolean[] = [];
+
+    const pending = switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: () => {},
+      load: async (id) => {
+        await queries.promise; torn.push(screen.isTorn);
+        await role.promise;    torn.push(screen.isTorn);
+        screen.publish(id);    return true;
+      },
+    });
+
+    queries.resolve(); await Promise.resolve();
+    expect(screen.view.header).toBe('c-acme');   // still wholly the old one
+    role.resolve();
+    expect((await pending).error).toBeNull();
+    expect(torn).toEqual([false, false]);
+    expect(screen.view).toEqual({ header: 'c-beta', rows: 'c-beta' });
+  });
+});
+
+describe('createLoadSequencer — the last choice wins', () => {
+  it('6a. a slow earlier load cannot overwrite a faster later one', async () => {
+    /*
+     *  Two clicks in quick succession. The FIRST query is slower than the
+     *  second. Without the ticket the first would publish last and the
+     *  person would land in the workspace they did not choose last.
+     */
+    const seq = createLoadSequencer();
+    const screen = fakeScreen('c-acme');
+    const first = deferred<void>();
+    const second = deferred<void>();
+
+    const load = async (id: string, gate: Promise<void>) => {
+      const ticket = seq.begin();
+      await gate;
+      if (!seq.isCurrent(ticket)) return 'dropped';
+      screen.publish(id);
+      return 'published';
+    };
+
+    const a = load('c-beta', first.promise);     // clicked first, answers last
+    const b = load('c-acme', second.promise);    // clicked second, answers first
+
+    second.resolve();
+    expect(await b).toBe('published');
+    first.resolve();
+    expect(await a).toBe('dropped');
+
+    //  The last CHOICE is what is on screen, not the last ANSWER.
+    expect(screen.view).toEqual({ header: 'c-acme', rows: 'c-acme' });
+  });
+
+  it('6b. the newest ticket is the only current one', () => {
+    const seq = createLoadSequencer();
+    const t1 = seq.begin();
+    const t2 = seq.begin();
+    expect(seq.isCurrent(t1)).toBe(false);
+    expect(seq.isCurrent(t2)).toBe(true);
+    expect(t1).not.toBe(t2);
+  });
+
+  it('6c. invalidate() makes every load in flight stale', () => {
+    //  Sign-out uses this, so a load still running cannot publish a
+    //  signed-out person's workspace afterwards.
+    const seq = createLoadSequencer();
+    const t = seq.begin();
+    expect(seq.isCurrent(t)).toBe(true);
+    seq.invalidate();
+    expect(seq.isCurrent(t)).toBe(false);
+  });
+});
+
+describe('the tear detector itself can fail (positive control)', () => {
+  /*
+   *  A regression test that cannot fail protects nothing. This reproduces
+   *  the ORIGINAL sequence — header first, rows after the await — and
+   *  requires the detector above to notice. If this ever stops failing to
+   *  be torn, the tests above have stopped testing anything.
+   */
+  it('catches the pre-fix sequence: header moved before the data', async () => {
+    const screen = fakeScreen('c-acme');
+    const gate = deferred<void>();
+    const seen: boolean[] = [];
+
+    const buggySwitch = async (id: string) => {
+      screen.view.header = id;        // what switchCompany used to do, eagerly
+      seen.push(screen.isTorn);       // ← the window
+      await gate.promise;
+      screen.view.rows = id;          // what setProfile did, four queries later
+      seen.push(screen.isTorn);
+    };
+
+    const p = buggySwitch('c-beta');
+    await Promise.resolve();
+    //  Mid-flight the screen IS torn — header Beta, rows still Acme.
+    expect(screen.view.header).toBe('c-beta');
+    expect(screen.view.rows).toBe('c-acme');
+    expect(screen.isTorn).toBe(true);
+
+    gate.resolve(); await p;
+    expect(seen).toEqual([true, false]);   // torn, then consistent
+  });
+
+  it('and the fixed sequence is never torn under the same timing', async () => {
+    const screen = fakeScreen('c-acme');
+    const gate = deferred<boolean>();
+    const p = switchWorkspace({
+      companyId: 'c-beta', currentCompanyId: 'c-acme', authorised: BOTH,
+      setBusy: () => {},
+      load: async (id) => { const ok = await gate.promise; if (ok) screen.publish(id); return ok; },
+    });
+    await Promise.resolve();
+    expect(screen.isTorn).toBe(false);
+    gate.resolve(true); await p;
+    expect(screen.isTorn).toBe(false);
   });
 });
