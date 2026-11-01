@@ -5,6 +5,7 @@ import { Fragment, ReactNode, useEffect, useState, type CSSProperties } from 're
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from "../Common/NotificationBell";
 import OfflineBadge from "../Common/OfflineBadge";
+import CompanySwitcher from "./CompanySwitcher";
 import Toast from "../Common/Toast";
 import {
   LayoutDashboard,
@@ -969,6 +970,9 @@ export default function MainLayout({
               <Menu size={20} />
             </button>
             <OfflineBadge />
+            {/*  The workspace switcher. Renders nothing at all for the
+                 ordinary single-workspace account — see the component. */}
+            <CompanySwitcher />
           </div>
 
           {/*  Global search: REMOVED, ON THE DESIGN'S OWN INSTRUCTION.
