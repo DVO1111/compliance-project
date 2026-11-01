@@ -107,6 +107,96 @@ export function resolveActiveCompany(input: ResolveActiveCompanyInput): string |
 }
 
 /**
+ * LATEST-WINS, for loads that can finish out of order.
+ *
+ * Two clicks in quick succession start two profile loads. They can resolve
+ * in either order, and without this the slower one publishes last — leaving
+ * the person in the workspace they did NOT choose last, header and all.
+ *
+ * Each load takes a ticket on the way in and checks it again just before it
+ * publishes. A ticket that is no longer current means a newer load has
+ * started, so the older result is dropped. `invalidate()` exists for
+ * sign-out: it makes every load in flight stale, so none of them can
+ * publish a signed-out person's workspace after the fact.
+ */
+export interface LoadSequencer {
+  begin(): number;
+  isCurrent(ticket: number): boolean;
+  invalidate(): void;
+}
+
+export function createLoadSequencer(): LoadSequencer {
+  let current = 0;
+  return {
+    begin: () => ++current,
+    isCurrent: (ticket: number) => ticket === current,
+    invalidate: () => { current += 1; },
+  };
+}
+
+/**
+ * Opening another workspace, as a sequence of decisions.
+ *
+ * This is the orchestration AuthContext performs, lifted out so it can be
+ * tested without a browser — the repository has no React renderer, and the
+ * failure this guards against is a timing one that only a controlled
+ * promise can reproduce reliably.
+ *
+ * THE RULE IT ENFORCES: nothing about the workspace changes until `load`
+ * has succeeded. `load` either publishes the whole workspace — profile,
+ * companies, active company, default — in one go, or publishes nothing.
+ * So there is no partial state, which in turn means there is nothing to
+ * roll back when a switch fails: the previous workspace simply stays.
+ */
+export interface SwitchWorkspaceOptions {
+  /** The workspace being asked for. */
+  companyId: string | null | undefined;
+  /** The one currently open, so a no-op switch stays a no-op. */
+  currentCompanyId: string | null;
+  /** The server's list. The ONLY thing membership is judged against. */
+  authorised: readonly AuthorisedCompany[];
+  /** Publishes the whole workspace on success; publishes nothing on failure. */
+  load: (companyId: string) => Promise<boolean>;
+  /** Drives the selector's in-progress indicator. */
+  setBusy: (busy: boolean) => void;
+  /** Reported, never shown raw. */
+  onError?: (err: unknown) => void;
+}
+
+export async function switchWorkspace(
+  opts: SwitchWorkspaceOptions,
+): Promise<{ error: Error | null }> {
+  const { companyId, currentCompanyId, authorised, load, setBusy, onError } = opts;
+
+  if (!companyId) return { error: new Error('No workspace was chosen.') };
+  //  Already there. Not an error, and not worth a round trip.
+  if (companyId === currentCompanyId) return { error: null };
+
+  //  Judged against the server's answer, before anything else happens, so
+  //  a company this person does not hold never reaches the loader at all.
+  if (!isSwitchAuthorised(companyId, authorised)) {
+    return { error: new Error('You do not have access to that workspace.') };
+  }
+
+  setBusy(true);
+  try {
+    const ok = await load(companyId);
+    if (!ok) {
+      return {
+        error: new Error('That workspace could not be opened. You are still in the previous one.'),
+      };
+    }
+    return { error: null };
+  } catch (err) {
+    //  Nothing was published, so there is nothing to undo.
+    onError?.(err);
+    return { error: err as Error };
+  } finally {
+    setBusy(false);
+  }
+}
+
+/**
  * May this session open that workspace?
  *
  * Answered ONLY from the server's list. The caller's own belief about which
