@@ -297,7 +297,7 @@ function PageLoading() {
 }
 
 function AppContent() {
-  const { user, profile, loading, isRecoveringPassword, isRecoveryCallback, isInitialPasswordSetup, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isRecoveringPassword, isRecoveryCallback, isInitialPasswordSetup, refreshProfile, signOut, activeCompanyId } = useAuth();
 
   const inviteTokenFromUrl = (() => {
     try {
@@ -1510,7 +1510,21 @@ function AppContent() {
   return (
     <MainLayout currentPage={currentPage} onNavigate={setCurrentPage}>
       <Sentry.ErrorBoundary
-        key={currentPage}
+        /*  THE ACTIVE WORKSPACE IS PART OF THE KEY, and that is what makes
+            switching safe to look at.
+
+            There is no query cache in this app — each page loads its own
+            data in an effect — and most of those effects are already keyed
+            on the company id, so they re-run on a switch by themselves. Most
+            is not all: a page that loads once on mount would keep the
+            previous company's suppliers, lots and batches on screen under
+            the new company's name, and in a multi-tenant compliance product
+            that is the worst possible failure of this feature.
+
+            Changing the key unmounts the page and mounts it again, so every
+            page starts from no data whichever way it fetches. One remount on
+            a deliberate, rare action is a very cheap way to be certain.  */
+        key={`${activeCompanyId ?? 'no-company'}:${currentPage}`}
         fallback={({ error, resetError }) => (
           <PageErrorFallback error={error as Error} onReset={resetError} />
         )}

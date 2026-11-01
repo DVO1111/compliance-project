@@ -29,7 +29,7 @@
 #  Format: <suite filename> <minimum assertions>
 #  TOTAL is the aggregate floor across every suite.
 
-TOTAL 3157
+TOTAL 3175
 
 access_requests_test.sql 44
 access_restrictions_test.sql 59
@@ -78,6 +78,7 @@ material_release_readiness_test.sql 20
 material_testing_and_release_test.sql 79
 materials_security_test.sql 60
 migration_reconciliation_test.sql 19
+my_companies_test.sql 18
 operational_role_model_test.sql 59
 product_registry_test.sql 56
 product_specification_test.sql 38
