@@ -42,6 +42,46 @@ export const ALLOWED_SIGNIN_EMAILS: readonly string[] = [
   'aeoladehinde@sterlinglams.com',
 ];
 
+/**
+ * Extra addresses, FOR A LOCAL STACK ONLY.
+ *
+ * The demonstration seed's eleven `.example` actors have to be able to sign
+ * in for anyone to look at the seeded data in a browser, and they must
+ * never appear in the published list above — they are fictional, and that
+ * array ships in the JavaScript every visitor downloads.
+ *
+ * So they come from `VITE_SIGNIN_ALLOWLIST_EXTRA`, and the addition is
+ * ignored unless the app is pointed at a LOOPBACK Supabase. That condition
+ * is the safeguard: a production build talks to
+ * `https://<ref>.supabase.co`, so setting the variable there changes
+ * nothing, and no deployment can widen its front door by accident.
+ *
+ * The database gate is untouched by this. `app_signin_is_allowed` and
+ * `provision_profile` still decide who may hold a profile, and since
+ * 20261214000000 they are closed by default. This only opens the browser's
+ * own convenience check, which the header above is already explicit about
+ * not being a security boundary.
+ */
+function localOnlyExtras(): readonly string[] {
+  let url = '';
+  let extra = '';
+  try {
+    url = String(import.meta.env?.VITE_SUPABASE_URL ?? '');
+    extra = String(import.meta.env?.VITE_SIGNIN_ALLOWLIST_EXTRA ?? '');
+  } catch {
+    return [];
+  }
+  if (!extra) return [];
+  //  Loopback only. Anything else — including a LAN address or a tunnel —
+  //  is treated as not local, because "not obviously remote" is not the
+  //  same as "provably local".
+  const isLoopback = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(url);
+  if (!isLoopback) return [];
+  return extra.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+}
+
+export const SIGNIN_ALLOWLIST_EXTRA: readonly string[] = localOnlyExtras();
+
 /** True when the gate is on at all. An empty list means "everyone", so
  *  emptying the list is how this is switched off — there is no second
  *  flag that can disagree with the list. */
@@ -63,7 +103,11 @@ export function isEmailAllowedToSignIn(email: string | null | undefined): boolea
   if (!SIGNIN_ALLOWLIST_ACTIVE) return true;
   if (!email) return false;
   const normalised = email.trim().toLowerCase();
-  return ALLOWED_SIGNIN_EMAILS.some((allowed) => allowed.trim().toLowerCase() === normalised);
+  if (ALLOWED_SIGNIN_EMAILS.some((allowed) => allowed.trim().toLowerCase() === normalised)) {
+    return true;
+  }
+  //  Empty in every build that is not pointed at a loopback Supabase.
+  return SIGNIN_ALLOWLIST_EXTRA.includes(normalised);
 }
 
 /**
