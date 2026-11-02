@@ -31,16 +31,38 @@
  * `a.b@gmail.com` and `ab@gmail.com` as the same address is a Gmail
  * convention and guessing which providers share it is how an allowlist
  * quietly becomes wider than it reads.
+ *
+ * EMPTY, DELIBERATELY — THE CLOSED BETA IS OVER.
+ * ----------------------------------------------
+ * This held four addresses from when the product was a closed pilot. The
+ * live project now has TWENTY accounts with profiles, and only those four
+ * were on the list. The gate never fired because the deployed bundle
+ * predated it; the first deploy that carried it would have signed out and
+ * refused SIXTEEN real users, each with their own workspace — among them
+ * the owner of CCI. That is not a gate doing its job, it is a pilot
+ * artefact outliving the pilot.
+ *
+ * The alternative was to list all twenty addresses. That is worse, and
+ * the header above says why: this array ships in the JavaScript every
+ * visitor downloads, so "never put anything in here that an address alone
+ * should not reveal" would have been broken twenty times over by
+ * publishing real customers' email addresses. It would also go stale on
+ * the twenty-first account.
+ *
+ * So the list is emptied, which is the off-switch this file documents:
+ * SIGNIN_ALLOWLIST_ACTIVE goes false and isEmailAllowedToSignIn admits
+ * everyone. NOTHING IS WEAKENED BY THAT. This was never the security
+ * boundary — the header is explicit — and authorisation still rests
+ * where it always did: RLS on every company-scoped table, and
+ * provision_profile deciding who may hold a profile at all.
+ *
+ * The real gate, if the product closes again, is the DATABASE one:
+ * supabase/migrations/20261214000000_closed_signup_by_default.sql, which
+ * makes `allowed_signins` authoritative and closed by default. It is
+ * written and merged but NOT YET APPLIED to the live project. Re-populating
+ * this array is not the way back; applying that migration is.
  */
-export const ALLOWED_SIGNIN_EMAILS: readonly string[] = [
-  'ayomideelijah1@gmail.com',
-  'fmuyiwa15@gmail.com',
-  //  A SEPARATE ADDRESS from fmuyiwa15 above, not a correction of it.
-  //  The two differ only in two digits, so an edit that "tidied" one
-  //  into the other would lock somebody out and look like a typo fix.
-  'fmuyiwa58@gmail.com',
-  'aeoladehinde@sterlinglams.com',
-];
+export const ALLOWED_SIGNIN_EMAILS: readonly string[] = [];
 
 /** True when the gate is on at all. An empty list means "everyone", so
  *  emptying the list is how this is switched off — there is no second
