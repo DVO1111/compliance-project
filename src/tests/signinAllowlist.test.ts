@@ -4,6 +4,17 @@
  * Small surface, but the failure modes are the kind that pass a casual
  * reading: an address let in by a capital letter, or a list that is
  * active but matches nothing and locks everyone out.
+ *
+ * THE LIST IS NOW EMPTY, which is the documented off-switch. The closed
+ * pilot is over: the live project has twenty accounts and the array held
+ * four, so the first deploy carrying this gate would have refused sixteen
+ * real users. See the comment on ALLOWED_SIGNIN_EMAILS for why the list
+ * was emptied rather than extended to twenty.
+ *
+ * The matching tests below are NOT deleted. They are guarded by
+ * `it.runIf(SIGNIN_ALLOWLIST_ACTIVE)` and written against whatever the
+ * list contains, so the moment anyone repopulates it they come back to
+ * life and guard it again.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -15,9 +26,23 @@ import {
 } from '../lib/auth/allowlist';
 
 describe('the allowlist itself', () => {
-  it('is active, and holds the owner address', () => {
-    expect(SIGNIN_ALLOWLIST_ACTIVE).toBe(true);
-    expect(ALLOWED_SIGNIN_EMAILS).toContain('ayomideelijah1@gmail.com');
+  it('is empty, so the browser gate admits everyone', () => {
+    expect(ALLOWED_SIGNIN_EMAILS).toHaveLength(0);
+    expect(SIGNIN_ALLOWLIST_ACTIVE).toBe(false);
+  });
+
+  /*
+   *  THE PROPERTY THAT OUTLASTS THE PILOT.
+   *
+   *  This array is compiled into the JavaScript every visitor downloads.
+   *  Listing the twenty live accounts would have published twenty real
+   *  people's email addresses to anyone who opened the bundle. Whatever
+   *  this list holds in future, it must not hold a customer's address.
+   */
+  it('publishes nobody: no real mailbox is compiled into the bundle', () => {
+    for (const e of ALLOWED_SIGNIN_EMAILS) {
+      expect(e).toMatch(/@(example\.(com|org|net|invalid)|test|invalid)$/);
+    }
   });
 
   //  Every entry lower-case, because the comparison lower-cases both
@@ -28,82 +53,92 @@ describe('the allowlist itself', () => {
   });
 });
 
-describe('isEmailAllowedToSignIn', () => {
-  it('admits the listed address', () => {
-    expect(isEmailAllowedToSignIn('ayomideelijah1@gmail.com')).toBe(true);
+describe('isEmailAllowedToSignIn — with the gate off', () => {
+  it('admits an ordinary address', () => {
+    expect(isEmailAllowedToSignIn('folaabitogun@gmail.com')).toBe(true);
+    expect(isEmailAllowedToSignIn('anyone@elsewhere.test')).toBe(true);
   });
 
-  it('ignores case and surrounding space, which is how it will be typed', () => {
-    expect(isEmailAllowedToSignIn('  AyomideElijah1@Gmail.com ')).toBe(true);
+  /*
+   *  NOTHING IS WEAKENED BY THAT, and this is the place to say so. This
+   *  function was never the security boundary — the module header is
+   *  explicit, and the browser holds the anon key regardless. What still
+   *  decides access is RLS on every company-scoped table and
+   *  provision_profile deciding who may hold a profile. The real gate, if
+   *  the product closes again, is 20261214000000_closed_signup_by_default.
+   */
+  it('is a front door, not a lock — the message still says who to ask', () => {
+    expect(SIGNIN_NOT_ALLOWED_MESSAGE).toMatch(/administrator/i);
+  });
+});
+
+describe('isEmailAllowedToSignIn — the matching rules, if the list returns', () => {
+  //  Written against the list rather than a fixed address, so these
+  //  reactivate for whatever a future list contains.
+  const first = ALLOWED_SIGNIN_EMAILS[0] ?? '';
+
+  it.runIf(SIGNIN_ALLOWLIST_ACTIVE)('admits a listed address', () => {
+    expect(isEmailAllowedToSignIn(first)).toBe(true);
   });
 
-  it('refuses anyone else', () => {
-    expect(isEmailAllowedToSignIn('someone@else.com')).toBe(false);
-    expect(isEmailAllowedToSignIn('ayomideelijah2@gmail.com')).toBe(false);
+  it.runIf(SIGNIN_ALLOWLIST_ACTIVE)('ignores case and surrounding space', () => {
+    expect(isEmailAllowedToSignIn(`  ${first.toUpperCase()} `)).toBe(true);
+  });
+
+  it.runIf(SIGNIN_ALLOWLIST_ACTIVE)('refuses anyone else', () => {
+    expect(isEmailAllowedToSignIn('someone@else.test')).toBe(false);
   });
 
   //  A near-miss that a `startsWith` or `includes` comparison would let
   //  through. This is the assertion that would catch that rewrite.
-  it('is not a substring match', () => {
-    expect(isEmailAllowedToSignIn('ayomideelijah1@gmail.com.attacker.net')).toBe(false);
-    expect(isEmailAllowedToSignIn('xayomideelijah1@gmail.com')).toBe(false);
+  it.runIf(SIGNIN_ALLOWLIST_ACTIVE)('is not a substring match', () => {
+    expect(isEmailAllowedToSignIn(`${first}.attacker.net`)).toBe(false);
+    expect(isEmailAllowedToSignIn(`x${first}`)).toBe(false);
   });
 
-  it('refuses an empty or absent address rather than defaulting open', () => {
+  it.runIf(SIGNIN_ALLOWLIST_ACTIVE)('refuses an absent address rather than defaulting open', () => {
     expect(isEmailAllowedToSignIn('')).toBe(false);
     expect(isEmailAllowedToSignIn(null)).toBe(false);
-    expect(isEmailAllowedToSignIn(undefined)).toBe(false);
   });
 
   //  Gmail treats a.b@ and ab@ as one mailbox; most providers do not.
   //  The list does not normalise, and that is deliberate — this test
   //  records the decision so a later "fix" has to argue with it.
-  it('does not silently treat Gmail dot variants as the same address', () => {
-    expect(isEmailAllowedToSignIn('ayomide.elijah1@gmail.com')).toBe(false);
+  it.runIf(SIGNIN_ALLOWLIST_ACTIVE)('does not treat Gmail dot variants as the same address', () => {
+    const [local, domain] = first.split('@');
+    if (local && local.length > 2 && domain) {
+      const dotted = `${local[0]}.${local.slice(1)}@${domain}`;
+      expect(isEmailAllowedToSignIn(dotted)).toBe(false);
+    }
   });
 });
 
 describe('canRestoreAuthSession', () => {
-  //  The unlisted example is deliberately an address that belongs to
-  //  nobody. It used to be a real one, which worked until that person
-  //  was added to the list — then this test failed, and the recovery
-  //  test below silently stopped testing an UNLISTED recovery while
-  //  still passing. An example that can be granted access is not a
-  //  fixture, it is a time bomb.
   const NOBODY = 'stranger@example.invalid';
 
-  it('keeps the closed allowlist for ordinary sessions', () => {
-    expect(canRestoreAuthSession(NOBODY, false)).toBe(false);
-    expect(canRestoreAuthSession('fmuyiwa15@gmail.com', false)).toBe(true);
+  it('restores an ordinary session now that the gate is open', () => {
+    expect(canRestoreAuthSession(NOBODY, false)).toBe(true);
   });
 
-  it('allows an unlisted recovery session only so its password can be changed', () => {
+  //  THE CASE THIS MISSED, kept because it is the reason the second
+  //  argument exists. approve-signup writes the approved address into
+  //  allowed_signins and emails an invite, but cannot edit the array
+  //  compiled into the bundle. An invite arrival judged only against that
+  //  array was signed out as its password screen drew, so approving
+  //  somebody produced an email that could not be used. Still true the
+  //  moment the list is repopulated, so it is asserted unconditionally.
+  it('always allows an emailed link, recovery or invite', () => {
     expect(canRestoreAuthSession(NOBODY, true)).toBe(true);
     expect(canRestoreAuthSession(null, true)).toBe(true);
-  });
-
-  //  THE CASE THIS MISSED. approve-signup writes the approved address
-  //  into allowed_signins and emails an invite, but cannot edit the
-  //  array compiled into the bundle. An invite arrival judged only
-  //  against that array was signed out as its password screen drew, so
-  //  approving someone produced an email that could not be used. The
-  //  argument covers both kinds of emailed link for that reason.
-  it('allows an invite callback for an address not in the compiled list', () => {
-    expect(isEmailAllowedToSignIn('newly.approved@example.invalid')).toBe(false);
     expect(canRestoreAuthSession('newly.approved@example.invalid', true)).toBe(true);
-  });
-
-  //  The test account, added so the invite flow can be exercised end to
-  //  end. Asserted here so that removing it from the list is a decision
-  //  someone makes rather than something that happens.
-  it('admits the test account', () => {
-    expect(canRestoreAuthSession('aeoladehinde@sterlinglams.com', false)).toBe(true);
   });
 });
 
 describe('the refusal message', () => {
-  //  A closed beta must not become a way to test whether a colleague has
-  //  an account. The same reasoning governs the password-reset copy.
+  //  Kept whether or not the gate is on: if the product ever closes
+  //  again, this copy is shown, and it must not become a way to test
+  //  whether a colleague has an account. The same reasoning governs the
+  //  password-reset copy.
   it('does not reveal whether the account exists', () => {
     expect(SIGNIN_NOT_ALLOWED_MESSAGE).not.toMatch(/not (found|registered|recognised|recognized)/i);
     expect(SIGNIN_NOT_ALLOWED_MESSAGE).not.toMatch(/no (such )?account/i);
