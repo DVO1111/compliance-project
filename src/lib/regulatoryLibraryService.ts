@@ -3,7 +3,6 @@
  * Curated, searchable database of regulations across jurisdictions
  * with enforcement history, warning letters, and guidance documents.
  */
-import { supabase } from './supabase';
 
 /* ── Types ──────────────────────────────────────────────────── */
 

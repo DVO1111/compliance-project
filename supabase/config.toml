@@ -173,6 +173,16 @@ minimum_password_length = 6
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
 
+# ── Criateur: Before User Created hook ──────────────────────────────────────
+# Enforced server-side, inside the signup transaction, so an unapproved
+# address never produces an auth.users row at all. The URI below is the
+# LOCAL one; on the hosted project the hook is configured in
+# Authentication -> Hooks and points at the deployed function.
+[auth.hook.before_user_created]
+enabled = true
+uri = "http://host.docker.internal:54321/functions/v1/before-user-created"
+secrets = "env(AUTH_HOOK_SECRET)"
+
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
 email_sent = 2
@@ -221,6 +231,16 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# ── Criateur: branded recovery email ────────────────────────────────────────
+# Supabase still generates and verifies the recovery token; this only
+# replaces the default sender's wording and styling. `supabase db` does not
+# apply this — it is read by `supabase start` locally, and the same subject
+# and body must be pasted into Authentication -> Emails -> Reset Password on
+# the hosted project. See docs/ALLOWLIST_AND_RECOVERY.md.
+[auth.email.template.recovery]
+subject = "Reset your Criateur password"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -386,6 +406,17 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Public lead capture for the marketing site. verify_jwt is false because the
 # visitors submitting it are anonymous — this is the only unauthenticated
 # function in the project. It validates and rate-limits its own input.
+# ── Criateur: the allowlist gate, in front of Auth ──────────────────────────
+# verify_jwt = false because Supabase Auth hooks do NOT send a user JWT.
+# They send a Standard Webhooks signature instead, and the function verifies
+# it against AUTH_HOOK_SECRET and fails closed when it is missing. Do not
+# set this to true: a hook that requires a JWT is never called successfully,
+# and the symptom is that every signup succeeds because the gate never ran.
+[functions.before-user-created]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/before-user-created/index.ts"
+
 [functions.request-info]
 enabled = true
 verify_jwt = false

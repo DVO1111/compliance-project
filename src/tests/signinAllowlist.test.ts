@@ -16,7 +16,7 @@
  * list contains, so the moment anyone repopulates it they come back to
  * life and guard it again.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ALLOWED_SIGNIN_EMAILS,
   SIGNIN_ALLOWLIST_ACTIVE,
@@ -147,5 +147,67 @@ describe('the refusal message', () => {
 
   it('tells the person what to do next', () => {
     expect(SIGNIN_NOT_ALLOWED_MESSAGE).toMatch(/administrator/i);
+  });
+});
+
+describe('the local-only extension', () => {
+  /*
+   *  The demo seed's eleven `.example` actors have to be able to sign in
+   *  for anyone to look at the seeded data in a browser, and they must
+   *  never reach the published list — that array ships in the JavaScript
+   *  every visitor downloads.
+   *
+   *  So they come from VITE_SIGNIN_ALLOWLIST_EXTRA, and the whole
+   *  safeguard is that the addition is ignored unless the app is pointed
+   *  at a LOOPBACK Supabase. These tests are about that condition, because
+   *  if it ever stops holding the front door widens silently.
+   *
+   *  The module reads the environment once, at import, so each case
+   *  re-imports it with a different environment.
+   */
+  const load = async (url: string, extra: string) => {
+    vi.resetModules();
+    vi.stubEnv('VITE_SUPABASE_URL', url);
+    vi.stubEnv('VITE_SIGNIN_ALLOWLIST_EXTRA', extra);
+    return import('../lib/auth/allowlist');
+  };
+
+  afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
+
+  it('admits an extra address when Supabase is on loopback', async () => {
+    const m = await load('http://127.0.0.1:54321', 'ada.okafor@ibadanpharma.example');
+    expect(m.isEmailAllowedToSignIn('ada.okafor@ibadanpharma.example')).toBe(true);
+  });
+
+  it('IGNORES the extras against a hosted Supabase', async () => {
+    //  The case that matters. A production build talks to
+    //  https://<ref>.supabase.co, so setting the variable there must
+    //  change nothing at all.
+    const m = await load('https://ovxfflilbqaxedzovgmz.supabase.co', 'ada.okafor@ibadanpharma.example');
+    expect(m.SIGNIN_ALLOWLIST_EXTRA).toEqual([]);
+    expect(m.isEmailAllowedToSignIn('ada.okafor@ibadanpharma.example')).toBe(false);
+  });
+
+  it('treats a LAN address as not local', async () => {
+    //  "Not obviously remote" is not the same as "provably local".
+    const m = await load('http://192.168.1.10:54321', 'ada.okafor@ibadanpharma.example');
+    expect(m.SIGNIN_ALLOWLIST_EXTRA).toEqual([]);
+  });
+
+  it('is empty when the variable is unset, even on loopback', async () => {
+    const m = await load('http://127.0.0.1:54321', '');
+    expect(m.SIGNIN_ALLOWLIST_EXTRA).toEqual([]);
+  });
+
+  it('never lets an extra displace the published list', async () => {
+    const m = await load('http://127.0.0.1:54321', 'someone@else.example');
+    expect(m.ALLOWED_SIGNIN_EMAILS).toContain('ayomideelijah1@gmail.com');
+    expect(m.isEmailAllowedToSignIn('ayomideelijah1@gmail.com')).toBe(true);
+  });
+
+  it('normalises case and spacing in the extras', async () => {
+    const m = await load('http://localhost:54321', '  Ada.Okafor@IbadanPharma.Example , b@c.example ');
+    expect(m.isEmailAllowedToSignIn('ada.okafor@ibadanpharma.example')).toBe(true);
+    expect(m.isEmailAllowedToSignIn('B@C.EXAMPLE')).toBe(true);
   });
 });
