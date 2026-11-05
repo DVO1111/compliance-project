@@ -663,13 +663,29 @@ export default function DashboardPage({
             ? 'bg-[color-mix(in_srgb,var(--color-surface)_70%,transparent)] backdrop-blur-xl border-transparent shadow-[0_8px_30px_rgb(0,0,0,0.12)]'
             : 'dash-card dash-border shadow-sm'
         }`}>
-          <div>
-            {/* heading-03 */}
-            <h2 className="type-heading-03 dash-text">
+          <div className="min-w-0 flex-1" style={{ flexBasis: 280 }}>
+            {/*  The design sets the page title in the display face, condensed
+                to 92% on its width axis, with the status line at 13.5px
+                beneath it. Sized with clamp() as the design does, so it holds
+                at 22px on a narrow viewport and reaches 27px on a wide one. */}
+            <h2
+              className="dash-text"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(22px, 2.2vw, 27px)',
+                fontWeight: 600,
+                fontStretch: '92%',
+                letterSpacing: '-0.012em',
+                lineHeight: 1.15,
+                margin: '0 0 4px',
+              }}
+            >
               Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}
             </h2>
-            {/* body-short-01 — was text-[11px], below the guide's 12px floor */}
-            <p className="type-body-short-01 dash-text-secondary mt-0.5">
+            <p
+              className="dash-text-secondary"
+              style={{ fontSize: 13.5, lineHeight: 1.5, margin: 0, textWrap: 'pretty' }}
+            >
               {activityLoading
                 ? "Loading your workspace…"
                 : loading || pipeline.loading
@@ -689,17 +705,24 @@ export default function DashboardPage({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <RegulatorBadge compact />
+            <RegulatorBadge variant="mono" />
             <ThemeSwitcher />
             {/* Export is a secondary action — a dashboard is for acting on
                 today's work, not for producing a file. */}
+            {/*  The design's Export is an accent-outlined button, not a
+                neutral one: the only control in the header, so it carries
+                the accent without becoming a filled primary. */}
             <button
               onClick={() => setIsExportModalOpen(true)}
-              className="inline-flex items-center gap-2 px-3 rounded-xl type-heading-01 border transition-colors hover:bg-[var(--color-surface-alt)]"
+              className="inline-flex items-center gap-2 px-4 border transition-colors"
               style={{
-                height: "var(--control-height-md)",
-                borderColor: "var(--color-border)",
-                color: "var(--color-text-secondary)",
+                minHeight: 38,
+                borderRadius: 8,
+                borderColor: "var(--color-accent)",
+                background: "var(--color-accent-soft)",
+                color: "var(--color-accent)",
+                fontSize: 13.5,
+                fontWeight: 600,
               }}
             >
               <Share2 className="w-4 h-4" />
