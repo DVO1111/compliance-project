@@ -125,10 +125,25 @@ export function MarketingNav({
 }: {
   links: NavLink[];
   onHome: () => void;
-  /** Sends someone to the contact form. The nav carries no account controls
-   *  at all now — no Sign Up, no Sign In — because the public site is a
-   *  lead-generation site rather than a product front door. Existing users
-   *  sign in at /login, which App.tsx routes on directly. */
+  /** Sends someone to the contact form.
+   *
+   *  The nav carries no Sign Up — the public site is a lead-generation site
+   *  rather than a product front door, and that part of the decision stands.
+   *  It does carry a quiet Sign in, which it did not before. The reason is
+   *  not symmetry; it is that the previous arrangement had a failure mode
+   *  nobody saw until a UAT tester hit it. Someone who already has an
+   *  account and types the bare domain lands here, finds the only form on
+   *  the page is the waitlist, and joins the waitlist — which creates no
+   *  account and tells nobody. That happened three times in one afternoon
+   *  on 11 Nov 2026. "Existing users sign in at /login" is true and was
+   *  the whole plan, but it relies on them knowing an address nobody shows
+   *  them, and the page offered no way to recover from not knowing it.
+   *
+   *  A link, not a button: /login is a real address (see isProductPath in
+   *  lib/routing, which puts a signed-out visitor there onto the sign-in
+   *  screen rather than the brochure), so it should be copyable,
+   *  middle-clickable and reachable from the keyboard like one. appUrl
+   *  keeps the deployment's base path. */
   onRequestInfo: () => void;
   onCta: () => void;
   ctaLabel: string;
@@ -174,6 +189,16 @@ export function MarketingNav({
         </span>
 
         <span className="hidden md:flex items-center gap-3 shrink-0">
+          <a
+            href={appUrl('/login')}
+            className="whitespace-nowrap shrink-0 transition hover:opacity-80"
+            style={{
+              color: 'rgba(207,222,255,0.86)',
+              padding: '9px 6px', fontSize: 14, fontWeight: 500,
+            }}
+          >
+            Sign in
+          </a>
           <button
             onClick={close(onRequestInfo)}
             className="whitespace-nowrap shrink-0 transition hover:opacity-80"
@@ -222,6 +247,7 @@ export function MarketingNav({
             </button>
           ))}
           <hr style={{ borderColor: 'var(--lp-line)' }} />
+          <a href={appUrl('/login')} onClick={() => setMobileOpen(false)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Sign in</a>
           <button onClick={close(onRequestInfo)} className="block w-full text-left text-[0.9375rem]" style={{ color: 'rgba(207,222,255,0.86)' }}>Request Info</button>
           <button onClick={close(onCta)} className="lp-btn lp-btn--primary lp-btn--block">{ctaLabel}</button>
         </div>
