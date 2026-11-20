@@ -59,10 +59,16 @@ DECLARE
   c_hist  uuid := '00000000-0000-7d03-b000-0000000000c2';
   u       uuid := '00000000-0000-7d03-b000-0000000000a1';
 BEGIN
-  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
-                          email_confirmed_at, created_at, updated_at)
-  VALUES (u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
-          'chain.tester@example.invalid', '', now(), now(), now())
+  --  Only (id, email), as every other suite does. The harness builds
+  --  auth.users from scripts/ci/db-bootstrap.sql, which is a shim with
+  --  six columns — no instance_id, aud, role or email_confirmed_at.
+  --  Naming the real Supabase columns here aborted the fixture, and
+  --  because the whole block is one statement nothing after it ran:
+  --  the materials were never created and sections A and B then failed
+  --  with MATERIAL_LOT_NO_MATERIAL, which reads like a fault in the
+  --  migration under test rather than in its fixture.
+  INSERT INTO auth.users (id, email)
+  VALUES (u, 'chain.tester@example.invalid')
   ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO public.companies (id, name) VALUES

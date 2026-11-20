@@ -46,7 +46,7 @@
 # they create.
 # ---------------------------------------------------------------------
 # needs integration_connections, created by integration_infrastructure_migration.sql
-20260226200000_team_chat.sql
+20260226200002_team_chat.sql
 # same
 20260305213000_grc_automation_schema.sql
 # NOT an ordering problem. Reads public.grc_automation_runs, which
@@ -61,12 +61,12 @@
 # on whichever of them exist without touching this file.
 20260306150000_performance_views.sql
 # CREATE OR REPLACE cannot change a function's return type; needs a DROP first
-20260227100000_fix_dash_rpcs.sql
+20260227100001_fix_dash_rpcs.sql
 # references public.regulatory_feed_items, which nothing creates
 20260304092000_fix_regulatory_feed_items_rls.sql
 # ALTERs a policy "adverse_events_insert" that does not exist at this point
 20260304100000_fix_mutable_search_paths.sql
 # references public.policy_versions before it exists
-20260305100000_policy_attestation_enhancements.sql
+20260305100001_policy_attestation_enhancements.sql
 # FK on a created_by column that does not exist on the target table yet
 20260401000000_fix_fk_constraints_for_user_deletion.sql
