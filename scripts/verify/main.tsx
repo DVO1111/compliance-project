@@ -24,6 +24,13 @@ import AccessPage from '../../src/components/Access/AccessPage';
 import MaterialsPage from '../../src/components/Materials/MaterialsPage';
 import InprocessPage from '../../src/components/Inprocess/InprocessPage';
 import InstrumentsPage from '../../src/components/Floor/InstrumentsPage';
+import SettingsHomePage from '../../src/components/Settings/SettingsHomePage';
+import FacilityLogsPage from '../../src/components/Facility/FacilityLogsPage';
+import FacilityZonesSetup from '../../src/components/Facility/FacilityZonesSetup';
+import FacilityTrendsView from '../../src/components/Facility/FacilityTrendsView';
+import FacilityPestView from '../../src/components/Facility/FacilityPestView';
+import FacilityWaterView from '../../src/components/Facility/FacilityWaterView';
+import SupplierRegisterPage from '../../src/components/Suppliers/SupplierRegisterPage';
 import QaDispositionPage from '../../src/components/Materials/QaDispositionPage';
 import GoodsReceiptPage from '../../src/components/Materials/GoodsReceiptPage';
 import QcTestingPage from '../../src/components/Materials/QcTestingPage';
@@ -47,10 +54,36 @@ const PAGES: Record<string, () => JSX.Element> = {
   'materials': () => <MaterialsPage companyId="c1" />,
   'in-process': () => <InprocessPage companyId="c1" userId="u1" canDecide />,
   'instruments': () => <InstrumentsPage companyId="c1" />,
+  //  CF-02's Settings home. Takes no props: it reads the signed-in
+  //  profile and derives which sections the viewer may open, which is
+  //  exactly the behaviour worth looking at here — ?role= changes what
+  //  the page lists.
+  'settings-home': () => <SettingsHomePage />,
+  //  FL-01. Renders the empty state against the empty stub and the
+  //  triage table against VERIFY_FIXTURE=populated.
+  'facility-logs': () => <FacilityLogsPage companyId="c1" />,
+  //  FL-02. Reached from FL-01 by a button in the product, so it is
+  //  mounted directly here: its own states (no sites, no zones, the
+  //  zone list with nested tests) are what need looking at.
+  'facility-zones': () => <FacilityZonesSetup companyId="c1" onBack={() => {}} />,
+  //  FL-06 / FL-07. The greyscale check is what FL-07 is, so this is
+  //  also the screen to look at with colour removed.
+  'facility-trends': () => <FacilityTrendsView companyId="c1" onBack={() => {}} />,
+  //  FL-13. The row that matters is BS-07: marked as needing action,
+  //  so its Close control must be disabled with the reason shown.
+  'facility-pest': () => <FacilityPestView companyId="c1" />,
+  //  FL-11. The pH row is the one to look at: a range limit, and a
+  //  reading of 4.2 that the environmental rule would have passed.
+  'facility-water': () => <FacilityWaterView companyId="c1" />,
 };
 
 /** Pages whose behaviour depends on the viewer's role. */
 const ROLE_PAGES: Record<string, (role: any) => JSX.Element> = {
+  //  HS-01 row 9's approved-supplier list. Role-sensitive on purpose:
+  //  PM-03 gives Procurement and the QA Manager `act` on `suppliers`
+  //  and four more roles `view`, so ?role= changes whether the
+  //  standing control appears at all.
+  'supplier-register': (role) => <SupplierRegisterPage companyId="c1" role={role} />,
   'qa-disposition': (role) => <QaDispositionPage companyId="c1" role={role} />,
   'goods-receipt': (role) => <GoodsReceiptPage companyId="c1" role={role} />,
   'qc-testing': (role) => <QcTestingPage companyId="c1" role={role} roles={role ? [role] : []} />,
