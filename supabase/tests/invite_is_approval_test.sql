@@ -1,5 +1,5 @@
 -- ============================================================================
---  An invitation is the approval (20261217000000_invite_is_approval.sql).
+--  An invitation is the approval (20261121134348_invite_is_approval.sql).
 --
 --  The change admits an address that Supabase Auth records as invited. A
 --  suite for a WIDENED gate has to prove the opposite things from a suite

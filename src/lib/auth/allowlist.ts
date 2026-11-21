@@ -62,7 +62,7 @@
  * the product; that table is.
  *
  * WHO THAT TABLE ADMITS, as of
- * supabase/migrations/20261217000000_invite_is_approval.sql: an address on
+ * supabase/migrations/20261121134348_invite_is_approval.sql: an address on
  * the list, OR an address Supabase Auth records as invited. An invitation
  * is an administrative act and now carries its own approval, so inviting
  * somebody is all it takes to let them in — there is no second list to

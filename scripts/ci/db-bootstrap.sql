@@ -25,7 +25,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES    TO anon, authen
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 
 --  invited_at is here because a migration READS it, not for fidelity's
---  own sake. 20261217000000_invite_is_approval.sql defines a LANGUAGE sql
+--  own sake. 20261121134348_invite_is_approval.sql defines a LANGUAGE sql
 --  function over auth.users.invited_at, and a SQL function body is parsed
 --  and validated at creation time — so without this column that migration
 --  fails to install here, and the harness reports a baseline mismatch
