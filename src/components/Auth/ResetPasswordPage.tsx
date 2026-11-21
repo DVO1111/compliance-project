@@ -93,7 +93,11 @@ export default function ResetPasswordPage({
       kicker={initialSetup ? 'Account setup' : 'Reset password'}
       heading={initialSetup ? 'Choose your password.' : 'Choose a new password.'}
       description={initialSetup
-        ? 'Set a password to finish creating your account. You will continue to workspace setup next.'
+        //  Says what actually happens. On success this screen signs the
+        //  invitee out and sends them to the sign-in page, so promising
+        //  "you will continue to workspace setup next" described a step
+        //  that never came and left the sign-in form looking like a fault.
+        ? 'Your email is confirmed. Choose a password and you will be taken to the sign-in page to use it.'
         : 'You followed a reset link, so set a password to finish signing in.'}
     >
       {!user && !preview ? (

@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
-import { isInviteCallback, isPasswordRecoveryCallback } from './auth/inviteCallback';
+import {
+  isInviteCallback,
+  isPasswordRecoveryCallback,
+  readImplicitInviteTokens,
+} from './auth/inviteCallback';
 
 // Supabase can consume the auth callback fragment during client initialization.
 // Capture the invite marker first so the app still knows why this page opened.
@@ -8,6 +12,20 @@ export const INITIAL_AUTH_CALLBACK_IS_INVITE = typeof window !== 'undefined'
   && isInviteCallback(window.location.search, window.location.hash);
 export const INITIAL_AUTH_CALLBACK_IS_RECOVERY = typeof window !== 'undefined'
   && isPasswordRecoveryCallback(window.location.search, window.location.hash);
+
+/**
+ * The invite link's own tokens, read before the client can clear them.
+ *
+ * Captured at module scope for the same reason the two markers above are:
+ * creating the client with `detectSessionInUrl` can strip the fragment,
+ * and by the time AuthContext mounts the tokens would be gone. The PKCE
+ * client will not adopt these itself — see readImplicitInviteTokens for
+ * why an invite is never a PKCE callback — so AuthContext hands them to
+ * setSession explicitly.
+ */
+export const INITIAL_INVITE_TOKENS = typeof window !== 'undefined'
+  ? readImplicitInviteTokens(window.location.hash)
+  : null;
 
 // Support both Vite (import.meta.env) and Node.js (process.env) environments
 const env: Record<string, string | undefined> =

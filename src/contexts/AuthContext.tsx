@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { User, Session } from '@supabase/supabase-js';
 import {
   supabase, isSupabaseConfigured, INITIAL_AUTH_CALLBACK_IS_INVITE,
-  INITIAL_AUTH_CALLBACK_IS_RECOVERY,
+  INITIAL_AUTH_CALLBACK_IS_RECOVERY, INITIAL_INVITE_TOKENS,
 } from '../lib/supabase';
 import { useJurisdictionStore } from '../stores/jurisdictionStore';
 import { toJurisdictionId } from '../lib/regulatoryProfile';
@@ -313,7 +313,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }, 8000);
 
-    supabase.auth.getSession()
+    //  AN INVITE BRINGS ITS OWN SESSION, AND THE CLIENT WILL NOT TAKE IT.
+    //  Invite links are implicit (#access_token&refresh_token&type=invite)
+    //  because inviteUserByEmail does not support PKCE, and this client is
+    //  PKCE for recovery's sake — so it ignores the fragment and getSession
+    //  returns nothing. Adopting the pair here is what turns an invite into
+    //  a session; without it the password screen draws signed-out and tells
+    //  the invitee their brand-new link has "already been used".
+    //
+    //  setSession returns the same { data: { session } } shape as
+    //  getSession, so everything downstream is unchanged. On a stale or
+    //  tampered token it resolves with session null and an error, which
+    //  lands on the sign-in screen exactly as a missing session does.
+    const restoreSession = INITIAL_INVITE_TOKENS
+      ? supabase.auth.setSession(INITIAL_INVITE_TOKENS).then((result) => {
+          //  Take the tokens out of the address bar once they are spent.
+          //  The client clears the fragment itself on a flow it handles;
+          //  it ignored this one, so nothing else will, and a live refresh
+          //  token would otherwise sit in browser history and in anything
+          //  the page later hands a Referer to. The markers App.tsx routes
+          //  on were captured at module load and are unaffected.
+          try {
+            window.history.replaceState({}, '', window.location.pathname + window.location.search);
+          } catch { /* no history access; the session is adopted either way */ }
+          return result;
+        })
+      : supabase.auth.getSession();
+
+    restoreSession
       .then(({ data: { session } }) => {
         if (settled) return;
         settled = true;
