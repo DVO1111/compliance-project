@@ -1140,6 +1140,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       logger.error('provisionWorkspace failed', err);
       const e = err as any;
+
+      //  One database error is not a fault to debug but an answer to
+      //  relay, and the raw form of it is unusable: somebody invited to
+      //  the product, who had just set a password and signed in, reached
+      //  this screen and was told
+      //
+      //    SIGNIN_NOT_ALLOWED: this address is not permitted to use
+      //    Criateur yet (P0001)
+      //
+      //  which names an internal error code, repeats a sentence written
+      //  for a server log, and gives no next step. It is also the one
+      //  message here that is NOT about a broken deployment, so showing
+      //  it alongside a Postgres code invites exactly the wrong
+      //  diagnosis.
+      if (/SIGNIN_NOT_ALLOWED/.test(e?.message ?? '')) {
+        return {
+          error: new Error(
+            'This address has not been approved for Criateur yet, so a workspace cannot be created for it. ' +
+            'Ask your administrator to send you an invitation from the Criateur team.',
+          ),
+        };
+      }
+
       //  The code is worth showing: 42501 is a refused privilege, 23505 a
       //  duplicate, 42883 a missing function. They lead to different
       //  fixes and the message alone often does not distinguish them.

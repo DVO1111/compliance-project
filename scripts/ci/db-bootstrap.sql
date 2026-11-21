@@ -24,11 +24,22 @@ ALTER ROLE authenticated SET search_path = public, extensions;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES    TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 
+--  invited_at is here because a migration READS it, not for fidelity's
+--  own sake. 20261217000000_invite_is_approval.sql defines a LANGUAGE sql
+--  function over auth.users.invited_at, and a SQL function body is parsed
+--  and validated at creation time — so without this column that migration
+--  fails to install here, and the harness reports a baseline mismatch
+--  rather than anything about the change under test.
+--
+--  Real auth.users has it, nullable, set only by the admin invite API.
+--  Nullable with no default is exactly right: every row this shim's
+--  fixtures create is a self-signup unless a suite says otherwise.
 CREATE TABLE IF NOT EXISTS auth.users (
   id                 uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
   email              text UNIQUE,
   encrypted_password text,
   raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  invited_at         timestamptz,
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
 );

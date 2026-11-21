@@ -56,11 +56,24 @@
  * where it always did: RLS on every company-scoped table, and
  * provision_profile deciding who may hold a profile at all.
  *
- * The real gate, if the product closes again, is the DATABASE one:
- * supabase/migrations/20261214000000_closed_signup_by_default.sql, which
- * makes `allowed_signins` authoritative and closed by default. It is
- * written and merged but NOT YET APPLIED to the live project. Re-populating
- * this array is not the way back; applying that migration is.
+ * The real gate is the DATABASE one, and it IS applied: the live project
+ * carries `allowed_signins` with provision_profile refusing an address
+ * that is not permitted. Re-populating this array is not the way to close
+ * the product; that table is.
+ *
+ * WHO THAT TABLE ADMITS, as of
+ * supabase/migrations/20261217000000_invite_is_approval.sql: an address on
+ * the list, OR an address Supabase Auth records as invited. An invitation
+ * is an administrative act and now carries its own approval, so inviting
+ * somebody is all it takes to let them in — there is no second list to
+ * maintain by hand.
+ *
+ * This header previously pointed at
+ * `20261214000000_closed_signup_by_default.sql` as the unapplied gate.
+ * No such file exists in this repository, and the gate it described has
+ * been live since 20261017000000. A comment that sends a reader to a
+ * missing migration is worse than none, because it reads as evidence
+ * that nothing is enforced.
  */
 export const ALLOWED_SIGNIN_EMAILS: readonly string[] = [];
 

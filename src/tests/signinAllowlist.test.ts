@@ -64,8 +64,14 @@ describe('isEmailAllowedToSignIn — with the gate off', () => {
    *  function was never the security boundary — the module header is
    *  explicit, and the browser holds the anon key regardless. What still
    *  decides access is RLS on every company-scoped table and
-   *  provision_profile deciding who may hold a profile. The real gate, if
-   *  the product closes again, is 20261214000000_closed_signup_by_default.
+   *  provision_profile deciding who may hold a profile.
+   *
+   *  The real gate is `allowed_signins` and it is LIVE, not pending:
+   *  20261017000000_signin_allowlist applied it, and
+   *  20261217000000_invite_is_approval widened it so that an invitation
+   *  carries its own approval. This comment named
+   *  20261214000000_closed_signup_by_default, which does not exist in
+   *  this repository.
    */
   it('is a front door, not a lock — the message still says who to ask', () => {
     expect(SIGNIN_NOT_ALLOWED_MESSAGE).toMatch(/administrator/i);
