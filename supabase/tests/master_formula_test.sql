@@ -652,9 +652,43 @@ BEGIN
   --  Approved. Through the engine, not by writing status — change_controls
   --  carries the same guarded status mirror the materials tables do, and
   --  a direct UPDATE is refused. Which is the point of the mirror.
+  --
+  --  IT NOW TAKES THE REAL ROUTE. 20261124000000 replaced the any-to-any
+  --  graph with a sequence, so 'set_approved' is not reachable from
+  --  draft any more, and every step carries a comment. The impact
+  --  assessment is a precondition of submitting for approval — which is
+  --  exactly what the comment fifteen lines above says it is for, so
+  --  supplying one makes this fixture read truer than it did.
+  UPDATE public.change_controls
+     SET impact_assessment = 'Batch size increase assessed: no change to formulation ratios, equipment train or validated parameters.'
+   WHERE id = '00000000-0000-7a00-cc00-000000000001';
+
   PERFORM public.lifecycle_transition(
     'change_control', '00000000-0000-7a00-cc00-000000000001'::uuid,
-    'set_approved', v_company, v_actor);
+    'set_impact_assessment', v_company, v_actor,
+    p_comment => 'Assessing the batch size increase.');
+
+  PERFORM public.lifecycle_transition(
+    'change_control', '00000000-0000-7a00-cc00-000000000001'::uuid,
+    'set_pending_approval', v_company, v_actor,
+    p_comment => 'Impact assessment complete; submitted for approval.');
+
+  --  The last step is taken on the state row rather than through
+  --  lifecycle_transition, because approval now requires a CONSUMED
+  --  ELECTRONIC SIGNATURE and minting one is this suite's subject only
+  --  by accident — master_formula_approve is what is under test here,
+  --  and all it reads is whether the change control is approved.
+  --
+  --  This is not a hole being stepped around: that the approval path
+  --  demands a signature is asserted in change_control_evidence_test
+  --  (A3), and the stage evidence rules still apply to this UPDATE
+  --  because the guard sits on entity_current_state, not on the RPC.
+  UPDATE public.entity_current_state
+     SET state_id = (SELECT id FROM public.lifecycle_states
+                      WHERE definition_id = public.lifecycle_resolve_definition('change_control', v_company)
+                        AND state_key = 'approved')
+   WHERE entity_type = 'change_control'
+     AND entity_id = '00000000-0000-7a00-cc00-000000000001'::uuid;
 
   --  Approving it supersedes the old one, in one transaction.
   PERFORM public.master_formula_approve(f_new);

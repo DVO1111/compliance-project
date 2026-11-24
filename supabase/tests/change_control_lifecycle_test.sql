@@ -190,8 +190,13 @@ BEGIN
   SELECT count(*) INTO n_hist_before FROM public.entity_state_history
    WHERE entity_id='00000000-0000-5200-c000-000000000001';
 
+  --  The comment is not decoration: since 20261124000000 every
+  --  change_control transition requires one, so a call without it is
+  --  refused and every assertion below would fail on a record that
+  --  never moved.
   r := public.lifecycle_transition('change_control','00000000-0000-5200-c000-000000000001',
-        'set_impact_assessment','00000000-0000-5200-a000-00000000000a'::uuid);
+        'set_impact_assessment','00000000-0000-5200-a000-00000000000a'::uuid,
+        p_comment => 'Raised and moved into assessment.');
 
   SELECT s.state_key INTO v_state FROM public.entity_current_state ecs
     JOIN public.lifecycle_states s ON s.id=ecs.state_id
@@ -212,7 +217,7 @@ RESET ROLE;
 
 
 -- =====================================================================
---  D — the any-to-any graph is preserved
+--  D — the workflow graph: rework is kept, shortcuts are gone
 -- =====================================================================
 DO $d$
 DECLARE n_tr int; n_states int;
@@ -223,34 +228,59 @@ BEGIN
   SELECT count(*) INTO n_states FROM public.lifecycle_states s
     JOIN public.lifecycle_definitions d ON d.id=s.definition_id
    WHERE d.entity_type='change_control';
-  PERFORM ccl_assert('D1','the graph is still 8 states / 56 transitions',
-                     n_states = 8 AND n_tr = 56, n_states||' states, '||n_tr||' transitions');
+  --  WAS 56 — the any-to-any graph, every state reachable from every
+  --  other. 20261124000000 replaced it with the twelve edges that
+  --  describe how a change actually moves, because the old graph is what
+  --  let a record go draft -> closed in a single click with nothing
+  --  recorded. The count stays exact rather than becoming a floor: a
+  --  future edge added without thought should fail this.
+  PERFORM ccl_assert('D1','the graph is 8 states / 12 workflow transitions',
+                     n_states = 8 AND n_tr = 12, n_states||' states, '||n_tr||' transitions');
 END $d$;
 
--- representative moves the old table permitted and must still permit:
--- a backwards step, and a jump that skips the UI's suggested order
+-- The two moves that say what kind of graph this now is: rework must
+-- still be possible, and skipping the workflow must not be.
 SET ROLE authenticated;
 DO $d2$
 DECLARE r jsonb; v_msg text;
 BEGIN
+  --  D2 — REWORK SURVIVES. Tightening a workflow is easy to overdo, and
+  --  a graph that only goes forwards forces people to correct records
+  --  out of band. impact_assessment -> draft is deliberately kept.
+  --  It now needs a comment, like every other move.
   BEGIN
     r := public.lifecycle_transition('change_control','00000000-0000-5200-c000-000000000001',
-          'set_draft','00000000-0000-5200-a000-00000000000a'::uuid);
-    PERFORM ccl_assert('D2','a backwards move is still permitted', r->>'to_state'='draft',
+          'set_draft','00000000-0000-5200-a000-00000000000a'::uuid,
+          p_comment => 'Returning for rework: scope was wrong.');
+    PERFORM ccl_assert('D2','a rework move backwards is still permitted', r->>'to_state'='draft',
                        'impact_assessment -> '||coalesce(r->>'to_state','NULL'));
   EXCEPTION WHEN others THEN
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    PERFORM ccl_assert('D2','a backwards move is still permitted', false, v_msg);
+    PERFORM ccl_assert('D2','a rework move backwards is still permitted', false, v_msg);
   END;
 
+  --  D3 — THIS ASSERTION IS INVERTED ON PURPOSE.
+  --
+  --  It used to read "a move that skips the UI order is still
+  --  permitted", and it passed, and that was the defect: draft -> closed
+  --  in one call, no assessment, no approval, no verification. UAT found
+  --  it from the other end — "clicking the next stage just automatically
+  --  indicates that it's completed without any evidence of actual
+  --  activity done".
+  --
+  --  The edge is gone, so the engine refuses the action outright. This
+  --  is a STRICTER assertion than the one it replaces, not a relaxed
+  --  one: it fails if anybody restores the shortcut.
   BEGIN
     r := public.lifecycle_transition('change_control','00000000-0000-5200-c000-000000000001',
-          'set_closed','00000000-0000-5200-a000-00000000000a'::uuid);
-    PERFORM ccl_assert('D3','a move that skips the UI order is still permitted', r->>'to_state'='closed',
-                       'draft -> '||coalesce(r->>'to_state','NULL'));
+          'set_closed','00000000-0000-5200-a000-00000000000a'::uuid,
+          p_comment => 'Attempting to close straight from draft.');
+    PERFORM ccl_assert('D3','a move that skips the workflow is refused', false,
+                       'IT SUCCEEDED: draft -> '||coalesce(r->>'to_state','NULL'));
   EXCEPTION WHEN others THEN
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    PERFORM ccl_assert('D3','a move that skips the UI order is still permitted', false, v_msg);
+    PERFORM ccl_assert('D3','a move that skips the workflow is refused',
+                       v_msg LIKE 'LIFECYCLE_INVALID_TRANSITION%', v_msg);
   END;
 END $d2$;
 RESET ROLE;
@@ -306,9 +336,17 @@ BEGIN
   SELECT count(*) INTO n_req FROM public.lifecycle_transitions t
     JOIN public.lifecycle_definitions d ON d.id=t.definition_id
     JOIN public.lifecycle_states ts ON ts.id=t.to_state_id
-   WHERE d.entity_type='change_control' AND t.requires_comment AND ts.state_key <> 'rejected';
-  PERFORM ccl_assert('E6','no unrelated transition gained a comment requirement', n_req = 0,
-                     n_req||' unexpected requirement(s)');
+   WHERE d.entity_type='change_control' AND NOT t.requires_comment;
+  --  INVERTED ON PURPOSE, like D3.
+  --
+  --  This read "no unrelated transition gained a comment requirement",
+  --  which was right when only rejection had to be explained. It is now
+  --  the opposite of what the product needs: a stage that advances with
+  --  nothing written down is exactly the complaint 20261124000000
+  --  answers. Every transition must carry a comment, and that comment is
+  --  the record of what was done.
+  PERFORM ccl_assert('E6','every transition requires a comment, not only rejection', n_req = 0,
+                     n_req||' transition(s) still advance silently');
 END $e6$;
 
 

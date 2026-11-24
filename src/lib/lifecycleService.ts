@@ -43,7 +43,18 @@ export interface LifecycleAction {
    */
   required_permission: string | null;
   requires_comment: boolean;
-  /** Also fails closed — there is no e-signature subsystem yet. */
+  /**
+   * The action needs an electronic signature, and the engine REQUIRES
+   * one rather than refusing the action: migration 20260917000000
+   * changed that, and `lifecycle_consume_signature` now verifies the
+   * signature belongs to this caller, this record and this action, is
+   * unspent, and was taken over the record as it still stands.
+   *
+   * This said "fails closed — there is no e-signature subsystem yet",
+   * which stopped being true three migrations later and would have
+   * talked the next reader out of using `signAndTransition`. Take such
+   * an action with that helper, never with `transition` alone.
+   */
   requires_signature: boolean;
   /** False when this caller would be rejected. Disable the control. */
   is_permitted: boolean;
@@ -103,7 +114,11 @@ export type LifecycleResult<T> =
  *   LIFECYCLE_ROLE_REQUIRED          caller's role is not sufficient
  *   LIFECYCLE_COMMENT_REQUIRED       the action requires a comment
  *   LIFECYCLE_PERMISSION_UNSUPPORTED declared permission cannot be checked
- *   LIFECYCLE_SIGNATURE_UNSUPPORTED  no e-signature subsystem exists
+ *   LIFECYCLE_SIGNATURE_REQUIRED     the action needs a signature and got none
+ *   LIFECYCLE_SIGNATURE_INVALID      no such signature
+ *   LIFECYCLE_SIGNATURE_MISMATCH     the signature is for another action
+ *   LIFECYCLE_SIGNATURE_SPENT        that signature has already been used
+ *   LIFECYCLE_SIGNATURE_STALE        the record changed after it was signed
  *   LIFECYCLE_ALREADY_INITIALIZED    entity already has a state
  *   LIFECYCLE_UNKNOWN_STATE          state key not in the definition
  *   LIFECYCLE_ERROR                  anything else (infrastructure)
