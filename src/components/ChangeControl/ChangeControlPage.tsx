@@ -27,7 +27,7 @@ const WORKFLOW_STEPS: ChangeControlStatus[] = [
  * The evidence each stage has to produce before the record may claim it.
  *
  * These mirror the database rule in
- * 20261124000000_change_control_requires_evidence.sql, which refuses the
+ * 20261125070847_change_control_requires_evidence.sql, which refuses the
  * state entry outright. They are NOT the gate — the gate is in the
  * database, where it cannot be skipped by anything that can reach the
  * API. What they do is ask for the thing in the form, so that the person

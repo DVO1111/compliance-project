@@ -1,6 +1,6 @@
 -- ============================================================================
 --  Change control: a stage is something you did
---  (20261124000000_change_control_requires_evidence.sql).
+--  (20261125070847_change_control_requires_evidence.sql).
 --
 --  The complaint this migration answers was that advancing a stage
 --  "automatically indicates that it's completed without any evidence of

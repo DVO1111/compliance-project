@@ -653,7 +653,7 @@ BEGIN
   --  carries the same guarded status mirror the materials tables do, and
   --  a direct UPDATE is refused. Which is the point of the mirror.
   --
-  --  IT NOW TAKES THE REAL ROUTE. 20261124000000 replaced the any-to-any
+  --  IT NOW TAKES THE REAL ROUTE. 20261125070847 replaced the any-to-any
   --  graph with a sequence, so 'set_approved' is not reachable from
   --  draft any more, and every step carries a comment. The impact
   --  assessment is a precondition of submitting for approval — which is

@@ -160,7 +160,7 @@ BEGIN
     --  taking history with it. That is the safety property relied on
     --  here: the two edges this project's history references
     --  (draft -> impact_assessment, impact_assessment -> pending_approval)
-    --  are both in cc_keep, so nothing referenced is removed — and if
+    --  are both in v_keep, so nothing referenced is removed — and if
     --  that ever stops being true on another database, this migration
     --  stops rather than destroying an audit trail.
     DELETE FROM public.lifecycle_transitions t

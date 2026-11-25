@@ -190,7 +190,7 @@ BEGIN
   SELECT count(*) INTO n_hist_before FROM public.entity_state_history
    WHERE entity_id='00000000-0000-5200-c000-000000000001';
 
-  --  The comment is not decoration: since 20261124000000 every
+  --  The comment is not decoration: since 20261125070847 every
   --  change_control transition requires one, so a call without it is
   --  refused and every assertion below would fail on a record that
   --  never moved.
@@ -229,7 +229,7 @@ BEGIN
     JOIN public.lifecycle_definitions d ON d.id=s.definition_id
    WHERE d.entity_type='change_control';
   --  WAS 56 — the any-to-any graph, every state reachable from every
-  --  other. 20261124000000 replaced it with the twelve edges that
+  --  other. 20261125070847 replaced it with the twelve edges that
   --  describe how a change actually moves, because the old graph is what
   --  let a record go draft -> closed in a single click with nothing
   --  recorded. The count stays exact rather than becoming a floor: a
@@ -342,7 +342,7 @@ BEGIN
   --  This read "no unrelated transition gained a comment requirement",
   --  which was right when only rejection had to be explained. It is now
   --  the opposite of what the product needs: a stage that advances with
-  --  nothing written down is exactly the complaint 20261124000000
+  --  nothing written down is exactly the complaint 20261125070847
   --  answers. Every transition must carry a comment, and that comment is
   --  the record of what was done.
   PERFORM ccl_assert('E6','every transition requires a comment, not only rejection', n_req = 0,
