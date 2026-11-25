@@ -1,6 +1,6 @@
 -- ============================================================================
 --  Ownership and approval authority
---  (20261125120000_change_control_owner_and_approvers.sql).
+--  (20261125105842_change_control_owner_and_approvers.sql).
 --
 --  The model under test: the raiser owns the record and asks; somebody
 --  named as an approver approves. So the suite is built around the two
@@ -11,7 +11,7 @@
 --          oversight, so B1 asserts it: if someone later makes the table
 --          closed-by-default, every workspace freezes at
 --          pending_approval and this is the test that says so.
---    D.    THE RESTATEMENT KEPT THE OLD RULES. 20261125120000 rewrites
+--    D.    THE RESTATEMENT KEPT THE OLD RULES. 20261125105842 rewrites
 --          change_control_state_guard in full rather than patching it,
 --          which is the easiest way in this whole repository to silently
 --          drop an evidence rule.
