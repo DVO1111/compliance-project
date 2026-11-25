@@ -43,6 +43,10 @@ export interface ChangeControl {
   regulatory_impact: boolean;
   validation_required: boolean;
   status: ChangeControlStatus;
+  //  Who is accountable for driving this change. Defaults to the raiser
+  //  and may be reassigned. NOT the approver — that is a separate
+  //  authority held per company in change_control_approvers.
+  owner_id: string | null;
   effective_date: string | null;
   approved_by: string | null;
   approved_at: string | null;
@@ -315,6 +319,108 @@ export async function approveChangeControl(
     },
     captureEvidence: false,
   }).catch(e => logger.error('Audit failed for change_control approval:', e));
+}
+
+export interface CompanyPerson { id: string; label: string }
+
+/**
+ * The people in this workspace, for naming an owner or an approver.
+ *
+ * Two queries rather than a join, which is the pattern MembersPage
+ * already uses: company_members and profiles are separately
+ * RLS-protected, and a failed profile lookup should cost a name, not
+ * the list.
+ */
+export async function listCompanyPeople(companyId: string): Promise<CompanyPerson[]> {
+  const { data: members, error } = await (supabase as any)
+    .from('company_members')
+    .select('user_id')
+    .eq('company_id', companyId)
+    .eq('status', 'active');
+  if (error) { logger.error('listCompanyPeople:', error); return []; }
+
+  const ids = Array.from(new Set((members ?? []).map((m: any) => m.user_id))).filter(Boolean);
+  if (ids.length === 0) return [];
+
+  const { data: profiles } = await (supabase as any)
+    .from('profiles')
+    .select('id,full_name,email')
+    .in('id', ids);
+
+  const byId = new Map<string, any>((profiles ?? []).map((p: any) => [p.id, p]));
+  return (ids as string[]).map(id => {
+    const p = byId.get(id);
+    return { id, label: p?.full_name || p?.email || 'Unnamed member' };
+  });
+}
+
+export interface ChangeControlApprover {
+  company_id: string;
+  user_id: string;
+  note: string | null;
+  added_by: string | null;
+  added_at: string;
+}
+
+/**
+ * Who may approve a change control here.
+ *
+ * An EMPTY list does not mean nobody — it means the company has not
+ * decided, and approval stays open to any member. The database says the
+ * same thing in app_may_approve_change_control, and the two must not
+ * disagree: a UI that treated empty as "nobody" would grey out a button
+ * the database would have accepted.
+ */
+export async function listChangeControlApprovers(companyId: string): Promise<ChangeControlApprover[]> {
+  const { data, error } = await (supabase as any)
+    .from('change_control_approvers')
+    .select('*')
+    .eq('company_id', companyId);
+  if (error) { logger.error('listChangeControlApprovers:', error); return []; }
+  return data ?? [];
+}
+
+export async function addChangeControlApprover(
+  companyId: string,
+  userId: string,
+  note: string,
+  addedBy: string,
+): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('change_control_approvers')
+    .insert({ company_id: companyId, user_id: userId, note: note.trim() || null, added_by: addedBy });
+  if (error) throw error;
+}
+
+export async function removeChangeControlApprover(companyId: string, userId: string): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('change_control_approvers')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+/**
+ * Whether the signed-in person may approve here, asked of the DATABASE
+ * rather than worked out from the list above.
+ *
+ * The rule is "empty means open", and restating that in TypeScript is
+ * how the browser and the server start to disagree about who QA is. One
+ * round trip is cheaper than that bug.
+ */
+export async function canApproveChangeControl(companyId: string): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .rpc('app_may_approve_change_control', { p_company_id: companyId });
+  if (error) {
+    logger.error('canApproveChangeControl:', error);
+    //  Fail OPEN deliberately: the database refuses the move itself if
+    //  the caller is not an approver, so a failed check here must not
+    //  hide a button from somebody entitled to press it. The gate is the
+    //  guard, never this.
+    return true;
+  }
+  return data === true;
 }
 
 /**

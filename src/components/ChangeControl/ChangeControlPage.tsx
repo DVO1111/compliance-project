@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GitMerge, Plus, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PenLine, History } from 'lucide-react';
+import { GitMerge, Plus, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PenLine, History, UserCheck, Inbox, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   listChangeControls,
@@ -14,8 +14,17 @@ import {
   CC_STATUS_LABELS,
   CC_STATUS_COLORS,
   CHANGE_TYPE_LABELS,
+  canApproveChangeControl,
+  listChangeControlApprovers,
+  addChangeControlApprover,
+  removeChangeControlApprover,
+  listCompanyPeople,
 } from '../../lib/pharma/changeControlService';
-import type { ChangeControlTransitionInput } from '../../lib/pharma/changeControlService';
+import type {
+  ChangeControlTransitionInput,
+  ChangeControlApprover,
+  CompanyPerson,
+} from '../../lib/pharma/changeControlService';
 import { getHistory } from '../../lib/lifecycleService';
 import type { LifecycleAction, LifecycleHistoryEntry } from '../../lib/lifecycleService';
 
@@ -358,10 +367,12 @@ function StageActionModal({ cc, action, companyId, userId, onClose, onDone }: {
   );
 }
 
-function DetailModal({ cc, companyId, userId, onClose, onAction }: {
+function DetailModal({ cc, companyId, userId, people, canApprove, onClose, onAction }: {
   cc: ChangeControl;
   companyId: string;
   userId: string;
+  people: Map<string, string>;
+  canApprove: boolean;
   onClose: () => void;
   onAction: () => void;
 }) {
@@ -425,6 +436,17 @@ function DetailModal({ cc, companyId, userId, onClose, onAction }: {
               <p className="font-bold dash-text text-base mt-1">{cc.title}</p>
               <p className="text-xs dash-text-tertiary mt-0.5">
                 {CHANGE_TYPE_LABELS[cc.change_type]} &middot; {cc.change_category} change &middot; Created {new Date(cc.created_at).toLocaleDateString()}
+              </p>
+              {/*  The owner is shown on the record, not buried in a
+                  field list: it is the answer to "who is chasing this",
+                  which is the question somebody opening a stalled change
+                  is actually asking. */}
+              <p className="text-xs dash-text-secondary mt-1 flex items-center gap-1.5">
+                <UserCheck size={12} className="flex-shrink-0" />
+                Owner: <span className="font-semibold dash-text">
+                  {cc.owner_id ? (people.get(cc.owner_id) ?? 'Unnamed member') : 'Unassigned'}
+                </span>
+                {cc.owner_id && cc.owner_id === userId && <span className="dash-text-tertiary">(you)</span>}
               </p>
             </div>
           </div>
@@ -559,14 +581,29 @@ function DetailModal({ cc, companyId, userId, onClose, onAction }: {
               {recordBlock && (
                 <p className="text-xs dash-text-tertiary mb-3">{recordBlock}</p>
               )}
+              {/*  Said once, above the buttons, rather than as a tooltip
+                  on a greyed control nobody hovers. */}
+              {!canApprove && actions.some(a => a.requires_signature) && (
+                <p className="text-xs mb-3 flex items-start gap-1.5" style={{ color: 'var(--color-warning-text, #92400e)' }}>
+                  <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+                  This workspace has named who may approve a change, and you are not one of them.
+                  The other steps are still yours to take.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 justify-end">
                 {actions.slice().sort((a, b) => a.sort_order - b.sort_order).map(a => {
                   const reject = a.to_state_key === 'rejected';
+                  //  The database refuses this too — see the guard. The
+                  //  button is disabled so that asking is not the way to
+                  //  find out.
+                  const blockedByAuthority = a.requires_signature && !canApprove;
                   return (
                     <button
                       key={`${a.action_key}:${a.to_state_key}`}
-                      disabled={!a.is_permitted}
-                      title={a.blocked_reason ?? undefined}
+                      disabled={!a.is_permitted || blockedByAuthority}
+                      title={blockedByAuthority
+                        ? 'Only a named approver may approve a change in this workspace.'
+                        : a.blocked_reason ?? undefined}
                       onClick={() => setPending(a)}
                       className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 ${
                         reject
@@ -599,6 +636,139 @@ function DetailModal({ cc, companyId, userId, onClose, onAction }: {
   );
 }
 
+/**
+ * Who may approve, and the panel for deciding.
+ *
+ * EMPTY MEANS OPEN, and the copy has to say so. A list headed
+ * "Approvers" with nothing in it reads as "nobody may approve", which is
+ * the opposite of what the database does — app_may_approve_change_control
+ * admits everyone until somebody is named. Getting that wrong in the
+ * wording would have people adding themselves to fix a problem they do
+ * not have.
+ */
+function ApproversPanel({ companyId, userId, people, onClose, onChanged }: {
+  companyId: string;
+  userId: string;
+  people: CompanyPerson[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [approvers, setApprovers] = useState<ChangeControlApprover[]>([]);
+  const [pick, setPick] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = async () => setApprovers(await listChangeControlApprovers(companyId));
+  useEffect(() => { void reload(); }, [companyId]);
+
+  const add = async () => {
+    if (!pick) { setError('Choose somebody first.'); return; }
+    setBusy(true); setError(null);
+    try {
+      await addChangeControlApprover(companyId, pick, note, userId);
+      setPick(''); setNote('');
+      await reload();
+      onChanged();
+    } catch (e: any) {
+      //  RLS refuses this for anyone who is not an owner or admin. Say
+      //  that, rather than showing the Postgres text.
+      setError(/row-level security|permission/i.test(e?.message ?? '')
+        ? 'Only a workspace owner or admin can change who approves.'
+        : e?.message ?? 'That could not be saved.');
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (uid: string) => {
+    setBusy(true); setError(null);
+    try {
+      await removeChangeControlApprover(companyId, uid);
+      await reload();
+      onChanged();
+    } catch (e: any) {
+      setError(/row-level security|permission/i.test(e?.message ?? '')
+        ? 'Only a workspace owner or admin can change who approves.'
+        : e?.message ?? 'That could not be removed.');
+    } finally { setBusy(false); }
+  };
+
+  const nameOf = (id: string) => people.find(p => p.id === id)?.label ?? 'Unnamed member';
+  const unlisted = people.filter(p => !approvers.some(a => a.user_id === p.id));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="dash-card border dash-border rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b dash-border">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[var(--color-accent-soft)]">
+              <UserCheck size={20} className="text-[var(--color-accent)]" />
+            </div>
+            <h2 className="text-lg font-bold dash-text">Who may approve a change</h2>
+          </div>
+          <button onClick={onClose} className="dash-text-tertiary hover:dash-text-primary"><X size={22} /></button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto">
+          {error && (
+            <div className="p-3 rounded-xl bg-[var(--color-danger-soft)] text-[var(--color-danger)] text-sm border border-[var(--color-danger-border)]">
+              {error}
+            </div>
+          )}
+
+          {approvers.length === 0 ? (
+            <div className="p-4 rounded-xl border dash-border bg-[var(--color-surface-alt)]">
+              <p className="text-sm dash-text font-semibold">Nobody is named yet.</p>
+              <p className="text-xs dash-text-secondary mt-1">
+                While this list is empty, <strong>any member</strong> can sign an approval. Name the
+                people who hold quality authority — usually QA — and from then on only they can.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {approvers.map(a => (
+                <li key={a.user_id} className="flex items-center justify-between gap-3 p-3 rounded-xl border dash-border">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold dash-text truncate">{nameOf(a.user_id)}</p>
+                    {a.note && <p className="text-xs dash-text-tertiary truncate">{a.note}</p>}
+                  </div>
+                  <button onClick={() => void remove(a.user_id)} disabled={busy}
+                    aria-label={`Remove ${nameOf(a.user_id)}`}
+                    className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50 flex-shrink-0">
+                    <Trash2 size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="pt-2 border-t dash-border space-y-3">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary block mb-1">Add an approver</label>
+              <select value={pick} onChange={e => setPick(e.target.value)}
+                className="w-full bg-[var(--color-surface)] border dash-border rounded-xl px-3 py-2 text-sm dash-text focus:outline-none">
+                <option value="">Choose a member…</option>
+                {unlisted.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest dash-text-tertiary block mb-1">Why them</label>
+              <input value={note} onChange={e => setNote(e.target.value)}
+                placeholder="e.g. QA Manager"
+                className="w-full bg-[var(--color-surface)] border dash-border rounded-xl px-3 py-2 text-sm dash-text focus:outline-none" />
+            </div>
+            <button onClick={() => void add()} disabled={busy}
+              className="w-full px-4 py-2.5 rounded-xl text-white font-semibold hover:opacity-90 disabled:opacity-50 shadow-md"
+              style={{ background: 'var(--color-accent)' }}>
+              {busy ? 'Saving…' : 'Add approver'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChangeControlPage() {
   const { user, profile } = useAuth();
   const companyId = (profile as any)?.company_id ?? '';
@@ -608,6 +778,10 @@ export default function ChangeControlPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedCC, setSelectedCC] = useState<ChangeControl | null>(null);
+  const [people, setPeople] = useState<CompanyPerson[]>([]);
+  const [canApprove, setCanApprove] = useState(true);
+  const [showApprovers, setShowApprovers] = useState(false);
+  const [tab, setTab] = useState<'all' | 'mine'>('all');
 
   const load = async () => {
     setLoading(true);
@@ -616,7 +790,27 @@ export default function ChangeControlPage() {
     setLoading(false);
   };
 
-  useEffect(() => { if (companyId) load(); }, [companyId]);
+  const loadContext = async () => {
+    const [p, may] = await Promise.all([
+      listCompanyPeople(companyId),
+      canApproveChangeControl(companyId),
+    ]);
+    setPeople(p);
+    setCanApprove(may);
+  };
+
+  useEffect(() => { if (companyId) { void load(); void loadContext(); } }, [companyId]);
+
+  //  The tuple annotation is load-bearing: without it `.map` infers
+  //  string[][] and the Map constructor rejects it under tsc, which
+  //  esbuild would never have told us.
+  const peopleById = new Map<string, string>(people.map(p => [p.id, p.label] as [string, string]));
+
+  //  THE QA QUEUE. "Awaiting my approval" is the follow-up half of the
+  //  model: the owner asks, and this is where the person being asked
+  //  finds what is waiting without being told twice.
+  const awaitingMe = records.filter(r => r.status === 'pending_approval' && canApprove);
+  const shown = tab === 'mine' ? awaitingMe : records;
 
   const openCount = records.filter(r => !['closed', 'rejected'].includes(r.status)).length;
   const pendingApproval = records.filter(r => r.status === 'pending_approval').length;
@@ -629,11 +823,36 @@ export default function ChangeControlPage() {
           <h1 className="text-2xl font-bold dash-text">Change Control</h1>
           <p className="text-sm dash-text-secondary mt-0.5">Track changes to SOPs, formulations, equipment, and processes through formal approval workflows.</p>
         </div>
-        <button onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md hover:opacity-90 transition-all"
-          style={{ background: 'var(--color-accent)' }}>
-          <Plus size={16} /> New Change Control
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowApprovers(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border dash-border dash-text text-sm font-semibold hover:dash-surface-alt transition-colors">
+            <UserCheck size={16} /> Approvers
+          </button>
+          <button onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md hover:opacity-90 transition-all"
+            style={{ background: 'var(--color-accent)' }}>
+            <Plus size={16} /> New Change Control
+          </button>
+        </div>
+      </div>
+
+      {/* The owner's queue and QA's queue, side by side. */}
+      <div className="flex gap-2">
+        {([
+          ['all', `All changes (${records.length})`],
+          ['mine', `Awaiting my approval (${awaitingMe.length})`],
+        ] as ['all' | 'mine', string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors border ${
+              tab === key
+                ? 'text-white border-transparent shadow-sm'
+                : 'dash-text border-[var(--color-border)] hover:dash-surface-alt'
+            }`}
+            style={tab === key ? { background: 'var(--color-accent)' } : undefined}>
+            {key === 'mine' && <Inbox size={14} />}
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -653,15 +872,29 @@ export default function ChangeControlPage() {
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
         </div>
-      ) : records.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div className="dash-card border dash-border rounded-2xl p-12 text-center shadow-sm">
-          <GitMerge size={40} className="mx-auto dash-text-tertiary mb-4" />
-          <p className="dash-text font-semibold">No change controls yet</p>
-          <p className="text-sm dash-text-secondary mt-1">Create your first change control request to begin the approval workflow.</p>
+          {tab === 'mine' ? (
+            <>
+              <Inbox size={40} className="mx-auto dash-text-tertiary mb-4" />
+              <p className="dash-text font-semibold">Nothing is waiting on you</p>
+              <p className="text-sm dash-text-secondary mt-1">
+                {canApprove
+                  ? 'Changes submitted for approval will appear here, and you will be notified when one is.'
+                  : 'You are not a named approver in this workspace, so no approvals are routed to you.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <GitMerge size={40} className="mx-auto dash-text-tertiary mb-4" />
+              <p className="dash-text font-semibold">No change controls yet</p>
+              <p className="text-sm dash-text-secondary mt-1">Create your first change control request to begin the approval workflow.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
-          {records.map(cc => (
+          {shown.map(cc => (
             <div
               key={cc.id}
               onClick={() => setSelectedCC(cc)}
@@ -745,8 +978,22 @@ export default function ChangeControlPage() {
           cc={selectedCC}
           companyId={companyId}
           userId={userId}
+          people={peopleById}
+          canApprove={canApprove}
           onClose={() => setSelectedCC(null)}
           onAction={() => { setSelectedCC(null); load(); }}
+        />
+      )}
+
+      {showApprovers && (
+        <ApproversPanel
+          companyId={companyId}
+          userId={userId}
+          people={people}
+          onClose={() => setShowApprovers(false)}
+          //  Naming the first approver can remove this person's own
+          //  authority, so the page re-asks rather than assuming.
+          onChanged={() => void loadContext()}
         />
       )}
     </div>
