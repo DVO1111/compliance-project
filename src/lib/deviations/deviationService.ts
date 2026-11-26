@@ -589,10 +589,30 @@ export async function completeRootCause(
   );
 }
 
-/** Raises a CAPA from a deviation — W5·11's DV-06. */
+export interface RaiseCapaInput {
+  title?: string;
+  description?: string;
+  capaType?: string;
+  priority?: string;
+  isSystemic?: boolean;
+  ownerId?: string;
+  /** ISO date. The CAPA's target completion — "timeline", in UAT's words. */
+  dueDate?: string;
+}
+
+/**
+ * Raises a CAPA from a deviation — W5·11's DV-06.
+ *
+ * EVERY FIELD IS PASSED, which it was not. This took only the deviation
+ * id, so the RPC applied its defaults and produced a CAPA with a
+ * generated title, a generated description, no owner and no due date —
+ * and the deviation's closure checklist then ticked "A CAPA has been
+ * raised" on the strength of it. p_due_date had existed on the RPC the
+ * whole time and was never sent.
+ */
 export async function raiseCapaFromDeviation(
   deviationId: string,
-  opts: { title?: string; capaType?: string; priority?: string; isSystemic?: boolean } = {},
+  opts: RaiseCapaInput = {},
 ): Promise<DeviationResult<{ capaId: string | null }>> {
   const { data, error } = await supabase.rpc('capa_raise_from_deviation', {
     p_deviation_id: deviationId,
@@ -602,6 +622,9 @@ export async function raiseCapaFromDeviation(
     p_capa_type: opts.capaType ?? undefined,
     p_priority: opts.priority ?? undefined,
     p_is_systemic: opts.isSystemic ?? undefined,
+    p_description: opts.description ?? undefined,
+    p_owner_id: opts.ownerId ?? undefined,
+    p_due_date: opts.dueDate ?? undefined,
   });
   if (error) {
     logger.error('[deviations] raiseCapaFromDeviation failed', { deviationId, error });

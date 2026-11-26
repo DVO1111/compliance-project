@@ -45,6 +45,9 @@ import type {
 import { assessReadiness } from '../../lib/deviations/investigation';
 import type { LinkedRecord, ClosureSignature } from './InvestigationPanel';
 import ClosureSignatureDialog from './ClosureSignatureDialog';
+import RaiseCapaDialog from './RaiseCapaDialog';
+import type { CapaForm } from '../../lib/deviations/capaForm';
+import { listCompanyPeople, type CompanyPerson } from '../../lib/pharma/changeControlService';
 import { orphanSignatureNotice, type ClosureForm } from '../../lib/deviations/closure';
 import { useFloorLayout } from '../../lib/inprocess/floorLayout';
 import { logger } from '../../lib/logger';
@@ -104,6 +107,7 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
     void (async () => {
       setCategories(await rootCauseCategories(companyId));
       setFramework(await defaultFramework(companyId));
+      setPeople(await listCompanyPeople(companyId));
     })();
   }, [companyId]);
 
@@ -112,6 +116,15 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
   const [closing, setClosing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
+
+  //  Raising a CAPA now asks who is responsible, so the panel needs the
+  //  workspace's members. Loaded once per company rather than when the
+  //  dialog opens: a select that populates after it is visible is a
+  //  select somebody has already tried to use.
+  const [people, setPeople] = useState<CompanyPerson[]>([]);
+  const [capaOpen, setCapaOpen] = useState(false);
+  const [capaSaving, setCapaSaving] = useState(false);
+  const [capaError, setCapaError] = useState<string | null>(null);
 
   //  Everything the investigation view needs, fetched together when a
   //  row is opened. Separately would show the panel with an empty
@@ -191,6 +204,44 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
       ? `Still outstanding: ${first.title}`
       : `${r.outstanding.length} conditions are still outstanding, starting with: ${first.title}`;
   }, [conditions]);
+
+  /**
+   * Raises the CAPA the person has just written.
+   *
+   * The dialog closes only on success. A refused raise with the sheet
+   * already gone would lose everything typed into it, and the commonest
+   * refusal — an owner who is not a member of this workspace — is one
+   * the person can fix in the form they are looking at.
+   */
+  const submitCapa = useCallback((form: CapaForm) => {
+    if (!open) return;
+    void (async () => {
+      setCapaSaving(true);
+      setCapaError(null);
+      const r = await raiseCapaFromDeviation(open.id, {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        capaType: form.capaType,
+        priority: form.priority,
+        isSystemic: form.isSystemic,
+        ownerId: form.ownerId,
+        dueDate: form.dueDate,
+      });
+      setCapaSaving(false);
+
+      if (!r.ok) { setCapaError(r.message); return; }
+
+      setCapaOpen(false);
+      setNotice('CAPA raised and linked to this deviation.');
+      //  The readiness checklist counts linked CAPAs, and the linked
+      //  list shows them, so both are stale now.
+      const [c, l] = await Promise.all([
+        closureReadiness(open.id), linkedRecords(open.id),
+      ]);
+      setConditions(c); setLinked(l);
+      await loadRegister();
+    })();
+  }, [open, loadRegister]);
 
   const submitClosure = useCallback((form: ClosureForm) => {
     if (!companyId || !open) return;
@@ -288,18 +339,10 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
               isQa={isQa}
               signature={signature}
               onSign={() => { setCloseError(null); setClosing(true); }}
-              onRaiseCapa={() => void (async () => {
-                const r = await raiseCapaFromDeviation(open.id);
-                if (!r.ok) { setNotice(r.message); return; }
-                setNotice('CAPA raised and linked to this deviation.');
-                //  The readiness checklist counts linked CAPAs, and the
-                //  linked list shows them, so both are stale now.
-                const [c, l] = await Promise.all([
-                  closureReadiness(open.id), linkedRecords(open.id),
-                ]);
-                setConditions(c); setLinked(l);
-                await loadRegister();
-              })()}
+              //  Opens the form. It used to raise the CAPA on the spot,
+              //  which is what UAT reported: the checklist ticked and
+              //  nothing was written.
+              onRaiseCapa={() => { setCapaError(null); setCapaOpen(true); }}
             />
           )}
 
@@ -311,6 +354,20 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
             error={closeError}
             onClose={() => { setClosing(false); setCloseError(null); }}
             onSubmit={submitClosure}
+          />
+
+          <RaiseCapaDialog
+            open={capaOpen}
+            deviation={{
+              deviationNumber: open.deviationNumber,
+              title: open.title,
+              severity: open.severity,
+            }}
+            people={people}
+            saving={capaSaving}
+            error={capaError}
+            onCancel={() => { setCapaOpen(false); setCapaError(null); }}
+            onSubmit={submitCapa}
           />
 
           {rca ? (
