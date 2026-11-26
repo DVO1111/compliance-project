@@ -23,7 +23,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FRAMEWORKS, hasForeignContent, nextWhyQuestion, whyProgress, answerProgress,
-  canComplete, completeButtonLabel, dueLabel, triageGaps, triageMessage,
+  canComplete, completeButtonLabel, dueLabel, triageGaps, triageMessage, ownerLabel,
   assessReadiness, signButtonLabel, sortRegister, summariseRegister,
   emptyRegisterMessage,
   type RootCauseAnalysis, type ReadinessCondition, type RegisterRow,
@@ -177,7 +177,7 @@ describe('the due date', () => {
   const inv = (over: Partial<Investigation> = {}): Investigation => ({
     deviationId: 'd1', deviationNumber: 'DEV-00001', title: 'T',
     severity: 'major', impact: 'yes', stateKey: 'under_investigation',
-    stateLabel: 'Under Investigation', ownerName: 'Ada Okafor',
+    stateLabel: 'Under Investigation', ownerId: 'u-ada', ownerName: 'Ada Okafor',
     dueDate: '2026-10-09', daysOverdue: 11, isOverdue: true,
     immediateAction: null, containment: null, ...over,
   });
@@ -206,11 +206,36 @@ describe('the due date', () => {
   //  claiming a rule nobody confirmed.
   it('reports a missing owner or date rather than demanding either', () => {
     expect(triageGaps(inv())).toEqual([]);
-    expect(triageGaps(inv({ ownerName: null }))).toEqual(['no owner']);
-    expect(triageGaps(inv({ ownerName: null, dueDate: null })))
+    expect(triageGaps(inv({ ownerId: null, ownerName: null }))).toEqual(['no owner']);
+    expect(triageGaps(inv({ ownerId: null, ownerName: null, dueDate: null })))
       .toEqual(['no owner', 'no due date']);
     expect(triageMessage(inv())).toBeNull();
-    expect(triageMessage(inv({ ownerName: null }))).toMatch(/QA sets both at triage/);
+    expect(triageMessage(inv({ ownerId: null, ownerName: null })))
+      .toMatch(/QA sets both at triage/);
+  });
+
+  //  THE BUG THIS SECTION EXISTS FOR.
+  //
+  //  UAT: a deviation was raised, an owner WAS assigned, and the screen
+  //  said "Not assigned" and told QA to set one at triage. ownerName is
+  //  null both when nobody is assigned and when the name cannot be
+  //  read — four of this project's profiles carry no full_name, and the
+  //  profiles policies only admit a teammate's row inside the same
+  //  company — and the panel collapsed the two.
+  //
+  //  Asking somebody to assign an owner that is already there is worse
+  //  than showing no name: it is the screen being wrong about who is
+  //  accountable.
+  it('an owner whose name cannot be read is still an owner', () => {
+    const unnamed = inv({ ownerName: null });
+    expect(triageGaps(unnamed)).toEqual([]);
+    expect(triageMessage(unnamed)).toBeNull();
+  });
+
+  it('says which of the three states the owner field is in', () => {
+    expect(ownerLabel(inv())).toBe('Ada Okafor');
+    expect(ownerLabel(inv({ ownerName: null }))).toBe('Assigned \u00b7 name unavailable');
+    expect(ownerLabel(inv({ ownerId: null, ownerName: null }))).toBe('Not assigned');
   });
 });
 

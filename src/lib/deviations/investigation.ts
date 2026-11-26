@@ -177,6 +177,23 @@ export interface Investigation {
   impact: string;
   stateKey: string;
   stateLabel: string;
+  /**
+   * WHETHER there is an owner. Distinct from ownerName, and the two must
+   * not be collapsed again.
+   *
+   * ownerName is null for two unrelated reasons — nobody is assigned, or
+   * the name could not be read — and the screen used to render both as
+   * "Not assigned" and count both as a triage gap. That is the screen
+   * asserting something false about accountability: a deviation with an
+   * owner whose profile this viewer cannot read is an assigned
+   * deviation, and saying otherwise sends somebody to assign an owner
+   * that is already there.
+   *
+   * Reachable in this project, not theoretical: four of twenty-two
+   * profiles carry no full_name, and the profiles policies only admit a
+   * teammate's row inside the same company.
+   */
+  ownerId: string | null;
   ownerName: string | null;
   dueDate: string | null;
   /** Derived server-side from the due date and today. Null when there
@@ -214,9 +231,24 @@ export function dueLabel(i: Pick<Investigation, 'dueDate' | 'daysOverdue' | 'isO
  */
 export function triageGaps(i: Investigation): string[] {
   const gaps: string[] = [];
-  if (!i.ownerName) gaps.push('no owner');
+  //  Keyed on ownerId, not ownerName: an owner whose name this viewer
+  //  cannot read is still an owner, and reporting a gap there would ask
+  //  QA to fix something that is not broken.
+  if (!i.ownerId) gaps.push('no owner');
   if (!i.dueDate) gaps.push('no due date');
   return gaps;
+}
+
+/**
+ * What the Owner field should say.
+ *
+ * Three cases, because there are three states and only two of them are
+ * the same sentence: named, assigned-but-unnamed, and unassigned.
+ */
+export function ownerLabel(i: Pick<Investigation, 'ownerId' | 'ownerName'>): string {
+  if (i.ownerName) return i.ownerName;
+  if (i.ownerId) return 'Assigned · name unavailable';
+  return 'Not assigned';
 }
 
 export function triageMessage(i: Investigation): string | null {

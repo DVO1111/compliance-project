@@ -164,10 +164,13 @@ export default function DeviationsPage({ companyId, isQa = false }: DeviationsPa
       impact: open.impact,
       stateKey: open.stateKey,
       stateLabel: open.stateLabel,
-      //  Resolved from investigation_owner through profiles. Null means
-      //  genuinely unassigned OR a failed lookup, and the panel draws
-      //  both as "Not assigned" — a name invented to fill the gap would
-      //  be a false statement about accountability.
+      //  BOTH are carried, because they answer different questions.
+      //  ownerId says whether the deviation is assigned; ownerName says
+      //  who to, and is null when the name cannot be read as well as
+      //  when nobody is assigned. Passing only the name is what made the
+      //  panel report "no owner" for an owned deviation — see
+      //  ownerLabel and triageGaps.
+      ownerId: detail.ownerId,
       ownerName: detail.ownerName,
       dueDate: open.dueDate,
       daysOverdue: open.daysOverdue,

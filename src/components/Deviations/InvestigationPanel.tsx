@@ -38,7 +38,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Check, X, Clock, ShieldCheck, Lock, Info } from 'lucide-react';
 import {
-  assessReadiness, signButtonLabel, dueLabel, triageMessage,
+  assessReadiness, signButtonLabel, dueLabel, triageMessage, ownerLabel,
   type Investigation, type ReadinessCondition,
 } from '../../lib/deviations/investigation';
 
@@ -114,7 +114,9 @@ export default function InvestigationPanel(p: InvestigationPanelProps) {
         {/*  Owner and due date. The overdue case is the design's own
             state for DV-04, so it is the one drawn loudest. */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Fact label="Owner" value={i.ownerName ?? 'Not assigned'} />
+          {/*  ownerLabel, not `ownerName ?? 'Not assigned'`: a failed
+              name lookup is not an unassigned deviation. */}
+          <Fact label="Owner" value={ownerLabel(i)} />
           <Fact
             label="Investigation due"
             value={dueLabel(i)}
