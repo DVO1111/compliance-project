@@ -1558,14 +1558,14 @@ isOneToOne: false
                   ]
                 },"capa_records": {
                   Row: {
-                    "batch_id": string | null,"capa_number": string,"capa_type": string,"closed_at": string | null,"company_id": string,"control_code": string | null,"control_id": string | null,"created_at": string,"created_by": string | null,"description": string,"due_date": string | null,"id": string,"is_systemic": boolean,"owner_name": string | null,"priority": string,"root_cause": string | null,"source": string,"source_deviation_id": string | null,"source_risk_id": string | null,"status": string,"title": string
+                    "batch_id": string | null,"capa_number": string,"capa_type": string,"closed_at": string | null,"company_id": string,"control_code": string | null,"control_id": string | null,"created_at": string,"created_by": string | null,"description": string,"due_date": string | null,"id": string,"is_systemic": boolean,"owner_id": string | null,"owner_name": string | null,"priority": string,"root_cause": string | null,"source": string,"source_deviation_id": string | null,"source_risk_id": string | null,"status": string,"title": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "batch_id"?: string | null,"capa_number": string,"capa_type": string,"closed_at"?: string | null,"company_id": string,"control_code"?: string | null,"control_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description": string,"due_date"?: string | null,"id"?: string,"is_systemic"?: boolean,"owner_name"?: string | null,"priority"?: string,"root_cause"?: string | null,"source": string,"source_deviation_id"?: string | null,"source_risk_id"?: string | null,"status"?: string,"title": string
+                    "batch_id"?: string | null,"capa_number": string,"capa_type": string,"closed_at"?: string | null,"company_id": string,"control_code"?: string | null,"control_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description": string,"due_date"?: string | null,"id"?: string,"is_systemic"?: boolean,"owner_id"?: string | null,"owner_name"?: string | null,"priority"?: string,"root_cause"?: string | null,"source": string,"source_deviation_id"?: string | null,"source_risk_id"?: string | null,"status"?: string,"title": string
                   }
                   Update: {
-                    "batch_id"?: string | null,"capa_number"?: string,"capa_type"?: string,"closed_at"?: string | null,"company_id"?: string,"control_code"?: string | null,"control_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string,"due_date"?: string | null,"id"?: string,"is_systemic"?: boolean,"owner_name"?: string | null,"priority"?: string,"root_cause"?: string | null,"source"?: string,"source_deviation_id"?: string | null,"source_risk_id"?: string | null,"status"?: string,"title"?: string
+                    "batch_id"?: string | null,"capa_number"?: string,"capa_type"?: string,"closed_at"?: string | null,"company_id"?: string,"control_code"?: string | null,"control_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string,"due_date"?: string | null,"id"?: string,"is_systemic"?: boolean,"owner_id"?: string | null,"owner_name"?: string | null,"priority"?: string,"root_cause"?: string | null,"source"?: string,"source_deviation_id"?: string | null,"source_risk_id"?: string | null,"status"?: string,"title"?: string
                   }
                   Relationships: [
                     {
@@ -6718,7 +6718,7 @@ isOneToOne: false
             }[]
                            },
 "capa_raise_from_deviation":
-{ Args: { "p_capa_type"?: string,"p_deviation_id": string,"p_due_date"?: string,"p_is_systemic"?: boolean,"p_priority"?: string,"p_title"?: string }; Returns: {
+{ Args: { "p_capa_type"?: string,"p_description"?: string,"p_deviation_id": string,"p_due_date"?: string,"p_is_systemic"?: boolean,"p_owner_id"?: string,"p_priority"?: string,"p_title"?: string }; Returns: {
               "batch_id": string | null,
 "capa_number": string,
 "capa_type": string,
@@ -6732,6 +6732,7 @@ isOneToOne: false
 "due_date": string | null,
 "id": string,
 "is_systemic": boolean,
+"owner_id": string | null,
 "owner_name": string | null,
 "priority": string,
 "root_cause": string | null,
