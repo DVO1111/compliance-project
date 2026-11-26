@@ -1,6 +1,6 @@
 -- ============================================================================
 --  Raising a CAPA carries what was written
---  (20261126120000_capa_is_written_when_it_is_raised.sql).
+--  (20261126115405_capa_is_written_when_it_is_raised.sql).
 --
 --  The complaint: "it just changes the status to a CAPA has been raised
 --  without actually allowing me to write the CAPA, add responsibility

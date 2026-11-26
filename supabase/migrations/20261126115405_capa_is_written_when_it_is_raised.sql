@@ -184,6 +184,16 @@ COMMENT ON FUNCTION public.capa_raise_from_deviation(uuid, text, text, text, boo
 --  included because it was there before and this migration is not the
 --  place to change who may call it — the function refuses an
 --  unauthenticated caller on its first line regardless.
+--  REVOKE FIRST. A newly created function carries EXECUTE for PUBLIC by
+--  default, and the function this replaces did NOT — its ACL named only
+--  postgres, anon, authenticated and service_role. Granting the named
+--  roles without revoking PUBLIC leaves the function reachable by more
+--  than it was before, which is a widening nobody asked for and nobody
+--  would notice. Caught by reading the ACL back after applying this to
+--  the live project, not by reasoning about it.
+REVOKE EXECUTE ON FUNCTION public.capa_raise_from_deviation(
+  uuid, text, text, text, boolean, timestamptz, text, uuid) FROM PUBLIC;
+
 GRANT EXECUTE ON FUNCTION public.capa_raise_from_deviation(
   uuid, text, text, text, boolean, timestamptz, text, uuid)
   TO anon, authenticated, service_role;
