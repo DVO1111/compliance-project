@@ -209,7 +209,9 @@ interface AuthContextType {
    */
   requestPasswordReset: (email: string) => Promise<{ error: Error | null }>;
   /** Sets the new password once the emailed link has opened a recovery session. */
-  completePasswordReset: (password: string) => Promise<{ error: Error | null }>;
+  /** `fullName` is accepted on the invite path, where it is the only
+   *  moment the person states their own name. See the implementation. */
+  completePasswordReset: (password: string, fullName?: string) => Promise<{ error: Error | null }>;
   /**
    * True between the emailed link opening a recovery session and the new
    * password being saved. App.tsx shows the reset screen while it holds, so
@@ -1011,10 +1013,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Saves the new password, then clears the recovery flag so the app
    * proceeds normally with the session the link already established.
    */
-  const completePasswordReset = async (password: string) => {
+  /**
+   * Save the new password, and the person's own name if they gave one.
+   *
+   * WHY THE NAME BELONGS HERE. An invitation carries an address and
+   * nothing else — Supabase's invite collects no name — so until now
+   * every invited account reached the product with profiles.full_name
+   * empty. That is not cosmetic: sign_electronic_record copies
+   * full_name into the signature record as signer_name at the moment of
+   * signing, so an empty name is recorded as the person's EMAIL on
+   * every approval they ever give. Four live accounts are in that state.
+   *
+   * This screen is the first and only moment the person is present,
+   * authenticated, and able to say who they are — before they have a
+   * profile, a workspace or anything to sign.
+   *
+   * IT IS WRITTEN TO AUTH METADATA FIRST, and that order matters: an
+   * invitee here may have NO profile row yet (provision_profile creates
+   * one when they make a workspace), so a direct profiles UPDATE would
+   * silently affect nothing. provisionWorkspace already reads
+   * user_metadata.full_name and passes it to provision_profile, so the
+   * name survives to the profile that does not exist yet.
+   *
+   * The profile is then updated too, for the case where one already
+   * exists: metadata is read only when the profile is created, so an
+   * existing row would otherwise keep its empty name for good.
+   */
+  const completePasswordReset = async (password: string, fullName?: string) => {
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const name = fullName?.trim();
+
+      const { error } = await supabase.auth.updateUser(
+        name ? { password, data: { full_name: name } } : { password },
+      );
       if (error) throw error;
+
+      if (name && user?.id) {
+        const { error: profileError } = await (supabase as any)
+          .from('profiles')
+          .update({ full_name: name })
+          .eq('id', user.id);
+        //  Not fatal, and deliberately not reported as a failed password
+        //  change: the password IS set by this point, and telling
+        //  somebody their password did not save because a name did not
+        //  would send them to reset a password that already works.
+        if (profileError) logger.warn('full_name was not written to the profile', profileError);
+      }
+
       setIsRecoveringPassword(false);
       setIsInitialPasswordSetup(false);
       return { error: null };

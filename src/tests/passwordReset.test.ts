@@ -22,6 +22,8 @@ import { describe, it, expect } from 'vitest';
 import {
   isAccountEnumerationError,
   passwordResetRedirectTo,
+  accountSetupProblem,
+  MIN_PASSWORD_LENGTH,
 } from '../lib/auth/passwordReset';
 
 describe('isAccountEnumerationError — hidden, because it reveals account existence', () => {
@@ -94,5 +96,55 @@ describe('passwordResetRedirectTo', () => {
   it('works for a local origin with a port', () => {
     expect(passwordResetRedirectTo('http://localhost:5173'))
       .toBe('http://localhost:5173/?recovery=1');
+  });
+});
+
+describe('accountSetupProblem — the invite path asks for a name', () => {
+  const setup = (over: Partial<Parameters<typeof accountSetupProblem>[0]> = {}) =>
+    accountSetupProblem({
+      initialSetup: true, fullName: 'Adaeze Okonkwo',
+      password: 'correct-horse', confirm: 'correct-horse', ...over,
+    });
+
+  it('accepts a complete setup', () => {
+    expect(setup()).toBeNull();
+  });
+
+  /*
+   *  WHY THE NAME IS REQUIRED HERE AND NOWHERE ELSE.
+   *
+   *  sign_electronic_record copies profiles.full_name into the signature
+   *  record as signer_name, falling back to the email. An invitation
+   *  carries no name, so every invited account signed its approvals as
+   *  an email address until it was asked — four live accounts were in
+   *  exactly that state. This screen is the only moment the person is
+   *  present and able to say who they are.
+   */
+  it('refuses an invite setup with no name', () => {
+    expect(setup({ fullName: '' })).toMatch(/full name/i);
+    expect(setup({ fullName: '   ' })).toMatch(/full name/i);
+    expect(setup({ fullName: 'A' })).toMatch(/full name/i);
+  });
+
+  //  On a reset the person already has an account and a name. Asking
+  //  again would make this a second place to change it, when the one
+  //  place should be their profile.
+  it('does not ask for a name on an ordinary password reset', () => {
+    expect(setup({ initialSetup: false, fullName: '' })).toBeNull();
+  });
+
+  //  The password rules still apply, and are reported before the
+  //  mismatch so the more basic problem is named first.
+  it('keeps the password rules', () => {
+    expect(setup({ password: 'short', confirm: 'short' }))
+      .toBe(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+    expect(setup({ confirm: 'something-else' })).toMatch(/do not match/i);
+  });
+
+  //  A missing name is reported before a password problem: it is the
+  //  field the person is least expecting, so naming it first stops them
+  //  fixing the password twice and still being refused.
+  it('reports the missing name before a password problem', () => {
+    expect(setup({ fullName: '', password: 'x', confirm: 'y' })).toMatch(/full name/i);
   });
 });

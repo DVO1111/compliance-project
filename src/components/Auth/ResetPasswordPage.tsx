@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import AuthShell, { AuthNotice, AuthField } from './AuthShell';
 import { appUrl } from '../../lib/routing';
+import { accountSetupProblem, MIN_PASSWORD_LENGTH } from '../../lib/auth/passwordReset';
 
 /**
  * Where the emailed reset link lands.
@@ -28,6 +29,7 @@ export default function ResetPasswordPage({
   initialSetup = false,
   preview = false,
 }: { initialSetup?: boolean; preview?: boolean }) {
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -38,25 +40,29 @@ export default function ResetPasswordPage({
   const [recoverySending, setRecoverySending] = useState(false);
   const { completePasswordReset, requestPasswordReset, signOut, user } = useAuth();
 
-  //  Supabase's own default minimum. Checked here so the failure is
-  //  immediate and next to the field, rather than a round trip.
-  const MIN_LENGTH = 6;
+  //  Supabase's own default minimum, from the module that also holds
+  //  the rule, so the input's minLength and the check cannot drift.
+  const MIN_LENGTH = MIN_PASSWORD_LENGTH;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (password.length < MIN_LENGTH) {
-      setError(`Use at least ${MIN_LENGTH} characters.`);
-      return;
-    }
-    if (password !== confirm) {
-      setError('The two passwords do not match.');
+    //  One rule, in a module that the test suite can reach. This
+    //  project has no component testing, so a rule written inline here
+    //  is a rule nothing checks — and the name rule decides whether an
+    //  account signs its approvals as a person or as an email address.
+    const problem = accountSetupProblem({ initialSetup, fullName, password, confirm });
+    if (problem) {
+      setError(problem);
       return;
     }
 
     setLoading(true);
-    const { error } = await completePasswordReset(password);
+    const { error } = await completePasswordReset(
+      password,
+      initialSetup ? fullName.trim() : undefined,
+    );
     setLoading(false);
 
     if (error) {
@@ -97,7 +103,7 @@ export default function ResetPasswordPage({
         //  invitee out and sends them to the sign-in page, so promising
         //  "you will continue to workspace setup next" described a step
         //  that never came and left the sign-in form looking like a fault.
-        ? 'Your email is confirmed. Choose a password and you will be taken to the sign-in page to use it.'
+        ? 'Your email is confirmed. Tell us your name and choose a password, and you will be taken to the sign-in page to use it.'
         : 'You followed a reset link, so set a password to finish signing in.'}
     >
       {!user && !preview ? (
@@ -131,6 +137,27 @@ export default function ResetPasswordPage({
       {error && <AuthNotice tone="error">{error}</AuthNotice>}
 
       {(user || preview) && <form onSubmit={(event) => { event.preventDefault(); if (!preview) void handleSubmit(event); }} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/*  Invite path only. On a password RESET the person already has
+            an account and a name; asking again would be a second place
+            to change it, and the one place should be their profile. */}
+        {initialSetup && (
+          <AuthField id="full-name" label="Your full name">
+            <input
+              type="text"
+              id="full-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="lp-field lp-field--sunken"
+              placeholder="e.g. Adaeze Okonkwo"
+              autoComplete="name"
+              required
+            />
+            <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--lp-t3)' }}>
+              This is the name recorded against your approvals and electronic signatures.
+            </span>
+          </AuthField>
+        )}
+
         <AuthField id="new-password" label="New password">
           <span style={{ position: 'relative', display: 'block' }}>
             <input

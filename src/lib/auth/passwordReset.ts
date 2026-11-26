@@ -59,3 +59,39 @@ export function isAccountEnumerationError(message: string | null | undefined): b
 export function passwordResetRedirectTo(origin: string): string {
   return `${origin.replace(/\/+$/, '')}/?recovery=1`;
 }
+
+/** Supabase's own minimum, checked here so the failure is immediate. */
+export const MIN_PASSWORD_LENGTH = 6;
+
+/**
+ * What is wrong with an account-setup submission, or null if nothing is.
+ *
+ * EXTRACTED SO IT CAN BE TESTED. The rules lived inline in
+ * ResetPasswordPage, and this project has no component testing — only
+ * pure-function suites — so a rule written in the component is a rule
+ * nothing checks. The name rule in particular is worth checking: it is
+ * the one that decides whether an account signs its approvals as a
+ * person or as an email address.
+ *
+ * The name is required ONLY on the invite path. On a password reset the
+ * person already has an account and a name, and asking again would make
+ * this a second place to change it when the one place should be their
+ * profile.
+ */
+export function accountSetupProblem(input: {
+  initialSetup: boolean;
+  fullName: string;
+  password: string;
+  confirm: string;
+}): string | null {
+  if (input.initialSetup && input.fullName.trim().length < 2) {
+    return 'Enter your full name as it should appear on approvals.';
+  }
+  if (input.password.length < MIN_PASSWORD_LENGTH) {
+    return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (input.password !== input.confirm) {
+    return 'The two passwords do not match.';
+  }
+  return null;
+}
