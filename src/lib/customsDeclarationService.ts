@@ -38,6 +38,12 @@ export interface CnDeclaration {
   total_weight_kg: number;
   is_flagged: boolean;
   flag_reason: string | null;
+  //  Set when somebody accepted a flagged declaration. `flag_reason`
+  //  is kept when that happens, so a resolved row still says what was
+  //  wrong. See 20261203000000.
+  flag_resolved_by?: string | null;
+  flag_resolved_at?: string | null;
+  flag_resolution_note?: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -61,6 +67,19 @@ const VAGUE_DESCRIPTIONS = new Set([
   'personal effects', 'personal belongings', 'clothing', 'gift',
 ]);
 
+/**
+ * The same rule the database applies, kept here so the form can warn
+ * before anything is submitted.
+ *
+ * NOT the authority. `cn_declaration_flag_reason()` and a BEFORE
+ * trigger decide what is stored (20261203000000), and they ignore
+ * whatever `is_flagged` / `flag_reason` a caller sends — this used to
+ * be computed only here, which made the flag on a customs declaration
+ * something a direct API call could simply switch off.
+ *
+ * The threshold and the vague-description list are asserted equal to
+ * the SQL copy in src/tests/logisticsCustoms.test.ts.
+ */
 function autoFlag(
   declaration_type: DeclarationType,
   total_value_gbp: number,
@@ -141,14 +160,36 @@ export async function createDeclaration(
   return data;
 }
 
+/**
+ * Accept a flagged declaration.
+ *
+ * ── WHY THIS SENDS A RESOLVER RATHER THAN `is_flagged: false` ──
+ *
+ * It used to send `{ is_flagged: false, flag_reason: null }`, which did
+ * two unwanted things: it let anybody clear a flag that the data still
+ * earns, and it erased the only record of what had been wrong.
+ *
+ * `20261203000000` made the flag the database's own. Clearing one is now
+ * an attributable act: the trigger requires `flag_resolved_by`, keeps
+ * `flag_reason` as filed, and refuses the update outright if the
+ * declaration was not flagged in the first place
+ * (`CN_FLAG_NOT_RAISED`). Correcting the declaration instead — fixing
+ * the value or the description — clears the flag with no resolver,
+ * because then nobody is accepting anything.
+ */
 export async function resolveDeclarationFlag(
   companyId: string,
   userId: string,
   declarationId: string,
+  note?: string,
 ): Promise<void> {
   const { error } = await (supabase as any)
     .from('cn_declarations')
-    .update({ is_flagged: false, flag_reason: null })
+    .update({
+      flag_resolved_by: userId,
+      flag_resolved_at: new Date().toISOString(),
+      flag_resolution_note: note ?? null,
+    })
     .eq('id', declarationId)
     .eq('company_id', companyId);
   if (error) throw error;
@@ -159,6 +200,8 @@ export async function resolveDeclarationFlag(
     entityType: 'cn_declaration',
     entityId: declarationId,
     companyId,
-    metadata: { is_flagged: false },
+    //  Records the resolution, not "is_flagged: false" — the second is
+    //  a consequence and the first is the decision somebody made.
+    metadata: { flag_resolved: true, note: note ?? null },
   });
 }

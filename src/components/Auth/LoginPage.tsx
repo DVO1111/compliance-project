@@ -6,6 +6,7 @@ import AuthShell, {
   AuthBackButton,
   AuthField,
 } from './AuthShell';
+import { loginFailureMessage } from '../../lib/auth/loginErrors';
 
 interface LoginPageProps {
   /** Kept for the invite flow and for when self-serve signup opens; the
@@ -70,7 +71,11 @@ export default function LoginPage({ onRequestAccess, onBackToLanding }: LoginPag
     setLoading(true);
 
     const { error } = await signIn(email, password);
-    if (error) setError(error.message);
+    //  Never the raw message: "Email not confirmed" tells the person
+    //  typing that this address HAS an account, which turns the sign-in
+    //  form into an enumerator. loginErrors.ts is the one place that
+    //  decides what a failure may disclose.
+    if (error) setError(loginFailureMessage(error.message));
 
     setLoading(false);
   };

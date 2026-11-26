@@ -5,6 +5,7 @@ import AccessDenied from './components/Common/AccessDenied';
 import PageErrorFallback from './components/Common/PageErrorFallback';
 import ScreenNotBuilt from './components/Common/ScreenNotBuilt';
 import { pageRefused, resolveWorkRole, resolveWorkRoles } from './lib/access/roleAccess';
+import { mayOpenSettingsHome } from './lib/navigation/settingsSections';
 import QaDispositionPage from './components/Materials/QaDispositionPage';
 import GoodsReceiptPage from './components/Materials/GoodsReceiptPage';
 import QcTestingPage from './components/Materials/QcTestingPage';
@@ -206,6 +207,9 @@ const WebhooksPage              = lazyPage(() => import('./components/Platform/W
 const EvidenceIngestionsPage    = lazyPage(() => import('./components/Platform/EvidenceIngestionsPage'));
 const EcosystemHubPage          = lazyPage(() => import('./components/Platform/EcosystemHubPage'));
 const CompanySettingsPage       = lazyPage(() => import('./components/company/CompanySettingsPage'));
+const SettingsHomePage          = lazyPage(() => import('./components/Settings/SettingsHomePage'));
+const FacilityLogsPage          = lazyPage(() => import('./components/Facility/FacilityLogsPage'));
+const SupplierRegisterPage      = lazyPage(() => import('./components/Suppliers/SupplierRegisterPage'));
 const BillingPage               = lazyPage(() => import('./components/Billing/BillingPage'));
 const BatchReleasePage          = lazyPage(() => import('./components/BatchRelease/BatchReleasePage'));
 const ChangeControlPage         = lazyPage(() => import('./components/ChangeControl/ChangeControlPage'));
@@ -984,6 +988,12 @@ function AppContent() {
       case 'training-log':
         return perms.canViewTraining ? <TrainingLogPage /> : <AccessDenied />;
 
+      //  CF-02. Guarded by the UNION of the sections' own existing
+      //  checks, so it grants nothing: each card inside leads to a page
+      //  that re-checks its own permission below before rendering.
+      case 'settings-home':
+        return mayOpenSettingsHome(perms, profile as never) ? <SettingsHomePage /> : <AccessDenied />;
+
       case 'company-settings':
         return perms.canManageRoles ? <CompanySettingsPage /> : <AccessDenied />;
 
@@ -1415,13 +1425,31 @@ function AppContent() {
       case 'sop-library':
         return <SopLibraryPage />;
 
+      //  HS-01 row 9 excludes supplier QUALIFICATION from the MVP and
+      //  keeps the approved-supplier LIST. This was a ComingSoonPage
+      //  while `suppliers` held a real RLS-protected table and PM-03
+      //  granted Procurement and the QA Manager `act` on the section —
+      //  a tabulated permission with no page to use it on. The
+      //  register is that list; the qualification workflow stays out
+      //  of scope.
       case 'supplier-qualification':
         return !isLogisticsProfile
-          ? <ComingSoonPage title="Supplier Qualification" description="Manage and qualify raw material suppliers and CMOs against GMP/HACCP requirements." />
+          ? <SupplierRegisterPage
+              companyId={profile?.company_id ?? undefined}
+              role={resolveWorkRole(profile)}
+            />
           : <AccessDenied />;
 
       case 'gmp-inspection':
         return !isLogisticsProfile ? <GmpInspectionPage /> : <AccessDenied />;
+
+      //  Same industry gate as the rest of the manufacturing-quality
+      //  cluster. PM-03 does not tabulate facility logs, so no section
+      //  check applies and none was invented.
+      case 'facility-logs':
+        return !isLogisticsProfile
+          ? <FacilityLogsPage companyId={profile?.company_id ?? undefined} />
+          : <AccessDenied />;
 
       case 'ai-insights':
         return <AIInsightsPage />;
